@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { MealDeck } from "@/components/MealDeck";
 import { MealAnalysis } from "@/components/MealAnalysis";
 import { ProductDetails } from "@/components/ProductDetails";
-import { supabase } from "@/lib/supabase";
+import FoodCarousel from "@/components/FoodCarousel";
 import { getUser, getUserProfile } from "@/lib/api/auth";
 import { getDailyProgress } from "@/lib/api/progress";
 import { getTimeBbasedSuggestions } from "@/lib/api/recipes";
@@ -555,71 +555,12 @@ export default function Dashboard() {
         </div>
 
 
-        {/* 3D Card Deck Meal Carousel */}
-        <div className="px-4 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Meal Suggestions</h2>
-            <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-              {(["breakfast", "lunch", "dinner"] as const).map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setActiveMealType(type)}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${activeMealType === type
-                    ? "bg-white dark:bg-slate-700 text-vic-green shadow-sm"
-                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                    }`}
-                >
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Breakfast Deck */}
-          {activeMealType === "breakfast" && (
-            <div className="mb-8 animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="flex items-center justify-between mb-3 px-2">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Breakfast</h3>
-                <span className="text-sm text-slate-600 dark:text-slate-400">Morning fuel</span>
-              </div>
-              <MealDeck
-                mealType="breakfast"
-                onCycleComplete={handleCycleComplete}
-                meals={meals.breakfast}
-              />
-            </div>
-          )}
-
-          {/* Lunch Deck */}
-          {activeMealType === "lunch" && (
-            <div className="mb-8 animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="flex items-center justify-between mb-3 px-2">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Lunch</h3>
-                <span className="text-sm text-slate-600 dark:text-slate-400">Midday energy</span>
-              </div>
-              <MealDeck
-                mealType="lunch"
-                onCycleComplete={handleCycleComplete}
-                meals={meals.lunch}
-              />
-            </div>
-          )}
-
-          {/* Dinner Deck */}
-          {activeMealType === "dinner" && (
-            <div className="mb-4 animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="flex items-center justify-between mb-3 px-2">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Dinner</h3>
-                <span className="text-sm text-slate-600 dark:text-slate-400">Evening nourishment</span>
-              </div>
-              <MealDeck
-                mealType="dinner"
-                onCycleComplete={handleCycleComplete}
-                meals={meals.dinner}
-              />
-            </div>
-          )}
-        </div>
+        {/* 3D Card Deck Food Carousel - VicCalary Design */}
+        <FoodCarousel
+          breakfastMeals={meals.breakfast}
+          lunchMeals={meals.lunch}
+          dinnerMeals={meals.dinner}
+        />
       </div>
 
       {/* Monthly Progress View */}

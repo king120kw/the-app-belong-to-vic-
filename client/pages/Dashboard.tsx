@@ -23,6 +23,8 @@ export default function Dashboard() {
   const [activeMealType, setActiveMealType] = useState<"breakfast" | "lunch" | "dinner">("breakfast");
   const [darkMode, setDarkMode] = useState(false);
   const [userName, setUserName] = useState("");
+  const [userAvatar, setUserAvatar] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [userProfile, setUserProfile] = useState<any>(null);
   const [dailyProgress, setDailyProgress] = useState<any>(null);
@@ -59,7 +61,7 @@ export default function Dashboard() {
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
 
-  // Load user name and theme from localStorage
+  // Load user name, theme, and avatar from localStorage
   useEffect(() => {
     const savedName = localStorage.getItem("userName") || "User";
     setUserName(savedName);
@@ -68,7 +70,30 @@ export default function Dashboard() {
     if (savedTheme === "dark") {
       document.documentElement.classList.add("dark");
     }
+    const savedAvatar = localStorage.getItem("userAvatar");
+    if (savedAvatar) {
+      setUserAvatar(savedAvatar);
+    }
   }, []);
+
+  // Handle avatar click
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Handle file selection
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setUserAvatar(base64String);
+        localStorage.setItem("userAvatar", base64String);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Toggle theme
   const toggleTheme = () => {
@@ -94,6 +119,52 @@ export default function Dashboard() {
   // Fetch all dashboard data
   useEffect(() => {
     async function fetchDashboardData() {
+      // Set meals immediately with hardcoded data (fallback/default)
+      setMeals({
+        breakfast: [
+          { id: '1', name: "Oatmeal with Dates", subtitle: "High fiber start", calories: 320, image: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80", meal_type: 'breakfast' },
+          { id: '2', name: "Berry Smoothie Bowl", subtitle: "Antioxidant rich", calories: 280, image: "https://images.unsplash.com/photo-1546069901-eacef0df6022?w=1200&q=80", meal_type: 'breakfast' },
+          { id: '3', name: "Soft Boiled Eggs", subtitle: "Protein packed", calories: 180, image: "https://images.unsplash.com/photo-1513042575839-1c0c2d1e5ddf?w=1200&q=80", meal_type: 'breakfast' },
+          { id: '4', name: "Avocado Toast", subtitle: "Healthy fats", calories: 350, image: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=1200&q=80", meal_type: 'breakfast' },
+          { id: '5', name: "Greek Yogurt Parfait", subtitle: "Probiotic boost", calories: 250, image: "https://images.unsplash.com/photo-1523986371872-9d3ba2e2f642?w=1200&q=80", meal_type: 'breakfast' },
+          { id: '6', name: "Banana Pancakes", subtitle: "Light & satiety", calories: 380, image: "https://images.unsplash.com/photo-1505250469679-203ad9ced0cb?w=1200&q=80", meal_type: 'breakfast' },
+          { id: '7', name: "Fresh Fruit Plate", subtitle: "Natural sugars", calories: 150, image: "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=1200&q=80", meal_type: 'breakfast' },
+          { id: '8', name: "Muesli Bowl", subtitle: "Wholegrain energy", calories: 310, image: "https://images.unsplash.com/photo-1541987157448-6d6a1f9f5c8d?w=1200&q=80", meal_type: 'breakfast' },
+          { id: '9', name: "Breakfast Burrito", subtitle: "Savory & filling", calories: 420, image: "https://images.unsplash.com/photo-1551024506-0bccd828d307?w=1200&q=80", meal_type: 'breakfast' },
+          { id: '10', name: "Butter Croissant", subtitle: "Flaky delight", calories: 290, image: "https://images.unsplash.com/photo-1588315029754-2dd089d39a1a?w=1200&q=80", meal_type: 'breakfast' },
+          { id: '11', name: "Chia Pudding", subtitle: "Omega-3 rich", calories: 200, image: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1200&q=80", meal_type: 'breakfast' },
+          { id: '12', name: "French Toast", subtitle: "Classic comfort", calories: 360, image: "https://images.unsplash.com/photo-1558042239-2510ca0eff8a?w=1200&q=80", meal_type: 'breakfast' }
+        ],
+        lunch: [
+          { id: '13', name: "Grilled Chicken Bowl", subtitle: "Lean protein", calories: 480, image: "https://images.unsplash.com/photo-1605478573815-7e0b7a77b798?w=1200&q=80", meal_type: 'lunch' },
+          { id: '14', name: "Quinoa Salad", subtitle: "Filling & fiber", calories: 390, image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1200&q=80", meal_type: 'lunch' },
+          { id: '15', name: "Fish Rice Bowl", subtitle: "Omega-3 rich", calories: 520, image: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80", meal_type: 'lunch' },
+          { id: '16', name: "Veggie Wrap", subtitle: "Portable & light", calories: 340, image: "https://images.unsplash.com/photo-1564758866816-79f6b0f4b5f6?w=1200&q=80", meal_type: 'lunch' },
+          { id: '17', name: "Poke Bowl", subtitle: "Fresh & balanced", calories: 450, image: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=1200&q=80", meal_type: 'lunch' },
+          { id: '18', name: "Lentil Soup", subtitle: "Comfort & protein", calories: 320, image: "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=1200&q=80", meal_type: 'lunch' },
+          { id: '19', name: "Chicken Salad", subtitle: "Crisp greens", calories: 380, image: "https://images.unsplash.com/photo-1553621042-f6e147245754?w=1200&q=80", meal_type: 'lunch' },
+          { id: '20', name: "Sushi Plate", subtitle: "Light & savory", calories: 410, image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1200&q=80", meal_type: 'lunch' },
+          { id: '21', name: "Club Sandwich", subtitle: "Triple layered", calories: 520, image: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=1200&q=80", meal_type: 'lunch' },
+          { id: '22', name: "Gourmet Burger", subtitle: "Premium beef", calories: 580, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200&q=80", meal_type: 'lunch' },
+          { id: '23', name: "Margherita Pizza", subtitle: "Classic Italian", calories: 490, image: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=1200&q=80", meal_type: 'lunch' },
+          { id: '24', name: "Burrito Bowl", subtitle: "Mexican fusion", calories: 510, image: "https://images.unsplash.com/photo-1565299507177-b0ac66763828?w=1200&q=80", meal_type: 'lunch' }
+        ],
+        dinner: [
+          { id: '25', name: "Grilled Steak", subtitle: "Hearty protein", calories: 620, image: "https://images.unsplash.com/photo-1604908177522-2ecbd7f2b4e3?w=1200&q=80", meal_type: 'dinner' },
+          { id: '26', name: "Wholegrain Pasta", subtitle: "Comfort carbs", calories: 480, image: "https://images.unsplash.com/photo-1604908177345-4bfc5bd7b8f9?w=1200&q=80", meal_type: 'dinner' },
+          { id: '27', name: "Tofu Stir Fry", subtitle: "Vegetarian option", calories: 390, image: "https://images.unsplash.com/photo-1541544181188-2f8b0b3c5f9f?w=1200&q=80", meal_type: 'dinner' },
+          { id: '28', name: "Roasted Vegetables", subtitle: "Light & warm", calories: 280, image: "https://images.unsplash.com/photo-1543353071-087092ec393a?w=1200&q=80", meal_type: 'dinner' },
+          { id: '29', name: "Vegetable Soup", subtitle: "Comforting broth", calories: 220, image: "https://images.unsplash.com/photo-1604908177313-4f6f79f4b4c6?w=1200&q=80", meal_type: 'dinner' },
+          { id: '30', name: "Baked Salmon", subtitle: "Omega-3 rich", calories: 520, image: "https://images.unsplash.com/photo-1512058564366-c9e3c8d4f3c8?w=1200&q=80", meal_type: 'dinner' },
+          { id: '31', name: "Chicken Curry", subtitle: "Warm & savory", calories: 550, image: "https://images.unsplash.com/photo-1526318472351-c75fcf070b60?w=1200&q=80", meal_type: 'dinner' },
+          { id: '32', name: "Mushroom Risotto", subtitle: "Creamy & rich", calories: 480, image: "https://images.unsplash.com/photo-1514511524328-1b0a9d2c7d97?w=1200&q=80", meal_type: 'dinner' },
+          { id: '33', name: "Roast Chicken", subtitle: "Classic comfort", calories: 590, image: "https://images.unsplash.com/photo-1604908177308-0460a8f5f7c1?w=1200&q=80", meal_type: 'dinner' },
+          { id: '34', name: "Beef Lasagna", subtitle: "Layered goodness", calories: 610, image: "https://images.unsplash.com/photo-1604908177315-4bfc5bd7b8f9?w=1200&q=80", meal_type: 'dinner' },
+          { id: '35', name: "Grilled Shrimp", subtitle: "Light seafood", calories: 380, image: "https://images.unsplash.com/photo-1604908177316-4f6f79f4b4c6?w=1200&q=80", meal_type: 'dinner' },
+          { id: '36', name: "Beef Stew", subtitle: "Hearty & warm", calories: 540, image: "https://images.unsplash.com/photo-1604908177317-47c6c4b5f7c1?w=1200&q=80", meal_type: 'dinner' }
+        ]
+      });
+
       try {
         const user = await getUser();
         if (!user) {
@@ -117,51 +188,8 @@ export default function Dashboard() {
           setActiveMealType(suggestions.mealType as any);
         }
 
-        // Fetch meals for all types with complete food image data (from HTML design)
-        setMeals({
-          breakfast: [
-            { id: '1', name: "Oatmeal with Dates", subtitle: "High fiber start", calories: 320, image: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80", meal_type: 'breakfast' },
-            { id: '2', name: "Berry Smoothie Bowl", subtitle: "Antioxidant rich", calories: 280, image: "https://images.unsplash.com/photo-1546069901-eacef0df6022?w=1200&q=80", meal_type: 'breakfast' },
-            { id: '3', name: "Soft Boiled Eggs", subtitle: "Protein packed", calories: 180, image: "https://images.unsplash.com/photo-1513042575839-1c0c2d1e5ddf?w=1200&q=80", meal_type: 'breakfast' },
-            { id: '4', name: "Avocado Toast", subtitle: "Healthy fats", calories: 350, image: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=1200&q=80", meal_type: 'breakfast' },
-            { id: '5', name: "Greek Yogurt Parfait", subtitle: "Probiotic boost", calories: 250, image: "https://images.unsplash.com/photo-1523986371872-9d3ba2e2f642?w=1200&q=80", meal_type: 'breakfast' },
-            { id: '6', name: "Banana Pancakes", subtitle: "Light & satiety", calories: 380, image: "https://images.unsplash.com/photo-1505250469679-203ad9ced0cb?w=1200&q=80", meal_type: 'breakfast' },
-            { id: '7', name: "Fresh Fruit Plate", subtitle: "Natural sugars", calories: 150, image: "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=1200&q=80", meal_type: 'breakfast' },
-            { id: '8', name: "Muesli Bowl", subtitle: "Wholegrain energy", calories: 310, image: "https://images.unsplash.com/photo-1541987157448-6d6a1f9f5c8d?w=1200&q=80", meal_type: 'breakfast' },
-            { id: '9', name: "Breakfast Burrito", subtitle: "Savory & filling", calories: 420, image: "https://images.unsplash.com/photo-1551024506-0bccd828d307?w=1200&q=80", meal_type: 'breakfast' },
-            { id: '10', name: "Butter Croissant", subtitle: "Flaky delight", calories: 290, image: "https://images.unsplash.com/photo-1588315029754-2dd089d39a1a?w=1200&q=80", meal_type: 'breakfast' },
-            { id: '11', name: "Chia Pudding", subtitle: "Omega-3 rich", calories: 200, image: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1200&q=80", meal_type: 'breakfast' },
-            { id: '12', name: "French Toast", subtitle: "Classic comfort", calories: 360, image: "https://images.unsplash.com/photo-1558042239-2510ca0eff8a?w=1200&q=80", meal_type: 'breakfast' }
-          ],
-          lunch: [
-            { id: '13', name: "Grilled Chicken Bowl", subtitle: "Lean protein", calories: 480, image: "https://images.unsplash.com/photo-1605478573815-7e0b7a77b798?w=1200&q=80", meal_type: 'lunch' },
-            { id: '14', name: "Quinoa Salad", subtitle: "Filling & fiber", calories: 390, image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1200&q=80", meal_type: 'lunch' },
-            { id: '15', name: "Fish Rice Bowl", subtitle: "Omega-3 rich", calories: 520, image: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80", meal_type: 'lunch' },
-            { id: '16', name: "Veggie Wrap", subtitle: "Portable & light", calories: 340, image: "https://images.unsplash.com/photo-1564758866816-79f6b0f4b5f6?w=1200&q=80", meal_type: 'lunch' },
-            { id: '17', name: "Poke Bowl", subtitle: "Fresh & balanced", calories: 450, image: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=1200&q=80", meal_type: 'lunch' },
-            { id: '18', name: "Lentil Soup", subtitle: "Comfort & protein", calories: 320, image: "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=1200&q=80", meal_type: 'lunch' },
-            { id: '19', name: "Chicken Salad", subtitle: "Crisp greens", calories: 380, image: "https://images.unsplash.com/photo-1553621042-f6e147245754?w=1200&q=80", meal_type: 'lunch' },
-            { id: '20', name: "Sushi Plate", subtitle: "Light & savory", calories: 410, image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1200&q=80", meal_type: 'lunch' },
-            { id: '21', name: "Club Sandwich", subtitle: "Triple layered", calories: 520, image: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=1200&q=80", meal_type: 'lunch' },
-            { id: '22', name: "Gourmet Burger", subtitle: "Premium beef", calories: 580, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200&q=80", meal_type: 'lunch' },
-            { id: '23', name: "Margherita Pizza", subtitle: "Classic Italian", calories: 490, image: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=1200&q=80", meal_type: 'lunch' },
-            { id: '24', name: "Burrito Bowl", subtitle: "Mexican fusion", calories: 510, image: "https://images.unsplash.com/photo-1565299507177-b0ac66763828?w=1200&q=80", meal_type: 'lunch' }
-          ],
-          dinner: [
-            { id: '25', name: "Grilled Steak", subtitle: "Hearty protein", calories: 620, image: "https://images.unsplash.com/photo-1604908177522-2ecbd7f2b4e3?w=1200&q=80", meal_type: 'dinner' },
-            { id: '26', name: "Wholegrain Pasta", subtitle: "Comfort carbs", calories: 480, image: "https://images.unsplash.com/photo-1604908177345-4bfc5bd7b8f9?w=1200&q=80", meal_type: 'dinner' },
-            { id: '27', name: "Tofu Stir Fry", subtitle: "Vegetarian option", calories: 390, image: "https://images.unsplash.com/photo-1541544181188-2f8b0b3c5f9f?w=1200&q=80", meal_type: 'dinner' },
-            { id: '28', name: "Roasted Vegetables", subtitle: "Light & warm", calories: 280, image: "https://images.unsplash.com/photo-1543353071-087092ec393a?w=1200&q=80", meal_type: 'dinner' },
-            { id: '29', name: "Vegetable Soup", subtitle: "Comforting broth", calories: 220, image: "https://images.unsplash.com/photo-1604908177313-4f6f79f4b4c6?w=1200&q=80", meal_type: 'dinner' },
-            { id: '30', name: "Baked Salmon", subtitle: "Omega-3 rich", calories: 520, image: "https://images.unsplash.com/photo-1512058564366-c9e3c8d4f3c8?w=1200&q=80", meal_type: 'dinner' },
-            { id: '31', name: "Chicken Curry", subtitle: "Warm & savory", calories: 550, image: "https://images.unsplash.com/photo-1526318472351-c75fcf070b60?w=1200&q=80", meal_type: 'dinner' },
-            { id: '32', name: "Mushroom Risotto", subtitle: "Creamy & rich", calories: 480, image: "https://images.unsplash.com/photo-1514511524328-1b0a9d2c7d97?w=1200&q=80", meal_type: 'dinner' },
-            { id: '33', name: "Roast Chicken", subtitle: "Classic comfort", calories: 590, image: "https://images.unsplash.com/photo-1604908177308-0460a8f5f7c1?w=1200&q=80", meal_type: 'dinner' },
-            { id: '34', name: "Beef Lasagna", subtitle: "Layered goodness", calories: 610, image: "https://images.unsplash.com/photo-1604908177315-4bfc5bd7b8f9?w=1200&q=80", meal_type: 'dinner' },
-            { id: '35', name: "Grilled Shrimp", subtitle: "Light seafood", calories: 380, image: "https://images.unsplash.com/photo-1604908177316-4f6f79f4b4c6?w=1200&q=80", meal_type: 'dinner' },
-            { id: '36', name: "Beef Stew", subtitle: "Hearty & warm", calories: 540, image: "https://images.unsplash.com/photo-1604908177317-47c6c4b5f7c1?w=1200&q=80", meal_type: 'dinner' }
-          ]
-        });
+        // Removed setMeals from here as it's now done at the start
+
 
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
@@ -306,10 +334,17 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="relative mx-auto flex h-auto min-h-screen w-full max-w-md flex-col bg-background-light dark:bg-background-dark overflow-x-hidden font-display">
+    <div className="relative mx-auto flex h-auto min-h-screen w-full max-w-md flex-col bg-background-light dark:bg-[#0d1418] overflow-x-hidden font-display">
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+        accept="image/*"
+      />
       {/* Camera Modal */}
       <div className={`modal-overlay ${showCameraModal ? "active" : ""}`}>
-        <div className="modal-content bg-white dark:bg-background-dark dark:border dark:border-slate-800">
+        <div className="modal-content bg-white dark:bg-[#1f2c34] dark:border dark:border-slate-800">
           <div className="relative bg-black rounded-t-lg">
             <video ref={cameraVideoRef} className="w-full h-80 object-cover" autoPlay playsInline />
             <button
@@ -336,7 +371,7 @@ export default function Dashboard() {
 
       {/* Scanner Modal */}
       <div className={`modal-overlay ${showScannerModal ? "active" : ""}`}>
-        <div className="modal-content bg-white dark:bg-background-dark dark:border dark:border-slate-800">
+        <div className="modal-content bg-white dark:bg-[#1f2c34] dark:border dark:border-slate-800">
           <div className="relative bg-black rounded-t-lg">
             <video ref={scannerVideoRef} className="w-full h-80 object-cover" autoPlay playsInline />
             <div className="absolute inset-4 border-2 border-vic-green rounded-lg animate-pulse"></div>
@@ -358,7 +393,7 @@ export default function Dashboard() {
 
       {/* Progress Modal */}
       <div className={`modal-overlay ${showProgressModal ? "active" : ""}`}>
-        <div className="modal-content bg-white dark:bg-background-dark dark:border dark:border-slate-800 p-6">
+        <div className="modal-content bg-white dark:bg-[#1f2c34] dark:border dark:border-slate-800 p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-2xl font-bold text-slate-800 dark:text-white">Weekly Progress</h3>
             <button
@@ -441,14 +476,16 @@ export default function Dashboard() {
       {/* Dashboard View */}
       <div className={`view ${currentView === "dashboard" ? "active" : ""}`}>
         {/* Header */}
-        <header className="flex items-center bg-background-light dark:bg-background-dark p-4 pb-2 justify-between sticky top-0 z-10">
+        <header className="flex items-center bg-background-light dark:bg-[#0d1418] p-4 pb-2 justify-between sticky top-0 z-10">
           <div className="flex size-12 shrink-0 items-center">
-            <div
-              className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8"
-              style={{
-                backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuBDIzmOKkCMAsO-QHgqPOmIS520rbDbPDohsp_l1BHCh2F8CvyNglHXwkKPfhdX1xPldmXOO0jLDsy_alKCT0oxe220SbizDgjNnxPyT1BasQvEzaehDfdntF2fxT4SJCyrztK3VrcBcNobzunVf17EVYGqpXnQoQSCfnp-syeFwTEFngZaFvY9QJh9Vwnx65HljWSyuAGUOEb-ITp9wMMKEPpfWm7A0t27zUe5HNhnGO41SnWQADmX6TSpKo0CsipDwEWKePVYeuMH")'
-              }}
-            ></div>
+            <Link to="/profile">
+              <div
+                className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 cursor-pointer hover:opacity-80 transition-opacity"
+                style={{
+                  backgroundImage: `url("${userAvatar || 'https://lh3.googleusercontent.com/aida-public/AB6AXuBDIzmOKkCMAsO-QHgqPOmIS520rbDbPDohsp_l1BHCh2F8CvyNglHXwkKPfhdX1xPldmXOO0jLDsy_alKCT0oxe220SbizDgjNnxPyT1BasQvEzaehDfdntF2fxT4SJCyrztK3VrcBcNobzunVf17EVYGqpXnQoQSCfnp-syeFwTEFngZaFvY9QJh9Vwnx65HljWSyuAGUOEb-ITp9wMMKEPpfWm7A0t27zUe5HNhnGO41SnWQADmX6TSpKo0CsipDwEWKePVYeuMH'}")`
+                }}
+              ></div>
+            </Link>
           </div>
           <div className="flex gap-2 items-center justify-end">
             <button
@@ -458,24 +495,23 @@ export default function Dashboard() {
             >
               <span className="material-symbols-outlined">{darkMode ? "light_mode" : "dark_mode"}</span>
             </button>
-            <button
-              onClick={handleSignOut}
-              className="flex cursor-pointer items-center justify-center rounded-xl h-10 px-4 bg-red-500 hover:bg-red-600 text-white text-sm font-bold transition-colors shadow-sm"
-              title="Sign out"
-            >
-              Sign Out
-            </button>
           </div>
         </header>
 
         {/* Welcome Section */}
         <div className="flex items-center gap-4 px-4 pt-4">
-          <div
-            className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-16 shrink-0"
-            style={{
-              backgroundImage: `url("https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=13ec37&color=fff")`
-            }}
-          ></div>
+          <Link to="/profile">
+            <div
+              className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-16 shrink-0 border-2 border-vic-green cursor-pointer hover:opacity-80 transition-opacity relative group"
+              style={{
+                backgroundImage: `url("${userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=13ec37&color=fff&size=128`}")`
+              }}
+            >
+              <div className="absolute inset-0 bg-black/30 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="material-symbols-outlined text-white text-xl">settings</span>
+              </div>
+            </div>
+          </Link>
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <h1 className="text-[#111812] dark:text-white tracking-light text-[32px] font-bold leading-tight text-left">
@@ -494,7 +530,7 @@ export default function Dashboard() {
 
         {/* Progress Section */}
         <div className="p-4">
-          <div className="flex flex-col items-stretch justify-start rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_12px_rgba(0,0,0,0.2)] bg-white dark:bg-background-dark dark:border dark:border-slate-800">
+          <div className="flex flex-col items-stretch justify-start rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_12px_rgba(0,0,0,0.2)] bg-white dark:bg-[#1f2c34] dark:border dark:border-slate-800">
             <div className="flex w-full grow flex-col items-stretch justify-center gap-4 p-6">
               <div className="flex flex-col">
                 <p className="text-slate-600 dark:text-slate-400 text-sm font-normal leading-normal">Progress</p>

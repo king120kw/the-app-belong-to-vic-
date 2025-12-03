@@ -82,9 +82,9 @@ class MealDeckController {
         this.cardOrder.push(this.cardOrder.shift()!);
         this.nextCount++;
         this.applyCardPositions();
-        if (this.nextCount % this.cards.length === 0 && this.nextCount > 0) {
-            this.dispatchCycleComplete();
-        }
+
+        // Auto-advance to next meal after EVERY card, not just after full cycle
+        this.dispatchCycleComplete();
     }
 
     handlePrev() {
@@ -130,25 +130,33 @@ export default function FoodCarousel({
             { meal: "dinner", deckId: "deck-dinner" },
         ];
 
-        configs.forEach((cfg) => {
-            const deckEl = document.getElementById(cfg.deckId);
-            const colEl = document.getElementById(`col-${cfg.meal}`);
-            const prevBtn = document.querySelector<HTMLButtonElement>(
-                `.nav.prev[data-deck="${cfg.meal}"]`
-            );
-            const nextBtn = document.querySelector<HTMLButtonElement>(
-                `.nav.next[data-deck="${cfg.meal}"]`
-            );
-
-            if (deckEl && colEl) {
-                controllersRef.current[cfg.meal] = new MealDeckController(
-                    deckEl,
-                    prevBtn,
-                    nextBtn,
-                    colEl
+        // Small timeout to ensure DOM is ready after data update
+        const timer = setTimeout(() => {
+            configs.forEach((cfg) => {
+                const deckEl = document.getElementById(cfg.deckId);
+                const colEl = document.getElementById(`col-${cfg.meal}`);
+                const prevBtn = document.querySelector<HTMLButtonElement>(
+                    `.nav.prev[data-deck="${cfg.meal}"]`
                 );
-            }
-        });
+                const nextBtn = document.querySelector<HTMLButtonElement>(
+                    `.nav.next[data-deck="${cfg.meal}"]`
+                );
+
+                if (deckEl && colEl) {
+                    // Clean up old controller if exists
+                    if (controllersRef.current[cfg.meal]) {
+                        // Optional: Add cleanup method to controller if needed
+                    }
+
+                    controllersRef.current[cfg.meal] = new MealDeckController(
+                        deckEl,
+                        prevBtn,
+                        nextBtn,
+                        colEl
+                    );
+                }
+            });
+        }, 100);
 
         // Listen for cycle complete events
         const handleCycleComplete = (e: Event) => {
@@ -164,8 +172,9 @@ export default function FoodCarousel({
 
         return () => {
             document.removeEventListener("mealCycleComplete", handleCycleComplete);
+            clearTimeout(timer);
         };
-    }, []);
+    }, [breakfastMeals, lunchMeals, dinnerMeals]);
 
     useEffect(() => {
         // Update column states based on active meal

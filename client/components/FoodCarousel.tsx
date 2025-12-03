@@ -119,12 +119,7 @@ export default function FoodCarousel({
     lunchMeals,
     dinnerMeals,
 }: FoodCarouselProps) {
-    const [activeMeal, setActiveMeal] = useState<
-        "breakfast" | "lunch" | "dinner"
-    >("breakfast");
-    const deckRefs = useRef<{
-        [key: string]: { deckEl: HTMLElement; colEl: HTMLElement } | null;
-    }>({});
+    const [activeMeal, setActiveMeal] = useState<"breakfast" | "lunch" | "dinner">("breakfast");
     const controllersRef = useRef<{ [key: string]: MealDeckController }>({});
 
     useEffect(() => {
@@ -161,10 +156,7 @@ export default function FoodCarousel({
             const currentMeal = customEvent.detail.meal;
             const mealOrder = ["breakfast", "lunch", "dinner"];
             const idx = mealOrder.indexOf(currentMeal);
-            const next = mealOrder[(idx + 1) % mealOrder.length] as
-                | "breakfast"
-                | "lunch"
-                | "dinner";
+            const next = mealOrder[(idx + 1) % mealOrder.length] as "breakfast" | "lunch" | "dinner";
             setActiveMeal(next);
         };
 

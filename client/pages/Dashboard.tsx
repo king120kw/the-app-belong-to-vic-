@@ -21,6 +21,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<"dashboard" | "progress">("dashboard");
   const [activeMealType, setActiveMealType] = useState<"breakfast" | "lunch" | "dinner">("breakfast");
+  const [darkMode, setDarkMode] = useState(false);
+  const [userName, setUserName] = useState("");
 
   const [userProfile, setUserProfile] = useState<any>(null);
   const [dailyProgress, setDailyProgress] = useState<any>(null);
@@ -57,19 +59,52 @@ export default function Dashboard() {
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
 
+  // Load user name and theme from localStorage
+  useEffect(() => {
+    const savedName = localStorage.getItem("userName") || "User";
+    setUserName(savedName);
+    const savedTheme = localStorage.getItem("theme") || "light";
+    setDarkMode(savedTheme === "dark");
+    if (savedTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    }
+  }, []);
+
+  // Toggle theme
+  const toggleTheme = () => {
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    if (newMode) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  };
+
+  // Sign out handler
+  const handleSignOut = () => {
+    localStorage.removeItem("userName");
+    navigate("/");
+  };
+
+
+
   // Fetch all dashboard data
   useEffect(() => {
     async function fetchDashboardData() {
       try {
         const user = await getUser();
         if (!user) {
-          navigate("/auth");
-          return;
+          // Allow access even if not authenticated for now, as we are using mock auth
+          // navigate("/auth");
+          // return;
         }
 
         // Parallel data fetching
         const [profile, progress, suggestions] = await Promise.all([
-          getUserProfile(user.id),
+          user ? getUserProfile(user.id) : null,
           getDailyProgress(new Date().toISOString().split('T')[0]),
           getTimeBbasedSuggestions()
         ]);
@@ -415,13 +450,21 @@ export default function Dashboard() {
               }}
             ></div>
           </div>
-          <div className="flex w-12 items-center justify-end">
-            <Link
-              to="/settings"
-              className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-12 bg-transparent text-[#111812] dark:text-white gap-2 text-base font-bold leading-normal tracking-[0.015em] min-w-0 p-0"
+          <div className="flex gap-2 items-center justify-end">
+            <button
+              onClick={toggleTheme}
+              className="flex cursor-pointer items-center justify-center rounded-xl h-10 w-10 bg-transparent text-[#111812] dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+              title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >
-              <span className="material-symbols-outlined text-[#111812] dark:text-white">settings</span>
-            </Link>
+              <span className="material-symbols-outlined">{darkMode ? "light_mode" : "dark_mode"}</span>
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="flex cursor-pointer items-center justify-center rounded-xl h-10 px-4 bg-red-500 hover:bg-red-600 text-white text-sm font-bold transition-colors shadow-sm"
+              title="Sign out"
+            >
+              Sign Out
+            </button>
           </div>
         </header>
 
@@ -430,13 +473,13 @@ export default function Dashboard() {
           <div
             className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-16 shrink-0"
             style={{
-              backgroundImage: `url("${userProfile?.avatar_url || 'https://lh3.googleusercontent.com/aida-public/AB6AXuBDIzmOKkCMAsO-QHgqPOmIS520rbDbPDohsp_l1BHCh2F8CvyNglHXwkKPfhdX1xPldmXOO0jLDsy_alKCT0oxe220SbizDgjNnxPyT1BasQvEzaehDfdntF2fxT4SJCyrztK3VrcBcNobzunVf17EVYGqpXnQoQSCfnp-syeFwTEFngZaFvY9QJh9Vwnx65HljWSyuAGUOEb-ITp9wMMKEPpfWm7A0t27zUe5HNhnGO41SnWQADmX6TSpKo0CsipDwEWKePVYeuMH'}")`
+              backgroundImage: `url("https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=13ec37&color=fff")`
             }}
           ></div>
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <h1 className="text-[#111812] dark:text-white tracking-light text-[32px] font-bold leading-tight text-left">
-                Welcome back, {userProfile?.full_name?.split(' ')[0] || 'Vic'}
+                Welcome back, {userName}
               </h1>
               <div className="flex items-center gap-1 rounded-full bg-vic-green/20 dark:bg-vic-green/30 px-2 py-1 text-vic-green">
                 <span className="material-symbols-outlined !text-sm">mic</span>

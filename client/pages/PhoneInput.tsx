@@ -4,11 +4,12 @@ import { useNavigate } from "react-router-dom";
 export default function PhoneInput() {
     const navigate = useNavigate();
     const [phoneNumber, setPhoneNumber] = useState("");
+    const [countryCode, setCountryCode] = useState("+1");
 
     const handleContinue = () => {
-        if (phoneNumber.length >= 10) {
+        if (phoneNumber.length >= 4) {
             // Store phone number for verification
-            localStorage.setItem("phoneNumber", `+1${phoneNumber}`);
+            localStorage.setItem("phoneNumber", `${countryCode}${phoneNumber}`);
             navigate("/verification-code");
         }
     };
@@ -52,17 +53,37 @@ export default function PhoneInput() {
 
                     {/* Phone Input */}
                     <div className="w-full max-w-md px-4 py-8">
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-                                <span className="text-gray-600 dark:text-gray-400 text-lg">+1</span>
+                        <div className="relative flex gap-2">
+                            <div className="relative w-24">
+                                <select
+                                    value={countryCode}
+                                    onChange={(e) => setCountryCode(e.target.value)}
+                                    className="w-full h-full appearance-none bg-white/50 dark:bg-background-dark/50 text-gray-800 dark:text-gray-100 font-medium text-lg px-3 py-4 rounded-xl border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-vic-green focus:border-transparent"
+                                >
+                                    <option value="+1">🇺🇸 +1</option>
+                                    <option value="+44">🇬🇧 +44</option>
+                                    <option value="+62">🇮🇩 +62</option>
+                                    <option value="+91">🇮🇳 +91</option>
+                                    <option value="+86">🇨🇳 +86</option>
+                                    <option value="+81">🇯🇵 +81</option>
+                                    <option value="+49">🇩🇪 +49</option>
+                                    <option value="+33">🇫🇷 +33</option>
+                                    <option value="+234">🇳🇬 +234</option>
+                                    <option value="+27">🇿🇦 +27</option>
+                                    <option value="+20">🇪🇬 +20</option>
+                                    <option value="+971">🇦🇪 +971</option>
+                                    <option value="+966">🇸🇦 +966</option>
+                                </select>
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                                    <span className="material-symbols-outlined text-gray-500 text-sm">expand_more</span>
+                                </div>
                             </div>
                             <input
                                 type="tel"
                                 value={phoneNumber}
                                 onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
-                                placeholder="123-456-7890"
-                                maxLength={10}
-                                className="w-full pl-12 pr-4 py-4 text-lg font-medium bg-white/50 dark:bg-background-dark/50 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-vic-green rounded-xl border border-gray-300 dark:border-gray-700 focus:border-transparent"
+                                placeholder="Phone number"
+                                className="flex-1 pl-4 pr-4 py-4 text-lg font-medium bg-white/50 dark:bg-background-dark/50 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-vic-green rounded-xl border border-gray-300 dark:border-gray-700 focus:border-transparent"
                             />
                         </div>
                         <p className="text-gray-500 dark:text-gray-400 text-sm mt-2 text-center">

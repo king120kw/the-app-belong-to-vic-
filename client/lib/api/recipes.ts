@@ -174,7 +174,7 @@ export const getPersonalizedSuggestions = async () => {
     return data
 }
 
-export const getTimeBbasedSuggestions = async () => {
+export const getTimeBasedSuggestions = async () => {
     const hour = new Date().getHours()
     let mealType: string
 

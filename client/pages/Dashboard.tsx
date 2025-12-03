@@ -6,7 +6,7 @@ import { ProductDetails } from "@/components/ProductDetails";
 import FoodCarousel from "@/components/FoodCarousel";
 import { getUser, getUserProfile } from "@/lib/api/auth";
 import { getDailyProgress } from "@/lib/api/progress";
-import { getTimeBbasedSuggestions } from "@/lib/api/recipes";
+import { getTimeBasedSuggestions } from "@/lib/api/recipes";
 
 interface Meal {
   id: string;
@@ -122,46 +122,46 @@ export default function Dashboard() {
       // Set meals immediately with hardcoded data (fallback/default)
       setMeals({
         breakfast: [
-          { id: '1', name: "Oatmeal with Dates", subtitle: "High fiber start", calories: 320, image: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80", meal_type: 'breakfast' },
-          { id: '2', name: "Berry Smoothie Bowl", subtitle: "Antioxidant rich", calories: 280, image: "https://images.unsplash.com/photo-1546069901-eacef0df6022?w=1200&q=80", meal_type: 'breakfast' },
-          { id: '3', name: "Soft Boiled Eggs", subtitle: "Protein packed", calories: 180, image: "https://images.unsplash.com/photo-1513042575839-1c0c2d1e5ddf?w=1200&q=80", meal_type: 'breakfast' },
-          { id: '4', name: "Avocado Toast", subtitle: "Healthy fats", calories: 350, image: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=1200&q=80", meal_type: 'breakfast' },
-          { id: '5', name: "Greek Yogurt Parfait", subtitle: "Probiotic boost", calories: 250, image: "https://images.unsplash.com/photo-1523986371872-9d3ba2e2f642?w=1200&q=80", meal_type: 'breakfast' },
-          { id: '6', name: "Banana Pancakes", subtitle: "Light & satiety", calories: 380, image: "https://images.unsplash.com/photo-1505250469679-203ad9ced0cb?w=1200&q=80", meal_type: 'breakfast' },
-          { id: '7', name: "Fresh Fruit Plate", subtitle: "Natural sugars", calories: 150, image: "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=1200&q=80", meal_type: 'breakfast' },
-          { id: '8', name: "Muesli Bowl", subtitle: "Wholegrain energy", calories: 310, image: "https://images.unsplash.com/photo-1541987157448-6d6a1f9f5c8d?w=1200&q=80", meal_type: 'breakfast' },
-          { id: '9', name: "Breakfast Burrito", subtitle: "Savory & filling", calories: 420, image: "https://images.unsplash.com/photo-1551024506-0bccd828d307?w=1200&q=80", meal_type: 'breakfast' },
-          { id: '10', name: "Butter Croissant", subtitle: "Flaky delight", calories: 290, image: "https://images.unsplash.com/photo-1588315029754-2dd089d39a1a?w=1200&q=80", meal_type: 'breakfast' },
-          { id: '11', name: "Chia Pudding", subtitle: "Omega-3 rich", calories: 200, image: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1200&q=80", meal_type: 'breakfast' },
-          { id: '12', name: "French Toast", subtitle: "Classic comfort", calories: 360, image: "https://images.unsplash.com/photo-1558042239-2510ca0eff8a?w=1200&q=80", meal_type: 'breakfast' }
+          { id: '1', name: "Oatmeal with Dates", subtitle: "High fiber start", calories: 320, image: "https://images.pexels.com/photos/1092730/pexels-photo-1092730.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' },
+          { id: '2', name: "Berry Smoothie Bowl", subtitle: "Antioxidant rich", calories: 280, image: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' },
+          { id: '3', name: "Soft Boiled Eggs", subtitle: "Protein packed", calories: 180, image: "https://images.pexels.com/photos/1410235/pexels-photo-1410235.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' },
+          { id: '4', name: "Avocado Toast", subtitle: "Healthy fats", calories: 350, image: "https://images.pexels.com/photos/1640770/pexels-photo-1640770.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' },
+          { id: '5', name: "Greek Yogurt Parfait", subtitle: "Probiotic boost", calories: 250, image: "https://images.pexels.com/photos/1854652/pexels-photo-1854652.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' },
+          { id: '6', name: "Banana Pancakes", subtitle: "Light & satiety", calories: 380, image: "https://images.pexels.com/photos/376464/pexels-photo-376464.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' },
+          { id: '7', name: "Fresh Fruit Plate", subtitle: "Natural sugars", calories: 150, image: "https://images.pexels.com/photos/1132047/pexels-photo-1132047.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' },
+          { id: '8', name: "Muesli Bowl", subtitle: "Wholegrain energy", calories: 310, image: "https://images.pexels.com/photos/1337824/pexels-photo-1337824.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' },
+          { id: '9', name: "Breakfast Burrito", subtitle: "Savory & filling", calories: 420, image: "https://images.pexels.com/photos/2087748/pexels-photo-2087748.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' },
+          { id: '10', name: "Butter Croissant", subtitle: "Flaky delight", calories: 290, image: "https://images.pexels.com/photos/2135677/pexels-photo-2135677.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' },
+          { id: '11', name: "Chia Pudding", subtitle: "Omega-3 rich", calories: 200, image: "https://images.pexels.com/photos/1435904/pexels-photo-1435904.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' },
+          { id: '12', name: "French Toast", subtitle: "Classic comfort", calories: 360, image: "https://images.pexels.com/photos/1630309/pexels-photo-1630309.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'breakfast' }
         ],
         lunch: [
-          { id: '13', name: "Grilled Chicken Bowl", subtitle: "Lean protein", calories: 480, image: "https://images.unsplash.com/photo-1605478573815-7e0b7a77b798?w=1200&q=80", meal_type: 'lunch' },
-          { id: '14', name: "Quinoa Salad", subtitle: "Filling & fiber", calories: 390, image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1200&q=80", meal_type: 'lunch' },
-          { id: '15', name: "Fish Rice Bowl", subtitle: "Omega-3 rich", calories: 520, image: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80", meal_type: 'lunch' },
-          { id: '16', name: "Veggie Wrap", subtitle: "Portable & light", calories: 340, image: "https://images.unsplash.com/photo-1564758866816-79f6b0f4b5f6?w=1200&q=80", meal_type: 'lunch' },
-          { id: '17', name: "Poke Bowl", subtitle: "Fresh & balanced", calories: 450, image: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=1200&q=80", meal_type: 'lunch' },
-          { id: '18', name: "Lentil Soup", subtitle: "Comfort & protein", calories: 320, image: "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=1200&q=80", meal_type: 'lunch' },
-          { id: '19', name: "Chicken Salad", subtitle: "Crisp greens", calories: 380, image: "https://images.unsplash.com/photo-1553621042-f6e147245754?w=1200&q=80", meal_type: 'lunch' },
-          { id: '20', name: "Sushi Plate", subtitle: "Light & savory", calories: 410, image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1200&q=80", meal_type: 'lunch' },
-          { id: '21', name: "Club Sandwich", subtitle: "Triple layered", calories: 520, image: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=1200&q=80", meal_type: 'lunch' },
-          { id: '22', name: "Gourmet Burger", subtitle: "Premium beef", calories: 580, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200&q=80", meal_type: 'lunch' },
-          { id: '23', name: "Margherita Pizza", subtitle: "Classic Italian", calories: 490, image: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=1200&q=80", meal_type: 'lunch' },
-          { id: '24', name: "Burrito Bowl", subtitle: "Mexican fusion", calories: 510, image: "https://images.unsplash.com/photo-1565299507177-b0ac66763828?w=1200&q=80", meal_type: 'lunch' }
+          { id: '13', name: "Grilled Chicken Bowl", subtitle: "Lean protein", calories: 480, image: "https://images.pexels.com/photos/1640772/pexels-photo-1640772.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' },
+          { id: '14', name: "Quinoa Salad", subtitle: "Filling & fiber", calories: 390, image: "https://images.pexels.com/photos/1640773/pexels-photo-1640773.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' },
+          { id: '15', name: "Fish Rice Bowl", subtitle: "Omega-3 rich", calories: 520, image: "https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' },
+          { id: '16', name: "Veggie Wrap", subtitle: "Portable & light", calories: 340, image: "https://images.pexels.com/photos/1600711/pexels-photo-1600711.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' },
+          { id: '17', name: "Poke Bowl", subtitle: "Fresh & balanced", calories: 450, image: "https://images.pexels.com/photos/1640775/pexels-photo-1640775.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' },
+          { id: '18', name: "Lentil Soup", subtitle: "Comfort & protein", calories: 320, image: "https://images.pexels.com/photos/539451/pexels-photo-539451.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' },
+          { id: '19', name: "Chicken Salad", subtitle: "Crisp greens", calories: 380, image: "https://images.pexels.com/photos/1059905/pexels-photo-1059905.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' },
+          { id: '20', name: "Sushi Plate", subtitle: "Light & savory", calories: 410, image: "https://images.pexels.com/photos/357756/pexels-photo-357756.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' },
+          { id: '21', name: "Club Sandwich", subtitle: "Triple layered", calories: 520, image: "https://images.pexels.com/photos/1633525/pexels-photo-1633525.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' },
+          { id: '22', name: "Gourmet Burger", subtitle: "Premium beef", calories: 580, image: "https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' },
+          { id: '23', name: "Margherita Pizza", subtitle: "Classic Italian", calories: 490, image: "https://images.pexels.com/photos/1653877/pexels-photo-1653877.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' },
+          { id: '24', name: "Burrito Bowl", subtitle: "Mexican fusion", calories: 510, image: "https://images.pexels.com/photos/1640771/pexels-photo-1640771.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'lunch' }
         ],
         dinner: [
-          { id: '25', name: "Grilled Steak", subtitle: "Hearty protein", calories: 620, image: "https://images.unsplash.com/photo-1604908177522-2ecbd7f2b4e3?w=1200&q=80", meal_type: 'dinner' },
-          { id: '26', name: "Wholegrain Pasta", subtitle: "Comfort carbs", calories: 480, image: "https://images.unsplash.com/photo-1604908177345-4bfc5bd7b8f9?w=1200&q=80", meal_type: 'dinner' },
-          { id: '27', name: "Tofu Stir Fry", subtitle: "Vegetarian option", calories: 390, image: "https://images.unsplash.com/photo-1541544181188-2f8b0b3c5f9f?w=1200&q=80", meal_type: 'dinner' },
-          { id: '28', name: "Roasted Vegetables", subtitle: "Light & warm", calories: 280, image: "https://images.unsplash.com/photo-1543353071-087092ec393a?w=1200&q=80", meal_type: 'dinner' },
-          { id: '29', name: "Vegetable Soup", subtitle: "Comforting broth", calories: 220, image: "https://images.unsplash.com/photo-1604908177313-4f6f79f4b4c6?w=1200&q=80", meal_type: 'dinner' },
-          { id: '30', name: "Baked Salmon", subtitle: "Omega-3 rich", calories: 520, image: "https://images.unsplash.com/photo-1512058564366-c9e3c8d4f3c8?w=1200&q=80", meal_type: 'dinner' },
-          { id: '31', name: "Chicken Curry", subtitle: "Warm & savory", calories: 550, image: "https://images.unsplash.com/photo-1526318472351-c75fcf070b60?w=1200&q=80", meal_type: 'dinner' },
-          { id: '32', name: "Mushroom Risotto", subtitle: "Creamy & rich", calories: 480, image: "https://images.unsplash.com/photo-1514511524328-1b0a9d2c7d97?w=1200&q=80", meal_type: 'dinner' },
-          { id: '33', name: "Roast Chicken", subtitle: "Classic comfort", calories: 590, image: "https://images.unsplash.com/photo-1604908177308-0460a8f5f7c1?w=1200&q=80", meal_type: 'dinner' },
-          { id: '34', name: "Beef Lasagna", subtitle: "Layered goodness", calories: 610, image: "https://images.unsplash.com/photo-1604908177315-4bfc5bd7b8f9?w=1200&q=80", meal_type: 'dinner' },
-          { id: '35', name: "Grilled Shrimp", subtitle: "Light seafood", calories: 380, image: "https://images.unsplash.com/photo-1604908177316-4f6f79f4b4c6?w=1200&q=80", meal_type: 'dinner' },
-          { id: '36', name: "Beef Stew", subtitle: "Hearty & warm", calories: 540, image: "https://images.unsplash.com/photo-1604908177317-47c6c4b5f7c1?w=1200&q=80", meal_type: 'dinner' }
+          { id: '25', name: "Grilled Steak", subtitle: "Hearty protein", calories: 620, image: "https://images.pexels.com/photos/769289/pexels-photo-769289.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' },
+          { id: '26', name: "Wholegrain Pasta", subtitle: "Comfort carbs", calories: 480, image: "https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' },
+          { id: '27', name: "Tofu Stir Fry", subtitle: "Vegetarian option", calories: 390, image: "https://images.pexels.com/photos/1640778/pexels-photo-1640778.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' },
+          { id: '28', name: "Roasted Vegetables", subtitle: "Light & warm", calories: 280, image: "https://images.pexels.com/photos/1640779/pexels-photo-1640779.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' },
+          { id: '29', name: "Vegetable Soup", subtitle: "Comforting broth", calories: 220, image: "https://images.pexels.com/photos/1640780/pexels-photo-1640780.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' },
+          { id: '30', name: "Baked Salmon", subtitle: "Omega-3 rich", calories: 520, image: "https://images.pexels.com/photos/1640781/pexels-photo-1640781.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' },
+          { id: '31', name: "Chicken Curry", subtitle: "Warm & savory", calories: 550, image: "https://images.pexels.com/photos/2474658/pexels-photo-2474658.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' },
+          { id: '32', name: "Mushroom Risotto", subtitle: "Creamy & rich", calories: 480, image: "https://images.pexels.com/photos/1640782/pexels-photo-1640782.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' },
+          { id: '33', name: "Roast Chicken", subtitle: "Classic comfort", calories: 590, image: "https://images.pexels.com/photos/2338407/pexels-photo-2338407.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' },
+          { id: '34', name: "Beef Lasagna", subtitle: "Layered goodness", calories: 610, image: "https://images.pexels.com/photos/4079520/pexels-photo-4079520.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' },
+          { id: '35', name: "Grilled Shrimp", subtitle: "Light seafood", calories: 380, image: "https://images.pexels.com/photos/566345/pexels-photo-566345.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' },
+          { id: '36', name: "Beef Stew", subtitle: "Hearty & warm", calories: 540, image: "https://images.pexels.com/photos/1640783/pexels-photo-1640783.jpeg?auto=compress&cs=tinysrgb&w=1200", meal_type: 'dinner' }
         ]
       });
 
@@ -177,7 +177,7 @@ export default function Dashboard() {
         const [profile, progress, suggestions] = await Promise.all([
           user ? getUserProfile(user.id) : null,
           getDailyProgress(new Date().toISOString().split('T')[0]),
-          getTimeBbasedSuggestions()
+          getTimeBasedSuggestions()
         ]);
 
         setUserProfile(profile);

@@ -176,7 +176,9 @@
 }
 
 .carousel .nav.next {
-  right: 8px;
+  right: 8px !important;
+  display: grid !important;
+  opacity: 1 !important;
 }
 
 /* Hide buttons on dimmed columns */
@@ -328,9 +330,10 @@
     height: 220px;
   }
 
-  .carousel .nav {
+  /* Don't hide nav on mobile, just in case */
+  /* .carousel .nav {
     display: none;
-  }
+  } */
 
   .column.dimmed {
     display: none;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import "../styles/FoodCarousel.css";
 
 interface Meal {
@@ -16,184 +16,49 @@ interface FoodCarouselProps {
     dinnerMeals: Meal[];
 }
 
-class MealDeckController {
-    deckEl: HTMLElement;
-    cards: HTMLElement[];
-    prevBtn: HTMLButtonElement | null;
-    nextBtn: HTMLButtonElement | null;
-    colEl: HTMLElement;
-    cardOrder: number[];
-    nextCount: number;
-
-    constructor(
-        deckEl: HTMLElement,
-        prevBtn: HTMLButtonElement | null,
-        nextBtn: HTMLButtonElement | null,
-        colEl: HTMLElement
-    ) {
-        this.deckEl = deckEl;
-        this.cards = Array.from(deckEl.querySelectorAll(".product-card"));
-        this.prevBtn = prevBtn;
-        this.nextBtn = nextBtn;
-        this.colEl = colEl;
-        this.cardOrder = this.cards.map((_, i) => i);
-        this.nextCount = 0;
-
-        this.bindEvents();
-        this.setDeckHeight();
-        this.applyCardPositions();
-
-        window.addEventListener("resize", () => this.setDeckHeight());
-    }
-
-    setDeckHeight() {
-        if (!this.cards.length) return;
-        const h = Math.max(...this.cards.map((c) => c.offsetHeight));
-        this.deckEl.style.height = h + "px";
-    }
-
-    bindEvents() {
-        this.nextBtn?.addEventListener("click", () => this.handleNext());
-        this.prevBtn?.addEventListener("click", () => this.handlePrev());
-
-        let startX = 0,
-            dragging = false,
-            pid: number | null = null;
-        this.deckEl.addEventListener("pointerdown", (e) => {
-            dragging = true;
-            startX = e.clientX;
-            pid = e.pointerId;
-            this.deckEl.setPointerCapture(pid);
-        });
-        this.deckEl.addEventListener("pointerup", (e) => {
-            if (!dragging) return;
-            dragging = false;
-            const dx = e.clientX - startX;
-            if (dx > 40) this.handlePrev();
-            else if (dx < -40) this.handleNext();
-            try {
-                if (pid !== null) this.deckEl.releasePointerCapture(pid);
-            } catch (err) { }
-        });
-        this.deckEl.addEventListener("pointercancel", () => (dragging = false));
-    }
-
-    handleNext() {
-        this.cardOrder.push(this.cardOrder.shift()!);
-        this.nextCount++;
-        this.applyCardPositions();
-
-        // Auto-advance to next meal after EVERY card, not just after full cycle
-        this.dispatchCycleComplete();
-    }
-
-    handlePrev() {
-        this.cardOrder.unshift(this.cardOrder.pop()!);
-        this.applyCardPositions();
-    }
-
-    applyCardPositions() {
-        this.cards.forEach((card) => {
-            card.classList.forEach((k) => {
-                if (/^card-pos-/.test(k)) card.classList.remove(k);
-            });
-        });
-        this.cardOrder.forEach((cardIndex, posIndex) => {
-            const card = this.cards[cardIndex];
-            const pos = Math.min(posIndex, 5);
-            card.classList.add(`card-pos-${pos}`);
-        });
-    }
-
-    dispatchCycleComplete() {
-        const ev = new CustomEvent("mealCycleComplete", {
-            detail: { meal: this.colEl.dataset.meal },
-            bubbles: true,
-        });
-        document.dispatchEvent(ev);
-    }
-}
-
 export default function FoodCarousel({
     breakfastMeals,
     lunchMeals,
     dinnerMeals,
 }: FoodCarouselProps) {
-    const [activeMeal, setActiveMeal] = useState<"breakfast" | "lunch" | "dinner">("breakfast");
-    const controllersRef = useRef<{ [key: string]: MealDeckController }>({});
+    // Process meals: ensure exactly 12 items and trim images
+    const processMeals = (meals: Meal[]) => meals.slice(0, 12).map(m => ({
+        ...m,
+        image: m.image.trim()
+    }));
 
-    useEffect(() => {
-        // Initialize deck controllers
-        const configs = [
-            { meal: "breakfast", deckId: "deck-breakfast" },
-            { meal: "lunch", deckId: "deck-lunch" },
-            { meal: "dinner", deckId: "deck-dinner" },
-        ];
+    // Combine all meals into a single array of 36 cards
+    const allMeals = [
+        ...processMeals(breakfastMeals),
+        ...processMeals(lunchMeals),
+        ...processMeals(dinnerMeals)
+    ];
 
-        // Small timeout to ensure DOM is ready after data update
-        const timer = setTimeout(() => {
-            configs.forEach((cfg) => {
-                const deckEl = document.getElementById(cfg.deckId);
-                const colEl = document.getElementById(`col-${cfg.meal}`);
-                const prevBtn = document.querySelector<HTMLButtonElement>(
-                    `.nav.prev[data-deck="${cfg.meal}"]`
-                );
-                const nextBtn = document.querySelector<HTMLButtonElement>(
-                    `.nav.next[data-deck="${cfg.meal}"]`
-                );
+    // Global index (0-35) - tracks current card across all meals
+    const [globalIndex, setGlobalIndex] = useState(0);
 
-                if (deckEl && colEl) {
-                    // Clean up old controller if exists
-                    if (controllersRef.current[cfg.meal]) {
-                        // Optional: Add cleanup method to controller if needed
-                    }
-
-                    controllersRef.current[cfg.meal] = new MealDeckController(
-                        deckEl,
-                        prevBtn,
-                        nextBtn,
-                        colEl
-                    );
-                }
-            });
-        }, 100);
-
-        // Listen for cycle complete events
-        const handleCycleComplete = (e: Event) => {
-            const customEvent = e as CustomEvent<{ meal: string }>;
-            const currentMeal = customEvent.detail.meal;
-            const mealOrder = ["breakfast", "lunch", "dinner"];
-            const idx = mealOrder.indexOf(currentMeal);
-            const next = mealOrder[(idx + 1) % mealOrder.length] as "breakfast" | "lunch" | "dinner";
-            setActiveMeal(next);
-        };
-
-        document.addEventListener("mealCycleComplete", handleCycleComplete);
-
-        return () => {
-            document.removeEventListener("mealCycleComplete", handleCycleComplete);
-            clearTimeout(timer);
-        };
-    }, [breakfastMeals, lunchMeals, dinnerMeals]);
-
-    useEffect(() => {
-        // Update column states based on active meal
-        const mealOrder = ["breakfast", "lunch", "dinner"];
-        mealOrder.forEach((m) => {
-            const col = document.getElementById(`col-${m}`);
-            if (col) {
-                const isActive = m === activeMeal;
-                col.classList.toggle("active", isActive);
-                col.classList.toggle("dimmed", !isActive);
-            }
-        });
-    }, [activeMeal]);
-
-    const mealData = {
-        breakfast: breakfastMeals,
-        lunch: lunchMeals,
-        dinner: dinnerMeals,
+    // Determine which meal type is active based on global index
+    const getMealTypeFromIndex = (index: number): 'breakfast' | 'lunch' | 'dinner' => {
+        if (index < 12) return 'breakfast';
+        if (index < 24) return 'lunch';
+        return 'dinner';
     };
+
+    // Get the card to display from the 5 surrounding cards for 3D effect
+    const getVisibleCards = () => {
+        const cards = [];
+        for (let i = -2; i <= 2; i++) {
+            const idx = (globalIndex + i + 36) % 36;
+            cards.push({
+                meal: allMeals[idx],
+                position: i + 2, // 0-4, where 2 is front
+            });
+        }
+        return cards;
+    };
+
+    const activeMealType = getMealTypeFromIndex(globalIndex);
+    const visibleCards = getVisibleCards();
 
     const mealLabels = {
         breakfast: { title: "Breakfast", time: "Morning", badge: "Morning" },
@@ -201,49 +66,52 @@ export default function FoodCarousel({
         dinner: { title: "Dinner", time: "Evening", badge: "Evening" },
     };
 
+    // Navigation handlers - navigate through all 36 cards
+    const handleNext = () => {
+        setGlobalIndex((prev) => (prev + 1) % 36);
+    };
+
+    const handlePrev = () => {
+        setGlobalIndex((prev) => (prev - 1 + 36) % 36);
+    };
+
     return (
         <div className="food-carousel-container">
             <h1 className="carousel-main-title">VicCalary — Meal Suggestions</h1>
 
             <div className="columns">
-                {(["breakfast", "lunch", "dinner"] as const).map((mealType) => (
-                    <div
-                        key={mealType}
-                        className="tile column"
-                        id={`col-${mealType}`}
-                        data-meal={mealType}
-                    >
-                        <div className="meal-header">
-                            <div>
-                                <div className="meal-title">
-                                    {mealLabels[mealType].title}
-                                </div>
-                                <div className="meal-time" id={`time-${mealType}`}>
-                                    {mealLabels[mealType].time}
-                                </div>
-                            </div>
-                            <div className="badge">{mealLabels[mealType].badge}</div>
+                <div className="tile column active">
+                    <div className="meal-header">
+                        <div>
+                            <div className="meal-title">{mealLabels[activeMealType].title}</div>
+                            <div className="meal-time">{mealLabels[activeMealType].time}</div>
                         </div>
+                        <div className="badge">{mealLabels[activeMealType].badge}</div>
+                    </div>
 
-                        <div className="carousel">
-                            <button
-                                className="nav prev"
-                                data-deck={mealType}
-                                aria-label={`Previous ${mealType}`}
-                            >
-                                ←
-                            </button>
+                    <div className="carousel">
+                        <button
+                            className="nav prev"
+                            onClick={handlePrev}
+                            aria-label="Previous meal"
+                        >
+                            <span className="material-symbols-outlined">chevron_left</span>
+                        </button>
 
-                            <div
-                                className="deck"
-                                id={`deck-${mealType}`}
-                                role="region"
-                                aria-label={`${mealType} deck`}
-                            >
-                                {mealData[mealType].map((meal) => (
-                                    <article key={meal.id} className="product-card" role="group">
+                        <div className="deck">
+                            {visibleCards.map(({ meal, position }) => (
+                                meal ? (
+                                    <article
+                                        key={meal.id}
+                                        className={`product-card card-pos-${position}`}
+                                        role="group"
+                                    >
                                         <div className="product-media">
-                                            <img src={meal.image} alt={meal.name} />
+                                            <img
+                                                src={meal.image}
+                                                alt={meal.name}
+                                                referrerPolicy="no-referrer"
+                                            />
                                         </div>
                                         <header className="product-head">
                                             <h2 className="product-name">{meal.name}</h2>
@@ -251,19 +119,19 @@ export default function FoodCarousel({
                                             <p className="product-calories">{meal.calories} cal</p>
                                         </header>
                                     </article>
-                                ))}
-                            </div>
-
-                            <button
-                                className="nav next"
-                                data-deck={mealType}
-                                aria-label={`Next ${mealType}`}
-                            >
-                                →
-                            </button>
+                                ) : null
+                            ))}
                         </div>
+
+                        <button
+                            className="nav next"
+                            onClick={handleNext}
+                            aria-label="Next meal"
+                        >
+                            <span className="material-symbols-outlined">chevron_right</span>
+                        </button>
                     </div>
-                ))}
+                </div>
             </div>
         </div>
     );

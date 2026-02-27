@@ -89,12 +89,17 @@ export const updateSettings = async (userId: string, settings: Partial<{
     timezone: string
     country_code: string
     is_language_auto: boolean
+    country: string
+    currency_symbol: string
 }>) => {
     const { data, error } = await supabase
         .from('user_settings')
         .upsert({
             user_id: userId,
             ...settings,
+        }, {
+            onConflict: 'user_id',
+            ignoreDuplicates: false,
         })
         .select()
         .single()

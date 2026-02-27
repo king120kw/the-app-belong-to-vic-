@@ -30,16 +30,39 @@ serve(async (req) => {
         );
 
         // 3. Update or Insert into chat_users
-        const { error: dbError } = await supabaseAdmin
+        // Check if user already has a chat profile
+        const { data: existingUser } = await supabaseAdmin
             .from('chat_users')
-            .upsert({
-                user_id: userId,
-                phone_number: phoneNumber,
-                country_code: countryCode,
-                is_verified: false,
-                verification_code: verificationCode,
-                verification_expires_at: expiresAt
-            }, { onConflict: 'user_id' });
+            .select('id')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        let dbError;
+        if (existingUser) {
+            const { error } = await supabaseAdmin
+                .from('chat_users')
+                .update({
+                    phone_number: phoneNumber,
+                    country_code: countryCode,
+                    is_verified: false,
+                    verification_code: verificationCode,
+                    verification_expires_at: expiresAt
+                })
+                .eq('id', existingUser.id);
+            dbError = error;
+        } else {
+            const { error } = await supabaseAdmin
+                .from('chat_users')
+                .insert({
+                    user_id: userId,
+                    phone_number: phoneNumber,
+                    country_code: countryCode,
+                    is_verified: false,
+                    verification_code: verificationCode,
+                    verification_expires_at: expiresAt
+                });
+            dbError = error;
+        }
 
         if (dbError) throw dbError;
 
@@ -60,7 +83,7 @@ serve(async (req) => {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Edge Function Error:", error);
         return new Response(JSON.stringify({ error: error.message }), {
             status: 500,

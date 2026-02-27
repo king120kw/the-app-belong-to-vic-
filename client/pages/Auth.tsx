@@ -94,7 +94,14 @@ export default function Auth() {
       }
     } catch (error: any) {
       console.error("Auth Error:", error);
-      toast.error(error.message || t('auth_error'));
+      let errorMessage = error.message || t('auth_error');
+
+      // Prevent technical API key errors from being shown to users
+      if (errorMessage.includes("Invalid API key") || errorMessage.includes("apiKey")) {
+        errorMessage = t('auth_error') || "Authentication service error. Please try again later.";
+      }
+
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
       setLoading(false);

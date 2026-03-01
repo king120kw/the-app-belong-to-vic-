@@ -60,6 +60,7 @@ serve(async (req) => {
         // 5. Generate AI Summary
         const apiKey = Deno.env.get('OPENAI_API_KEY');
         const COACH_ID = '00000000-0000-0000-0000-000000000001';
+        let conversationId = null;
         let summary = "I haven't seen any logs from you today yet. Keep tracking your meals and budget!";
 
         if (apiKey && (progress || history?.length > 0)) {
@@ -70,7 +71,7 @@ serve(async (req) => {
                     "Authorization": `Bearer ${apiKey}`,
                 },
                 body: JSON.stringify({
-                    model: "gpt-4o-mini",
+                    model: "gpt-4o",
                     messages: [
                         {
                             role: "system",
@@ -104,42 +105,15 @@ serve(async (req) => {
                 const aiData = await aiResponse.json();
                 summary = aiData.choices[0]?.message?.content || summary;
 
-                // 6. Post to Chat
-                // First find if a conversation exists
-                const { data: existingConvs } = await supabase
-                    .from('conversation_participants')
-                    .select('conversation_id')
-                    .eq('user_id', userId);
+                // 6. Post to Chat - Use RPC to ensure we target the CORRECT 'ai' conversation
+                const { data: systemConvs, error: rpcError } = await supabase.rpc('provision_user_system_chats', { p_user_id: userId });
 
-                let conversationId = null;
-                if (existingConvs && existingConvs.length > 0) {
-                    const convIds = existingConvs.map(c => c.conversation_id);
-                    const { data: coachParticipant } = await supabase
-                        .from('conversation_participants')
-                        .select('conversation_id')
-                        .in('conversation_id', convIds)
-                        .eq('user_id', COACH_ID)
-                        .single();
-
-                    if (coachParticipant) conversationId = coachParticipant.conversation_id;
+                if (rpcError) {
+                    console.error("RPC Error provisioning chats:", rpcError);
+                    throw rpcError;
                 }
 
-                // If not, create one
-                if (!conversationId) {
-                    const { data: newConv } = await supabase
-                        .from('conversations')
-                        .insert({ is_group: false })
-                        .select()
-                        .single();
-
-                    if (newConv) {
-                        conversationId = newConv.id;
-                        await supabase.from('conversation_participants').insert([
-                            { conversation_id: conversationId, user_id: userId },
-                            { conversation_id: conversationId, user_id: COACH_ID }
-                        ]);
-                    }
-                }
+                conversationId = systemConvs.coach_conversation_id;
 
                 // Insert the summary message
                 if (conversationId) {

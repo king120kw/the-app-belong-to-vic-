@@ -28,6 +28,7 @@
     "emoji-picker-react": "^4.17.1",
     "express": "^5.1.0",
     "jsqr": "^1.4.0",
+    "pg": "^8.19.0",
     "react-qr-code": "^2.0.18",
     "zod": "^3.25.76"
   },

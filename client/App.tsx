@@ -22,6 +22,8 @@ import Cookbook from "./pages/Cookbook";
 import RecipeDetails from "./pages/RecipeDetails";
 import Budget from "./pages/Budget";
 import ProgressAnalysis from "./pages/ProgressAnalysis";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import NotFound from "./pages/NotFound";
 import { BottomNavbar } from "./components/BottomNavbar";
 import CallOverlay from "./components/CallOverlay";
@@ -51,7 +53,8 @@ const MainLayout = () => {
   // Global Call State
   const [incomingCall, setIncomingCall] = useState<any>(null);
   const [activeCall, setActiveCall] = useState<any>(null);
-  const { joinCall, leaveCall, status: dailyStatus, participants } = useDailyCall();
+  const [isCallMinimized, setIsCallMinimized] = useState(false);
+  const { joinCall, leaveCall, status: dailyStatus, participants, updateIframeStyle } = useDailyCall();
 
   // Global Call Listener
   useEffect(() => {
@@ -142,8 +145,7 @@ const MainLayout = () => {
   // 2. Active call exists AND (we haven't joined yet OR we joined but only us are there)
   // This mimics "Calling..." screen until the other person picks up (joins).
 
-  const showOverlay = (incomingCall || activeCall) &&
-    (dailyStatus !== 'joined' || (dailyStatus === 'joined' && participants.length < 2));
+  const showOverlay = (incomingCall || activeCall);
 
   const handleGlobalAccept = async () => {
     if (!incomingCall) return;
@@ -165,6 +167,68 @@ const MainLayout = () => {
       setActiveCall(null);
     }
   };
+
+  const handleGlobalDecline = async () => {
+    if (!incomingCall) return;
+    try {
+      await updateCallStatus(incomingCall.id, 'declined');
+      setIncomingCall(null);
+    } catch (err) {
+      console.error("Failed to decline call:", err);
+      setIncomingCall(null);
+    }
+  };
+
+  const handleGlobalEnd = async () => {
+    const callId = activeCall?.id || incomingCall?.id;
+    if (callId) {
+      await updateCallStatus(callId, 'ended');
+    }
+    setActiveCall(null);
+    setIncomingCall(null);
+    setIsCallMinimized(false);
+    leaveCall();
+  };
+
+  // Sync Daily Iframe Style with Minimization
+  useEffect(() => {
+    if (dailyStatus === 'joined') {
+      if (isCallMinimized) {
+        // Floating Bubble Style
+        updateIframeStyle({
+          position: 'fixed',
+          bottom: '80px',
+          right: '16px',
+          width: '80px',
+          height: '80px',
+          borderRadius: '16px',
+          zIndex: '9999',
+          border: '2px solid rgba(255,255,255,0.2)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          pointerEvents: 'auto'
+        });
+      } else {
+        // Full Screen Style
+        updateIframeStyle({
+          position: 'fixed',
+          top: '0',
+          left: '0',
+          width: '100%',
+          height: '100%',
+          border: '0',
+          zIndex: '9999',
+          borderRadius: '0'
+        });
+      }
+    }
+  }, [isCallMinimized, dailyStatus, updateIframeStyle]);
+
+  // Auto-minimize when navigating away from chat
+  useEffect(() => {
+    if (dailyStatus === 'joined' && !isChatConversation && !isCallMinimized) {
+      setIsCallMinimized(true);
+    }
+  }, [location.pathname, dailyStatus, isChatConversation, isCallMinimized]);
   // Global Auth Loader to prevent flashing
   if (loading) {
     return (
@@ -184,7 +248,6 @@ const MainLayout = () => {
           <CallOverlay
             type={incomingCall?.type || activeCall?.type || 'voice'}
             status={incomingCall ? 'ringing' : 'connected'}
-            // If incoming: show CALLER. If outgoing (activeCall): show RECEIVER.
             caller={{
               name: incomingCall
                 ? (incomingCall.caller?.full_name || incomingCall.caller?.display_name || 'Caller')
@@ -197,6 +260,8 @@ const MainLayout = () => {
             onAccept={handleGlobalAccept}
             onDecline={handleGlobalDecline}
             onEnd={handleGlobalEnd}
+            isMinimized={isCallMinimized}
+            onToggleMinimize={() => setIsCallMinimized(!isCallMinimized)}
           />
         </div>
       )}
@@ -218,6 +283,8 @@ const MainLayout = () => {
           <Route path="/phone-input" element={<PhoneInput />} />
           <Route path="/verification-code" element={<VerificationCode />} />
           <Route path="/analysis" element={<ProgressAnalysis />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

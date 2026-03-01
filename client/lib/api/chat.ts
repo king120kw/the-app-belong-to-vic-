@@ -2,58 +2,34 @@ import { supabase } from '../supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 export const getConversationsV2 = async (userId: string) => {
-    // 1. First get all conversation IDs where the user is a participant (and not soft-deleted)
-    const { data: participationData, error: participationError } = await supabase
+    // 1. First get all conversation IDs where the user is a participant
+    const { data: participationData, error: participationError } = await (supabase
         .from('conversation_participants')
         .select('conversation_id, last_read_at, deleted_at')
         .eq('user_id', userId)
-        .is('deleted_at', null);
+        .is('deleted_at', null) as any);
 
     if (participationError) {
         console.error('Error fetching participation:', participationError);
         throw participationError;
     }
 
-    const COACH_ID = '00000000-0000-0000-0000-000000000001';
-
-    // Ensure Health Coach conversation exists for this user
-    let updatedParticipation = participationData || [];
-
-    // Check if we already have a conversation with the Health Coach in our list
-    // We need to check participants of all current conversations
-    let hasCoachConversation = false;
-
-    if (updatedParticipation.length > 0) {
-        const { data: coachChecks } = await supabase
-            .from('conversation_participants')
-            .select('conversation_id')
-            .in('conversation_id', updatedParticipation.map(p => p.conversation_id))
-            .eq('user_id', COACH_ID);
-
-        if (coachChecks && coachChecks.length > 0) {
-            hasCoachConversation = true;
-        }
+    // 2. Provision system conversations (self-chat + Health Coach) via secure DB function
+    //    This uses SECURITY DEFINER so it bypasses RLS - no 403 errors
+    try {
+        await (supabase as any).rpc('provision_user_system_chats', { p_user_id: userId });
+    } catch (err) {
+        console.warn('provision_user_system_chats failed (non-fatal):', err);
     }
 
-    if (!hasCoachConversation) {
-        try {
-            const conv = await createPrivateConversation(userId, COACH_ID);
-            // Refresh participation data
-            const { data: newParticipation } = await supabase
-                .from('conversation_participants')
-                .select('conversation_id, last_read_at, deleted_at')
-                .eq('user_id', userId)
-                .eq('conversation_id', conv.id)
-                .is('deleted_at', null)
-                .single();
+    // 3. Re-fetch participation data (includes newly created system convs)
+    const { data: freshParticipation } = await (supabase
+        .from('conversation_participants')
+        .select('conversation_id, last_read_at, deleted_at')
+        .eq('user_id', userId)
+        .is('deleted_at', null) as any);
 
-            if (newParticipation) {
-                updatedParticipation = [...updatedParticipation, newParticipation];
-            }
-        } catch (err) {
-            console.error("Failed to auto-provision Health Coach:", err);
-        }
-    }
+    const updatedParticipation = freshParticipation || participationData || [];
 
     if (updatedParticipation.length === 0) return [];
 
@@ -69,7 +45,7 @@ export const getConversationsV2 = async (userId: string) => {
                 user_profiles (
                     full_name, 
                     avatar_url,
-                    chat_users!chat_users_user_id_fkey(phone_number, is_verified)
+                    chat_users(phone_number, is_verified)
                 )
             ),
             messages (
@@ -103,24 +79,34 @@ export const getConversationsV2 = async (userId: string) => {
             msg.sender_id !== userId && new Date(msg.created_at) > lastRead
         ).length;
 
-        // Process display info
-        const otherParticipant = conv.conversation_participants?.find((p: any) => p.user_id !== userId);
-        let display_name = 'Expert';
-        let display_avatar = null;
+        // Process display info - use conversation_type for strict identity separation
+        const COACH_ID = '00000000-0000-0000-0000-000000000001';
+        let display_name = 'Unknown';
+        let display_avatar: string | null = null;
         let display_phone = null;
 
-        if (otherParticipant) {
-            const profile = otherParticipant.user_profiles;
-            const chatUser = profile?.chat_users;
-            display_name = profile?.full_name || chatUser?.phone_number || 'Expert';
-            display_avatar = profile?.avatar_url;
-            display_phone = chatUser?.phone_number;
-        } else if (conv.conversation_participants && conv.conversation_participants.length > 0) {
-            // Self chat (only me as participant)
-            const myProfile = conv.conversation_participants[0]?.user_profiles;
-            display_name = myProfile?.full_name ? `${myProfile.full_name} (You)` : 'Expert';
-            display_avatar = myProfile?.avatar_url;
-            display_phone = myProfile?.chat_users?.phone_number;
+        if (conv.conversation_type === 'self') {
+            // Self-chat: use the user's own profile
+            const myParticipant = conv.conversation_participants?.find((p: any) => p.user_id === userId);
+            const myProfile = myParticipant?.user_profiles;
+            display_name = myProfile?.full_name ? `${myProfile.full_name} (Me)` : 'Personal Notes';
+            display_avatar = myProfile?.avatar_url || null;
+            display_phone = myProfile?.chat_users?.phone_number || null;
+        } else if (conv.conversation_type === 'ai') {
+            // Health Coach: always use fixed identity
+            display_name = 'Health Coach';
+            display_avatar = '/APP%20LOGO.jpg';
+            display_phone = null;
+        } else {
+            // Peer conversation: find the OTHER participant
+            const otherParticipant = conv.conversation_participants?.find((p: any) => p.user_id !== userId);
+            if (otherParticipant) {
+                const profile = otherParticipant.user_profiles;
+                const chatUser = profile?.chat_users;
+                display_name = profile?.full_name || chatUser?.phone_number || 'User';
+                display_avatar = profile?.avatar_url || null;
+                display_phone = chatUser?.phone_number || null;
+            }
         }
 
         return {
@@ -148,10 +134,10 @@ export const getConversationById = async (conversationId: string, userId: string
             *,
             conversation_participants(
                 user_id,
-                user_profiles!fk_conversation_participants_user_profiles(
+                user_profiles(
                     full_name, 
                     avatar_url,
-                    chat_users!chat_users_user_id_fkey(phone_number, is_verified)
+                    chat_users(phone_number, is_verified)
                 )
             )
         `)
@@ -160,19 +146,31 @@ export const getConversationById = async (conversationId: string, userId: string
 
     if (error) throw error;
 
-    // Process display info
-    const otherParticipant = data.conversation_participants.find((p: any) => p.user_id !== userId);
-    if (otherParticipant) {
-        const profile = otherParticipant.user_profiles;
-        const chatUser = profile?.chat_users;
-        data.display_name = profile?.full_name || chatUser?.phone_number || 'Expert';
-        data.display_avatar = profile?.avatar_url;
-        data.display_phone = chatUser?.phone_number;
-    } else {
-        const myProfile = data.conversation_participants[0]?.user_profiles;
-        data.display_name = myProfile?.full_name ? `${myProfile.full_name} (You)` : 'Expert';
+    // Process display info using strict identity detection
+    const COACH_ID = '00000000-0000-0000-0000-000000000001';
+
+    if (data.conversation_type === 'self') {
+        const myProfile = data.conversation_participants.find((p: any) => p.user_id === userId)?.user_profiles;
+        data.display_name = myProfile?.full_name ? `${myProfile.full_name} (Me)` : 'Personal Notes';
         data.display_avatar = myProfile?.avatar_url;
         data.display_phone = myProfile?.chat_users?.phone_number;
+    } else if (data.conversation_type === 'ai') {
+        data.display_name = 'Health Coach';
+        data.display_avatar = '/APP%20LOGO.jpg';
+        data.display_phone = null;
+    } else {
+        const otherParticipant = data.conversation_participants.find((p: any) => p.user_id !== userId && p.user_id !== COACH_ID);
+        if (otherParticipant) {
+            const profile = otherParticipant.user_profiles;
+            const chatUser = profile?.chat_users;
+            data.display_name = profile?.full_name || chatUser?.phone_number || 'User';
+            data.display_avatar = profile?.avatar_url;
+            data.display_phone = chatUser?.phone_number;
+        } else {
+            // Fallback
+            data.display_name = 'User';
+            data.display_avatar = null;
+        }
     }
 
     return data;
@@ -215,7 +213,8 @@ export const createPrivateConversation = async (userId: string, otherUserId: str
     const { data: conv, error: convError } = await supabase
         .from('conversations')
         .insert({
-            is_group: false
+            is_group: false,
+            conversation_type: isSelf ? 'self' : 'direct'
         } as any)
         .select()
         .single()
@@ -239,13 +238,28 @@ export const createPrivateConversation = async (userId: string, otherUserId: str
     return conv
 }
 
+export const getMyQRCodeData = async (userId: string) => {
+    const { data: chatUser } = await supabase
+        .from('chat_users')
+        .select('phone_number')
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle();
+
+    return JSON.stringify({
+        userId,
+        phone: chatUser?.phone_number
+    });
+}
+
 export const createGroupConversation = async (userId: string, name: string, participantIds: string[]) => {
     // 1. Create conversation record
     const { data: conv, error: convError } = await supabase
         .from('conversations')
         .insert({
             is_group: true,
-            name
+            name,
+            conversation_type: 'group'
         } as any)
         .select()
         .single()
@@ -510,10 +524,16 @@ export const isChatVerified = async (userId: string) => {
         .from('chat_users')
         .select('is_verified')
         .eq('user_id', userId)
-        .maybeSingle()
 
-    if (error || !data) return false
-    return data.is_verified
+    if (error) {
+        console.error("isChatVerified failed with error:", error);
+        return false;
+    }
+
+    if (!data || data.length === 0) return false;
+
+    // If ANY of the rows for this user is verified, they are verified
+    return data.some((row: any) => row.is_verified)
 }
 
 export const findUserByPhone = async (phoneNumber: string) => {

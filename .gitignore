@@ -30,3 +30,16 @@ dist-ssr
 
 # Local Netlify folder
 .netlify
+
+# Scratch/Log files
+*.log
+*.txt
+*.sql
+*.cjs
+*.js
+!client/**
+!supabase/**
+!postcss.config.js
+!tailwind.config.js
+!vite.config.ts
+!*.config.js

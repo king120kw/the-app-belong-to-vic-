@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { sendPhoneVerification } from "../lib/api/auth";
 import { fetchCountries, Country } from "../lib/api/countries";
@@ -79,14 +80,26 @@ export default function PhoneInput() {
             const fullNumber = `${selectedCountry.dialCode}${phoneNumber}`.replace(/\+/g, '');
             const e164 = `+${fullNumber}`;
 
-            await sendPhoneVerification(user.id, phoneNumber, selectedCountry.dialCode);
+            const response = await sendPhoneVerification(user.id, phoneNumber, selectedCountry.dialCode);
 
             // Store phone number reference
             localStorage.setItem("phoneNumber", e164);
+            localStorage.setItem("localPhoneNumber", phoneNumber);
+            localStorage.setItem("pending_otp", "true");
 
-            // DIRECT NAVIGATION: Go straight to chat as background verification is instant
-            toast.success("Verification successful!");
-            navigate("/chat");
+            // In a development/testing environment, the backend might return the OTP
+            if (response && response.code) {
+                await supabase.from('notifications').insert({
+                    user_id: user.id,
+                    notification_type: 'system',
+                    title: 'Kode Verifikasi',
+                    content: `Kode verifikasi chat Anda adalah: ${response.code}`
+                });
+            }
+
+            // Navigate to OTP entry
+            toast.success(t('code_sent_msg') || "Verification code sent!");
+            navigate("/verification-code");
         } catch (error: any) {
             toast.error(`Error: ${error.message}`);
         } finally {

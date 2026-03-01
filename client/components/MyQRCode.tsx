@@ -1,64 +1,79 @@
+import React from 'react';
 import QRCode from 'react-qr-code';
-// Fallback type if needed
-type QRCodeType = any;
-import { useAuth } from '../lib/AuthContext';
-import { useQuery } from '@tanstack/react-query';
-import { getUserProfile } from '../lib/api/auth';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { QrCode, Download, Share2 } from 'lucide-react';
 
 interface MyQRCodeProps {
-    size?: number;
+    data: string;
+    fullName?: string;
 }
 
-export default function MyQRCode({ size = 256 }: MyQRCodeProps) {
-    const { user } = useAuth();
-
-    const { data: profile } = useQuery({
-        queryKey: ['profile', user?.id],
-        queryFn: () => getUserProfile(user!.id),
-        enabled: !!user?.id
-    });
-
-    if (!user || !profile) {
-        return (
-            <div className="flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-3xl" style={{ width: size + 40, height: size + 40 }}>
-                <div className="flex flex-col items-center gap-3">
-                    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-vic-green"></div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Generating...</span>
-                </div>
-            </div>
-        );
-    }
-
-    // Create QR code payload with timestamp for expiry
-    const timestamp = Date.now();
-    const payload = {
-        userId: user.id,
-        fullName: profile.full_name || 'User',
-        avatarUrl: profile.avatar_url || '',
-        timestamp
+export const MyQRCode: React.FC<MyQRCodeProps> = ({ data, fullName }) => {
+    const handleDownload = () => {
+        const svg = document.getElementById("my-qr-code");
+        if (!svg) return;
+        const svgData = new XMLSerializer().serializeToString(svg);
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        const img = new Image();
+        img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx?.drawImage(img, 0, 0);
+            const pngFile = canvas.toDataURL("image/png");
+            const downloadLink = document.createElement("a");
+            downloadLink.download = "my-qr-code.png";
+            downloadLink.href = pngFile;
+            downloadLink.click();
+        };
+        img.src = "data:image/svg+xml;base64," + btoa(svgData);
     };
 
-    // Simple signature using timestamp (server will validate freshness)
-    const qrData = JSON.stringify(payload);
-
     return (
-        <div key={user.id} className="flex flex-col items-center gap-4 p-6 bg-white dark:bg-[#1f2c34] rounded-2xl">
-            <h3 className="text-lg font-bold dark:text-white">My QR Code</h3>
-            <p className="text-sm text-slate-600 dark:text-slate-400 text-center">
-                Let others scan this code to add you as a contact
-            </p>
-            <div className="p-4 bg-white rounded-xl">
-                <QRCode
-                    value={qrData}
-                    size={size}
-                    level="H"
-                    fgColor="#000000"
-                    bgColor="#FFFFFF"
-                />
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-500">
-                Valid for 5 minutes
-            </p>
-        </div>
+        <Card className="w-full max-w-sm mx-auto overflow-hidden bg-white/5 backdrop-blur-lg border-white/10 shadow-2xl">
+            <CardHeader className="text-center">
+                <CardTitle className="text-xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+                    Your VicCode
+                </CardTitle>
+                <p className="text-sm text-gray-400">Share this code with friends to start chatting</p>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center gap-6 pb-8">
+                <div className="p-4 bg-white rounded-2xl shadow-inner">
+                    <QRCode
+                        id="my-qr-code"
+                        size={200}
+                        style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                        value={data}
+                        viewBox={`0 0 256 256`}
+                    />
+                </div>
+
+                {fullName && (
+                    <div className="text-lg font-medium text-white">
+                        {fullName}
+                    </div>
+                )}
+
+                <div className="flex gap-3 w-full">
+                    <Button
+                        variant="secondary"
+                        className="flex-1 bg-white/10 hover:bg-white/20 border-white/10 text-white"
+                        onClick={handleDownload}
+                    >
+                        <Download className="w-4 h-4 mr-2" />
+                        Download
+                    </Button>
+                    <Button
+                        variant="default"
+                        className="flex-1 bg-gradient-to-r from-blue-500 to-emerald-500 hover:from-blue-600 hover:to-emerald-600 text-white border-0"
+                        onClick={() => navigator.share?.({ title: 'My VicCode', text: 'Scan this to chat with me on VicCalary!', url: window.location.href })}
+                    >
+                        <Share2 className="w-4 h-4 mr-2" />
+                        Share
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
     );
-}
+};

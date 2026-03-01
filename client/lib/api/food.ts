@@ -164,14 +164,12 @@ export const getRecentMeals = async (userId: string, limit = 10) => {
 const updateDailyProgress = async (userId: string, calories: number) => {
     const today = new Date().toISOString().split('T')[0]
 
-    const { data: progressRows } = await supabase
+    const { data: existingProgress } = await supabase
         .from('daily_progress')
         .select('*')
         .eq('user_id', userId)
         .eq('progress_date', today)
-        .limit(1)
-
-    const existingProgress = progressRows && progressRows.length > 0 ? progressRows[0] : null;
+        .maybeSingle()
 
     if (existingProgress) {
         await supabase
@@ -183,13 +181,11 @@ const updateDailyProgress = async (userId: string, calories: number) => {
             .eq('id', existingProgress.id)
     } else {
         // Get user calorie goal
-        const { data: onboardingRows } = await supabase
+        const { data: onboarding } = await supabase
             .from('onboarding_responses')
             .select('daily_calorie_goal')
             .eq('user_id', userId)
-            .limit(1)
-
-        const onboarding = onboardingRows && onboardingRows.length > 0 ? onboardingRows[0] : null;
+            .maybeSingle()
 
         await supabase
             .from('daily_progress')

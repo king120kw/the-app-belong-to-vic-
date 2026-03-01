@@ -5,7 +5,8 @@ import { useAuth } from "../lib/AuthContext";
 import { getUserProfile, updateUserProfile, uploadAvatar } from "../lib/api/auth";
 import { useTranslation } from "../lib/api/translation";
 import { toast } from "sonner";
-import MyQRCode from "../components/MyQRCode";
+import { MyQRCode } from "../components/MyQRCode";
+import { getMyQRCodeData } from "../lib/api/chat";
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -19,6 +20,13 @@ export default function Profile() {
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['profile', user?.id],
     queryFn: () => getUserProfile(user!.id),
+    enabled: !!user?.id
+  });
+
+  // Fetch QR Code data
+  const { data: qrData } = useQuery({
+    queryKey: ['qrData', user?.id],
+    queryFn: () => getMyQRCodeData(user!.id),
     enabled: !!user?.id
   });
 
@@ -162,9 +170,11 @@ export default function Profile() {
         </div>
 
         {/* My QR Code Section */}
-        <div className="mt-8">
-          <MyQRCode size={220} />
-        </div>
+        {qrData && (
+          <div className="mt-8">
+            <MyQRCode data={qrData} fullName={(profile as any)?.full_name || user.user_metadata?.full_name} />
+          </div>
+        )}
 
         {/* Sign Out */}
         <button

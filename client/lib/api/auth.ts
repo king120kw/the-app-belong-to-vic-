@@ -15,7 +15,7 @@ export const syncUserWithSupabase = async (supabaseUser: any) => {
         .from('user_profiles')
         .select('avatar_url')
         .eq('id', supabaseUser.id)
-        .single();
+        .maybeSingle();
 
     const { data: profileRows, error } = await supabase
         .from('user_profiles')
@@ -81,15 +81,15 @@ export const syncUserWithSupabase = async (supabaseUser: any) => {
 export const getUserProfile = async (userId: string) => {
     const { data, error } = await supabase
         .from('user_profiles')
-        .select('*, chat_users!chat_users_user_id_fkey(phone_number)')
+        .select('*, chat_users(phone_number)')
         .eq('id', userId)
-        .single()
+        .maybeSingle() as any; // Cast the result of maybeSingle() to any
 
     if (error) throw error
 
     // Process to pull phone_number to top level for compatibility
-    if (data && (data as any).chat_users) {
-        (data as any).phone_number = (data as any).chat_users.phone_number;
+    if (data && data.chat_users) {
+        data.phone_number = data.chat_users.phone_number;
     }
 
     return data
@@ -272,16 +272,14 @@ export const saveOnboardingResponses = async (userId: string, responses: any) =>
 }
 
 export const getOnboardingResponses = async (userId: string) => {
-    const { data: dataRows, error } = await (supabase
+    const { data: rows, error } = await supabase
         .from('onboarding_responses')
         .select('*')
         .eq('user_id', userId)
-        .limit(1) as any)
+        .limit(1)
 
-    const data = dataRows && dataRows.length > 0 ? dataRows[0] : null;
-
-    if (error && error.code !== 'PGRST116') throw error
-    return data
+    if (error) throw error
+    return rows && rows.length > 0 ? rows[0] : null
 }
 
 // ============================================================================
@@ -295,6 +293,9 @@ export const sendPhoneVerification = async (userId: string, phoneNumber: string,
 
     if (error) {
         console.error("OTP send error:", error);
+        if (error instanceof Error && 'context' in error) {
+            console.error("Error context:", (error as any).context);
+        }
         throw error;
     }
     return data;
@@ -313,10 +314,18 @@ export const verifyPhoneCode = async (userId: string, phoneNumber: string, code:
     if (error) throw error
 
     if (data && data.verification_code === code) {
-        await supabase
+        const { error: updateError, data: updatedData } = await supabase
             .from('chat_users')
             .update({ is_verified: true })
             .eq('id', (data as any).id)
+            .select()
+
+        if (updateError) throw updateError
+
+        // Critical: If RLS blocked the update, it will succeed but return 0 rows.
+        if (!updatedData || updatedData.length === 0) {
+            throw new Error('Verification failed. Database update was blocked by security policies.');
+        }
 
         return { success: true }
     }

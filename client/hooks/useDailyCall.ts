@@ -106,11 +106,16 @@ export function useDailyCall() {
         callFrame?.setLocalVideo(enabled);
     }, [callFrame]);
 
+    const updateIframeStyle = useCallback((style: any) => {
+        callFrame?.updateIframeStyles(style);
+    }, [callFrame]);
+
     return {
         joinCall,
         leaveCall,
         toggleAudio,
         toggleVideo,
+        updateIframeStyle,
         status,
         participants,
         callFrame,

@@ -6,15 +6,18 @@ import { verifyPhoneCode, sendPhoneVerification } from "../lib/api/auth";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { useTranslation } from "../lib/api/translation";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function VerificationCode() {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { user } = useAuth();
     const { t } = useTranslation();
     const [code, setCode] = useState(["", "", "", "", "", ""]);
     const [loading, setLoading] = useState(false);
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
     const phoneNumber = localStorage.getItem("phoneNumber") || "your phone";
+    const localPhoneNumber = localStorage.getItem("localPhoneNumber") || "";
 
     // Focus first input on mount
     useEffect(() => {
@@ -33,8 +36,19 @@ export default function VerificationCode() {
                 filter: `user_id=eq.${user.id}`
             }, (payload: any) => {
                 if (payload.new && payload.new.is_verified) {
+                    queryClient.setQueryData(['chat-verified', user.id], true);
                     toast.success(t('phone_verified_msg'));
-                    navigate("/chat");
+
+                    // Add verification alert notification
+                    supabase.from('notifications').insert({
+                        user_id: user.id,
+                        notification_type: 'verification_success',
+                        title: 'Phone Verified!',
+                        content: 'Your phone number has been successfully verified for chat.'
+                    }).then(() => { });
+
+                    localStorage.removeItem("pending_otp");
+                    navigate("/chat", { state: { view: 'contacts' } });
                 }
             })
             .subscribe();
@@ -42,7 +56,7 @@ export default function VerificationCode() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [user, navigate, t]);
+    }, [user, navigate, t, queryClient]);
 
     const handleChange = (index: number, value: string) => {
         if (value.length > 1) {
@@ -84,9 +98,20 @@ export default function VerificationCode() {
                 // Extract local part for backend if needed, or send full
                 // The current api/auth expect phoneNumber as stored in chat_users
                 // We'll send what's in localStorage
-                await verifyPhoneCode(user.id, phoneNumber, verificationCode);
+                await verifyPhoneCode(user.id, localPhoneNumber || phoneNumber, verificationCode);
+                queryClient.setQueryData(['chat-verified', user.id], true);
                 toast.success(t('phone_verified_msg'));
-                navigate("/chat");
+
+                // Add verification alert notification
+                await supabase.from('notifications').insert({
+                    user_id: user.id,
+                    notification_type: 'verification_success',
+                    title: 'Phone Verified!',
+                    content: 'Your phone number has been successfully verified for chat.'
+                });
+
+                localStorage.removeItem("pending_otp");
+                navigate("/chat", { state: { view: 'contacts' } });
             } catch (error: any) {
                 toast.error(`Verification failed: ${error.message}`);
                 setCode(["", "", "", "", "", ""]);

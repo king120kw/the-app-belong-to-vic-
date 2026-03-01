@@ -13,8 +13,6 @@ export default function Settings() {
   const { t, lang, country, refreshLocation } = useTranslation();
   const [darkMode, setDarkMode] = useState(false);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
-  const [showTOS, setShowTOS] = useState(false);
 
   // Fetch user settings
   const { data: settings, isLoading } = useQuery<any>({
@@ -234,12 +232,12 @@ export default function Settings() {
           <SettingItem
             label={t('privacy_policy')}
             icon="privacy_tip"
-            onClick={() => setShowPrivacy(true)}
+            onClick={() => navigate("/privacy")}
           />
           <SettingItem
             label={t('terms_service')}
             icon="description"
-            onClick={() => setShowTOS(true)}
+            onClick={() => navigate("/terms")}
           />
           <SettingItem
             label={t('app_version')}
@@ -249,31 +247,6 @@ export default function Settings() {
           />
         </SettingGroup>
 
-        {/* Modal Placeholders */}
-        {showPrivacy && (
-          <div className="fixed inset-0 z-[100] bg-white dark:bg-[#0d1418] p-6 overflow-y-auto animate-in slide-in-from-bottom duration-300">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold">{t('privacy_policy')}</h2>
-              <button onClick={() => setShowPrivacy(false)} className="material-symbols-outlined">close</button>
-            </div>
-            <div className="prose dark:prose-invert">
-              <p>{t('privacy_desc')}</p>
-              {/* Add real policy here */}
-            </div>
-          </div>
-        )}
-
-        {showTOS && (
-          <div className="fixed inset-0 z-[100] bg-white dark:bg-[#0d1418] p-6 overflow-y-auto animate-in slide-in-from-bottom duration-300">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold">{t('terms_service')}</h2>
-              <button onClick={() => setShowTOS(false)} className="material-symbols-outlined">close</button>
-            </div>
-            <div className="prose dark:prose-invert">
-              <p>{t('tos_desc')}</p>
-            </div>
-          </div>
-        )}
 
         {/* Sign Out Button */}
         <div className="p-6">

@@ -75,13 +75,13 @@ export default function Dashboard() {
   const { data: onboarding } = useQuery({
     queryKey: ['onboarding', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: rows, error } = await supabase
         .from('onboarding_responses')
         .select('*')
         .eq('user_id', user!.id)
-        .single();
+        .limit(1);
       if (error) throw error;
-      return data;
+      return rows && rows.length > 0 ? rows[0] : null;
     },
     enabled: !!user?.id
   });

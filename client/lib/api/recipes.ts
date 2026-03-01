@@ -123,7 +123,7 @@ export const toggleFavoriteRecipe = async (userId: string, recipeId: string) => 
         .eq('user_id', userId)
         .eq('recipe_id', recipeId)
         .eq('interaction_type', 'favorited')
-        .single()
+        .maybeSingle()
 
     if (existing) {
         await supabase
@@ -153,7 +153,7 @@ export const markRecipeAsCooked = async (userId: string, recipeId: string, notes
             notes,
         })
         .select()
-        .single()
+        .maybeSingle()
 
     if (error) throw error
 
@@ -174,7 +174,7 @@ export const rateRecipe = async (userId: string, recipeId: string, rating: numbe
             notes,
         })
         .select()
-        .single()
+        .maybeSingle()
 
     if (error) throw error
     return data
@@ -220,13 +220,15 @@ export const getPersonalizedSuggestions = async (userId: string) => {
         .from('user_profiles')
         .select('*')
         .eq('id', userId)
-        .single()
+        .maybeSingle()
 
-    const { data: onboarding } = await (supabase
+    const { data: onboardingRows } = await (supabase
         .from('onboarding_responses')
         .select('*')
         .eq('user_id', userId)
-        .single() as any);
+        .limit(1) as any);
+
+    const onboarding = onboardingRows && onboardingRows.length > 0 ? onboardingRows[0] : null;
 
     // Call recommendations Edge Function
     try {
@@ -422,7 +424,7 @@ const updateDailyRecipeCount = async (userId: string) => {
         .select('*')
         .eq('user_id', userId)
         .eq('progress_date', today)
-        .single()
+        .maybeSingle()
 
     if (existingProgress) {
         await supabase

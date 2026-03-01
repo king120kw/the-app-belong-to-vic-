@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { getConversationById, getMessages, sendMessage, uploadChatMedia, markAsRead, sendTypingIndicator, initiateCallV2, updateCallStatus, softDeleteConversation } from '../lib/api/chat';
 import { useAuth } from '../lib/AuthContext';
+import { getUserProfile } from '../lib/api/auth';
 import { toast } from 'sonner';
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 import { useTranslation } from '../lib/api/translation';
@@ -130,6 +131,12 @@ const AudioMessage = ({ src }: { src: string }) => {
     );
 };
 
+// UUID v4 validation - prevents sending "self" or any invalid string to Supabase
+const isValidUUID = (id: string | undefined): boolean => {
+    if (!id) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+};
+
 export default function ChatConversation() {
     const { id: activeId } = useParams();
     const { user } = useAuth();
@@ -147,6 +154,8 @@ export default function ChatConversation() {
     const [otherUserTyping, setOtherUserTyping] = useState(false);
     const [recordingStartY, setRecordingStartY] = useState<number | null>(null);
     const [recordingDragY, setRecordingDragY] = useState(0);
+    const [recordingDragX, setRecordingDragX] = useState(0);
+    const [recordingStartX, setRecordingStartX] = useState<number | null>(null);
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
@@ -167,23 +176,51 @@ export default function ChatConversation() {
         queryKey: ['conversation', activeId],
         queryKeyHashFn: () => `conversation-${activeId}`, // Force unique hash
         queryFn: () => getConversationById(activeId!, user!.id),
-        enabled: !!activeId && !!user,
+        enabled: isValidUUID(activeId) && !!user,
         refetchOnWindowFocus: false // Don't refetch on window focus to avoid jumps
     });
 
     const { data: messages = [], isLoading: isLoadingMessages } = useQuery({
         queryKey: ['messages', activeId],
         queryFn: () => getMessages(activeId!),
-        enabled: !!activeId,
+        enabled: isValidUUID(activeId),
         refetchOnWindowFocus: false
     });
 
-    // Check if it's a self-chat
-    const isSelf = useMemo(() => {
-        if (!conversation || !user) return false;
-        const participants = conversation.conversation_participants || [];
-        return participants.length === 1 && participants[0].user_id === user.id;
-    }, [conversation, user]);
+    const { data: profile } = useQuery({
+        queryKey: ['profile', user?.id],
+        queryFn: () => getUserProfile(user!.id),
+        enabled: !!user?.id
+    });
+
+    // Guard: if the route param is not a valid UUID (e.g. '/chat/self'), redirect back
+    const navigate_redirect = useNavigate();
+    if (activeId && !isValidUUID(activeId)) {
+        navigate_redirect('/chat');
+        return null;
+    }
+
+    const isAI = useMemo(() => conversation?.conversation_type === 'ai', [conversation]);
+    const isSelf = useMemo(() => conversation?.conversation_type === 'self', [conversation]);
+    const isDirect = useMemo(() => conversation?.conversation_type === 'private' || conversation?.conversation_type === 'direct', [conversation]);
+
+    const otherParticipant = useMemo(() => {
+        if (isSelf) return null;
+        return conversation?.conversation_participants?.find((p: any) => p.user_id !== user?.id);
+    }, [conversation, user, isSelf]);
+
+    const displayName = useMemo(() => {
+        if (isAI) return 'Health Coach';
+        if (isSelf) return (profile?.full_name ? `${profile.full_name} (Me)` : 'Personal Notes');
+        const otherProfile = otherParticipant?.user_profiles;
+        return otherProfile?.full_name || otherParticipant?.chat_users?.phone_number || 'User';
+    }, [isAI, isSelf, profile, otherParticipant]);
+
+    const displayAvatar = useMemo(() => {
+        if (isAI) return '/APP%20LOGO.jpg';
+        if (isSelf) return profile?.avatar_url || null;
+        return otherParticipant?.user_profiles?.avatar_url || null;
+    }, [isAI, isSelf, profile, otherParticipant]);
 
     // Handle initial scroll
     useEffect(() => {
@@ -233,9 +270,6 @@ export default function ChatConversation() {
         };
     }, [user?.id]);
 
-    const otherParticipant = useMemo(() => {
-        return conversation?.conversation_participants?.find((p: any) => p.user_id !== user?.id);
-    }, [conversation, user?.id]);
 
     const isOnline = otherParticipant && onlineUsers.has(otherParticipant.user_id);
     const expertStatus = isOnline ? "online" : "offline";
@@ -320,7 +354,9 @@ export default function ChatConversation() {
 
             if (e) {
                 const y = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+                const x = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
                 setRecordingStartY(y);
+                setRecordingStartX(x);
             }
         } catch (err) {
             toast.error("Microphone access denied");
@@ -381,14 +417,23 @@ export default function ChatConversation() {
         if (!isRecording || isRecordingLocked || recordingStartY === null) return;
 
         const currentY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+        const currentX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+
         const deltaY = recordingStartY - currentY; // positive is upwards
+        const deltaX = recordingStartX !== null ? currentX - recordingStartX : 0; // negative is leftwards
+
         setRecordingDragY(deltaY);
+        setRecordingDragX(deltaX);
 
         if (deltaY > 80) { // Lock threshold
             setIsRecordingLocked(true);
             setRecordingStartY(null);
+            setRecordingStartX(null);
             setRecordingDragY(0);
+            setRecordingDragX(0);
             toast.success("Recording locked", { duration: 1000 });
+        } else if (deltaX < -100) { // Cancel threshold
+            stopRecording(true);
         }
     }, [isRecording, isRecordingLocked, recordingStartY]);
 
@@ -484,7 +529,7 @@ export default function ChatConversation() {
 
     // Robust Read Status Sync
     const markConversationAsReadLocal = useCallback(async (convId: string) => {
-        if (!user?.id || !convId) return;
+        if (!user?.id || !convId || !isValidUUID(convId)) return;
 
         console.log(`[Chat] Marking as read: ${convId}`);
         // 1. Optimistic UI update for the sidebar and local state
@@ -756,24 +801,47 @@ export default function ChatConversation() {
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
 
-                    <div className="size-10 rounded-full bg-slate-200 overflow-hidden border border-black/5 dark:border-white/10 shrink-0">
-                        {conversation?.display_avatar ? (
-                            <img src={conversation.display_avatar} alt="" className="size-full object-cover" />
-                        ) : (
-                            <div className="size-full bg-slate-400 flex items-center justify-center text-white">
-                                <span className="material-symbols-outlined">person</span>
+                    <div className="size-10 rounded-full bg-slate-200 overflow-hidden border border-black/5 dark:border-white/10 shrink-0 flex items-center justify-center">
+                        {displayAvatar ? (
+                            <img
+                                src={displayAvatar}
+                                alt={displayName}
+                                className="size-full object-cover"
+                                onError={(e: any) => {
+                                    e.target.style.display = 'none';
+                                    const fallback = e.target.parentElement.querySelector('.avatar-fallback');
+                                    if (fallback) fallback.style.display = 'flex';
+                                }}
+                            />
+                        ) : null}
+
+                        {/* Fallback Icon */}
+                        {(!displayAvatar) && (
+                            <div className="avatar-fallback size-full bg-slate-400 flex items-center justify-center text-white">
+                                <span className="material-symbols-outlined">{isSelf ? 'bookmark' : 'person'}</span>
+                            </div>
+                        )}
+
+                        {/* Hidden Fallback for Image Errors */}
+                        {displayAvatar && (
+                            <div className="avatar-fallback hidden size-full bg-slate-400 flex items-center justify-center text-white">
+                                <span className="material-symbols-outlined">{isSelf ? 'bookmark' : 'person'}</span>
                             </div>
                         )}
                     </div>
 
-                    <div className="flex-1 min-w-0" onClick={() => navigate(`/expert/${conversation?.display_phone}`)}>
+                    <div className="flex-1 min-w-0" onClick={() => { if (!isSelf && !isAI && otherParticipant?.chat_users?.phone_number) navigate(`/expert/${otherParticipant.chat_users.phone_number}`) }}>
                         <h2 className="text-[16px] font-semibold text-[#111B21] dark:text-[#e9edef] truncate flex items-center gap-1.5">
-                            {conversation?.display_name || 'Chat'}
-                            {isOnline && <span className="size-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />}
+                            {displayName}
+                            {isAI && <span className="text-[9px] font-bold bg-vic-green/20 text-vic-green px-1.5 py-0.5 rounded-full">AI</span>}
                         </h2>
                         <p className="text-[13px] text-[#667781] dark:text-[#8696a0] truncate">
                             {otherUserTyping ? (
                                 <span className="text-vic-green font-medium animate-pulse">typing...</span>
+                            ) : isAI ? (
+                                'AI Coach'
+                            ) : isSelf ? (
+                                'Personal Workspace'
                             ) : (
                                 expertStatus
                             )}
@@ -781,34 +849,32 @@ export default function ChatConversation() {
                     </div>
 
                     <div className="flex items-center gap-1">
-                        <button
-                            onClick={() => handleStartCall('video')}
-                            className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full"
-                        >
-                            <span className="material-symbols-outlined text-[24px]">videocam</span>
-                        </button>
-                        <button
-                            onClick={() => handleStartCall('voice')}
-                            className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full"
-                        >
-                            <span className="material-symbols-outlined text-[24px]">call</span>
-                        </button>
-                        <button
-                            onClick={async () => {
-                                if (window.confirm("Delete this conversation?")) {
-                                    try {
-                                        await softDeleteConversation(activeId!, user!.id);
-                                        toast.success("Conversation deleted");
-                                        navigate('/chat');
-                                    } catch (err) {
-                                        toast.error("Failed to delete conversation");
-                                    }
-                                }
-                            }}
-                            className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full"
-                        >
-                            <span className="material-symbols-outlined text-[24px]">delete</span>
-                        </button>
+                        {!isSelf && !isAI && (
+                            <>
+                                <button onClick={() => handleStartCall('video')} className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full">
+                                    <span className="material-symbols-outlined text-[24px]">videocam</span>
+                                </button>
+                                <button onClick={() => handleStartCall('voice')} className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full">
+                                    <span className="material-symbols-outlined text-[24px]">call</span>
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (window.confirm("Delete this conversation?")) {
+                                            try {
+                                                await softDeleteConversation(activeId!, user!.id);
+                                                toast.success("Conversation deleted");
+                                                navigate('/chat');
+                                            } catch {
+                                                toast.error("Failed to delete conversation");
+                                            }
+                                        }
+                                    }}
+                                    className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full"
+                                >
+                                    <span className="material-symbols-outlined text-[24px]">delete</span>
+                                </button>
+                            </>
+                        )}
                         <button className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full">
                             <span className="material-symbols-outlined text-[24px]">more_vert</span>
                         </button>
@@ -1018,7 +1084,11 @@ export default function ChatConversation() {
                             {/* Lock Indicator (Floating) */}
                             {isRecording && !isRecordingLocked && (
                                 <div
-                                    className="absolute -top-20 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-80 animate-bounce pointer-events-none bg-black/60 text-white rounded-full px-2 py-1"
+                                    className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-80 animate-bounce pointer-events-none bg-black/60 text-white rounded-full px-2 py-1"
+                                    style={{
+                                        top: `${-100 - Math.max(recordingDragY, 0)}px`,
+                                        opacity: Math.max(0.4, 1 - (recordingDragY / 120))
+                                    }}
                                 >
                                     <span className="material-symbols-outlined text-[18px]">lock</span>
                                 </div>

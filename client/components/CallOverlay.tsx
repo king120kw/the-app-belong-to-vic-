@@ -14,9 +14,23 @@ interface CallOverlayProps {
     direction: 'incoming' | 'outgoing';
     localStream?: MediaStream;
     remoteStream?: MediaStream;
+    isMinimized?: boolean;
+    onToggleMinimize?: () => void;
 }
 
-export default function CallOverlay({ type, status, caller, direction, onAccept, onDecline, onEnd, localStream, remoteStream }: CallOverlayProps) {
+export default function CallOverlay({
+    type,
+    status,
+    caller,
+    direction,
+    onAccept,
+    onDecline,
+    onEnd,
+    localStream,
+    remoteStream,
+    isMinimized = false,
+    onToggleMinimize
+}: CallOverlayProps) {
     const { t } = useTranslation();
     const [duration, setDuration] = useState(0);
     const remoteAudioRef = React.useRef<HTMLAudioElement>(null);
@@ -55,8 +69,36 @@ export default function CallOverlay({ type, status, caller, direction, onAccept,
         );
     }
 
+    if (isMinimized) {
+        return (
+            <div
+                onClick={onToggleMinimize}
+                className="fixed bottom-20 right-4 z-[9999] w-20 h-20 rounded-2xl bg-[#00A884] shadow-2xl flex items-center justify-center cursor-pointer hover:scale-105 transition-all overflow-hidden border-2 border-white/20"
+            >
+                <img
+                    src={caller.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(caller.name)}&background=00A884&color=fff&size=100`}
+                    alt={caller.name}
+                    className="w-full h-full object-cover opacity-80"
+                />
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20">
+                    <span className="material-symbols-outlined text-white text-2xl animate-pulse">
+                        {type === 'video' ? 'videocam' : 'call'}
+                    </span>
+                    <span className="text-[10px] text-white font-bold">{formatDuration(duration)}</span>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="fixed inset-0 z-[100] bg-[#0b141a] flex flex-col items-center justify-between p-12 text-white animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[100] bg-[#0b141a] flex flex-col items-center justify-between p-8 md:p-12 text-white animate-in fade-in zoom-in duration-300">
+            {/* Minimize Toggle */}
+            <button
+                onClick={onToggleMinimize}
+                className="absolute top-6 left-6 p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors"
+            >
+                <span className="material-symbols-outlined text-white">close_fullscreen</span>
+            </button>
             {/* Hidden Audio for Remote Stream */}
             <audio ref={remoteAudioRef} autoPlay />
             <div className="flex flex-col items-center gap-6 mt-12 animate-in slide-in-from-top-10 duration-500">

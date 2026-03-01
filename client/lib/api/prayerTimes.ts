@@ -38,12 +38,13 @@ export const getPrayerTimes = async (location?: LocationData): Promise<PrayerTim
 export const getPersonalizedSpiritualReminder = async (userId: string): Promise<{ type: 'quran' | 'hadith', content: string, reference: string } | null> => {
     try {
         // 1. Get user onboarding goal
-        const { data: onboarding } = await supabase
+        const { data: onboardingRows } = await supabase
             .from('onboarding_responses')
             .select('goal')
             .eq('user_id', userId)
-            .single();
+            .limit(1);
 
+        const onboarding = onboardingRows && onboardingRows.length > 0 ? onboardingRows[0] : null;
         const goal = onboarding?.goal || 'General';
 
         // 2. Find content that matches category or is general, which hasn't been viewed

@@ -299,34 +299,65 @@ BEGIN
 END $$;
 
 -- Create Policies
-CREATE POLICY "Users can view own profile" ON user_profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update own profile" ON user_profiles FOR UPDATE USING (true);
-CREATE POLICY "Users can view own onboarding" ON onboarding_responses FOR SELECT USING (auth.uid()::text = user_id);
-CREATE POLICY "Users can insert own onboarding" ON onboarding_responses FOR INSERT WITH CHECK (auth.uid()::text = user_id);
-CREATE POLICY "Users can update own onboarding" ON onboarding_responses FOR UPDATE USING (auth.uid()::text = user_id);
-CREATE POLICY "Users can view own food analysis" ON food_analysis_history FOR SELECT USING (true);
-CREATE POLICY "Users can insert own food analysis" ON food_analysis_history FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can view own recipe interactions" ON user_recipe_interactions FOR SELECT USING (true);
-CREATE POLICY "Users can insert own recipe interactions" ON user_recipe_interactions FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can view own budgets" ON user_budgets FOR SELECT USING (true);
-CREATE POLICY "Users can insert own budgets" ON user_budgets FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can update own budgets" ON user_budgets FOR UPDATE USING (true);
-CREATE POLICY "Users can view own progress" ON progress_measurements FOR SELECT USING (true);
-CREATE POLICY "Users can insert own progress" ON progress_measurements FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can view own daily progress" ON daily_progress FOR SELECT USING (true);
-CREATE POLICY "Users can insert own daily progress" ON daily_progress FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can update own daily progress" ON daily_progress FOR UPDATE USING (true);
-CREATE POLICY "Users can view own chat profile" ON chat_users FOR SELECT USING (true);
-CREATE POLICY "Users can insert own chat profile" ON chat_users FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can update own chat profile" ON chat_users FOR UPDATE USING (true);
-CREATE POLICY "Users can view conversations they're in" ON conversation_participants FOR SELECT USING (true);
-CREATE POLICY "Users can view messages in their conversations" ON messages FOR SELECT USING (true);
-CREATE POLICY "Users can send messages" ON messages FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can view own notifications" ON notifications FOR SELECT USING (true);
-CREATE POLICY "Users can update own notifications" ON notifications FOR UPDATE USING (true);
-CREATE POLICY "Users can view own settings" ON user_settings FOR SELECT USING (true);
-CREATE POLICY "Users can insert own settings" ON user_settings FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can update own settings" ON user_settings FOR UPDATE USING (true);
+-- Create Policies using standard auth.uid() function
+CREATE POLICY "Allow individual read" ON user_profiles FOR SELECT TO authenticated USING (auth.uid()::text = id);
+CREATE POLICY "Allow individual update" ON user_profiles FOR UPDATE TO authenticated USING (auth.uid()::text = id);
+CREATE POLICY "Allow individual insert" ON user_profiles FOR INSERT TO authenticated WITH CHECK (auth.uid()::text = id);
+
+CREATE POLICY "Allow individual read" ON onboarding_responses FOR SELECT TO authenticated USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual insert" ON onboarding_responses FOR INSERT TO authenticated WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual update" ON onboarding_responses FOR UPDATE TO authenticated USING (auth.uid()::text = user_id);
+
+CREATE POLICY "Allow individual read" ON user_settings FOR SELECT TO authenticated USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual insert" ON user_settings FOR INSERT TO authenticated WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual update" ON user_settings FOR UPDATE TO authenticated USING (auth.uid()::text = user_id);
+
+CREATE POLICY "Allow individual read" ON chat_users FOR SELECT TO authenticated USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual insert" ON chat_users FOR INSERT TO authenticated WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual update" ON chat_users FOR UPDATE TO authenticated USING (auth.uid()::text = user_id);
+
+CREATE POLICY "Allow individual read" ON conversation_participants FOR SELECT TO authenticated USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual insert" ON conversation_participants FOR INSERT TO authenticated WITH CHECK (auth.uid()::text = user_id);
+
+CREATE POLICY "view_messages" ON messages FOR SELECT TO authenticated 
+USING (EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = messages.conversation_id AND user_id = auth.uid()::text));
+
+CREATE POLICY "send_messages" ON messages FOR INSERT TO authenticated 
+WITH CHECK (auth.uid()::text = sender_id AND EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = messages.conversation_id AND user_id = auth.uid()::text));
+
+CREATE POLICY "view_conversations" ON conversations FOR SELECT TO authenticated 
+USING (EXISTS (SELECT 1 FROM conversation_participants WHERE conversation_id = conversations.id AND user_id = auth.uid()::text));
+
+CREATE POLICY "view_transactions" ON budget_transactions FOR SELECT TO authenticated 
+USING (EXISTS (SELECT 1 FROM user_budgets WHERE id = budget_transactions.budget_id AND user_id = auth.uid()::text));
+
+CREATE POLICY "insert_transactions" ON budget_transactions FOR INSERT TO authenticated 
+WITH CHECK (EXISTS (SELECT 1 FROM user_budgets WHERE id = budget_transactions.budget_id AND user_id = auth.uid()::text));
+
+-- Generalized policies for other tables
+CREATE POLICY "Allow individual read" ON daily_progress FOR SELECT TO authenticated USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual insert" ON daily_progress FOR INSERT TO authenticated WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual update" ON daily_progress FOR UPDATE TO authenticated USING (auth.uid()::text = user_id);
+
+CREATE POLICY "Allow individual read" ON user_budgets FOR SELECT TO authenticated USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual insert" ON user_budgets FOR INSERT TO authenticated WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual update" ON user_budgets FOR UPDATE TO authenticated USING (auth.uid()::text = user_id);
+
+CREATE POLICY "Allow individual read" ON food_analysis_history FOR SELECT TO authenticated USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual insert" ON food_analysis_history FOR INSERT TO authenticated WITH CHECK (auth.uid()::text = user_id);
+
+CREATE POLICY "Allow individual read" ON progress_measurements FOR SELECT TO authenticated USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual insert" ON progress_measurements FOR INSERT TO authenticated WITH CHECK (auth.uid()::text = user_id);
+
+CREATE POLICY "Allow individual read" ON notifications FOR SELECT TO authenticated USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual update" ON notifications FOR UPDATE TO authenticated USING (auth.uid()::text = user_id);
+
+CREATE POLICY "Allow individual read" ON user_spiritual_history FOR SELECT TO authenticated USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual insert" ON user_spiritual_history FOR INSERT TO authenticated WITH CHECK (auth.uid()::text = user_id);
+
+CREATE POLICY "Allow individual read" ON user_recipe_interactions FOR SELECT TO authenticated USING (auth.uid()::text = user_id);
+CREATE POLICY "Allow individual insert" ON user_recipe_interactions FOR INSERT TO authenticated WITH CHECK (auth.uid()::text = user_id);
+
 CREATE POLICY "Anyone can view food items" ON food_items FOR SELECT USING (true);
 CREATE POLICY "Anyone can view recipes" ON recipes FOR SELECT USING (true);
 

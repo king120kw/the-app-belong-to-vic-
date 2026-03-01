@@ -265,7 +265,7 @@ const MainLayout = () => {
           />
         </div>
       )}
-      <main className={`flex-1 ${!isChatConversation ? 'pb-16' : ''}`}>
+      <main className={`flex-1 ${!isChatConversation && location.pathname !== '/onboarding' ? 'pb-16' : ''}`}>
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />

@@ -265,10 +265,21 @@ export default function Onboarding() {
       if (!user) {
         navigate("/auth");
       } else {
-        // Check if onboarding is already completed
+        // Check if profile exists, and sync if not
         getUserProfile(user.id).then(profile => {
-          if (profile?.onboarding_completed) {
-            navigate("/dashboard");
+          if (profile) {
+            if (profile.onboarding_completed) {
+              navigate("/dashboard");
+            }
+          } else {
+            // Profile missing! Trigger a sync to ensure DB triggers run
+            console.warn("Profile missing in Onboarding, triggering sync...");
+            import("../lib/api/auth").then(({ syncUserWithSupabase }) => {
+              syncUserWithSupabase(user).catch(err => {
+                console.error("Critical: Failed to sync profile during onboarding recovery:", err);
+                toast.error("Failed to initialize your profile. Please try logging in again.");
+              });
+            });
           }
         });
       }
@@ -276,7 +287,15 @@ export default function Onboarding() {
   }, [authLoading, user, navigate]);
 
   const saveMutation = useMutation({
-    mutationFn: (data: any) => saveOnboardingResponses(user!.id, data),
+    mutationFn: async (data: any) => {
+      // One last check for profile before saving to avoid foreign key violation
+      const profile = await getUserProfile(user!.id);
+      if (!profile) {
+        const { syncUserWithSupabase } = await import("../lib/api/auth");
+        await syncUserWithSupabase(user);
+      }
+      return saveOnboardingResponses(user!.id, data);
+    },
     onSuccess: () => {
       navigate("/dashboard");
     },

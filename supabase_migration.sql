@@ -388,3 +388,47 @@ CREATE TRIGGER update_daily_progress_updated_at BEFORE UPDATE ON daily_progress
 DROP TRIGGER IF EXISTS update_user_settings_updated_at ON user_settings;
 CREATE TRIGGER update_user_settings_updated_at BEFORE UPDATE ON user_settings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- ACCOUNT PROVISIONING (AI COACH)
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION provision_coach_for_new_user()
+RETURNS TRIGGER AS $$
+DECLARE
+    COACH_ID CONSTANT TEXT := '00000000-0000-0000-0000-000000000001';
+    new_conv_id UUID;
+BEGIN
+    -- Only for real users, not the coach itself
+    IF NEW.id = COACH_ID THEN
+        RETURN NEW;
+    END IF;
+
+    -- Create a new conversation with conversation_type (CRITICAL FIX)
+    INSERT INTO conversations (is_group, conversation_type)
+    VALUES (false, 'ai')
+    RETURNING id INTO new_conv_id;
+
+    -- Add the new user and the coach as participants
+    INSERT INTO conversation_participants (conversation_id, user_id)
+    VALUES 
+        (new_conv_id, NEW.id),
+        (new_conv_id, COACH_ID);
+
+    -- Send a welcome message from the coach
+    INSERT INTO messages (conversation_id, sender_id, content, message_type)
+    VALUES (
+        new_conv_id, 
+        COACH_ID, 
+        'Hello! I am your AI Health Coach. I will help you track your calories and budget. You can ask me anything about health, food, or your daily progress!', 
+        'text'
+    );
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_provision_coach ON user_profiles;
+CREATE TRIGGER trigger_provision_coach
+  AFTER INSERT ON user_profiles
+  FOR EACH ROW EXECUTE FUNCTION provision_coach_for_new_user();

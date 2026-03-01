@@ -260,6 +260,8 @@ export default function Onboarding() {
     });
   }, [questions]);
 
+  const [syncAttempted, setSyncAttempted] = useState(false);
+
   useEffect(() => {
     if (!authLoading) {
       if (!user) {
@@ -271,20 +273,21 @@ export default function Onboarding() {
             if (profile.onboarding_completed) {
               navigate("/dashboard");
             }
-          } else {
-            // Profile missing! Trigger a sync to ensure DB triggers run
-            console.warn("Profile missing in Onboarding, triggering sync...");
+          } else if (!syncAttempted) {
+            // Profile missing and no sync attempted yet!
+            setSyncAttempted(true);
+            console.warn("Profile missing in Onboarding, triggering initial sync...");
             import("../lib/api/auth").then(({ syncUserWithSupabase }) => {
               syncUserWithSupabase(user).catch(err => {
                 console.error("Critical: Failed to sync profile during onboarding recovery:", err);
-                toast.error("Failed to initialize your profile. Please try logging in again.");
+                toast.error("Failed to initialize your profile. Please try logging in again or refresh the page.");
               });
             });
           }
         });
       }
     }
-  }, [authLoading, user, navigate]);
+  }, [authLoading, user, navigate, syncAttempted]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {

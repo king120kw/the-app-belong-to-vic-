@@ -65,29 +65,100 @@ serve(async (req) => {
             supabase.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(6)
         ]);
 
-        // 3. Generate Contextual AI Reply using OpenAI
+        // 3. Multimodal Handling (Vision & Voice)
         const apiKey = Deno.env.get('OPENAI_API_KEY');
         if (!apiKey) throw new Error("OPENAI_API_KEY not set");
 
-        const prompt = `You are a high-performance AI Health Coach.
-User Profile: ${JSON.stringify(onboarding.data || {})}
-Last 7 Days Food: ${JSON.stringify(foodHistory.data || [])}
-Last 7 Days Budget: ${JSON.stringify(budgetHistory.data || [])}
-Last 7 Days Progress: ${JSON.stringify(measurements.data || [])}
+        let transcribedText = "";
+        let imageUrl: string | null = null;
 
-CONTEXT:
-Provide a coaching reply that references their recent trends.
-- If they've been eating well but overspending, mention it.
-- If their weight/mood has been fluctuating, be more empathetic.
-- Align with their primary goal: ${onboarding.data?.goal || 'General Health'}.
+        if (record.message_type === 'voice') {
+            console.log("Transcribing voice message...");
+            try {
+                // Media URL is typically in record.metadata (from internal RPC/client) 
+                // but we check record.content as fallback.
+                const voiceUrl = record.metadata || record.content;
 
-Recent Messages:
+                if (!voiceUrl || !voiceUrl.startsWith('http')) {
+                    throw new Error("Invalid voice URL: " + voiceUrl);
+                }
+
+                const audioResponse = await fetch(voiceUrl);
+                const audioBlob = await audioResponse.blob();
+
+                const formData = new FormData();
+                formData.append('file', audioBlob, 'voice.m4a');
+                formData.append('model', 'whisper-1');
+
+                const transcriptionRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${apiKey}` },
+                    body: formData
+                });
+
+                if (transcriptionRes.ok) {
+                    const transData = await transcriptionRes.json();
+                    transcribedText = transData.text;
+                    console.log("Transcribed:", transcribedText);
+                } else {
+                    console.error("Whisper Error:", await transcriptionRes.text());
+                    transcribedText = "[Voice message - transcription failed]";
+                }
+            } catch (err) {
+                console.error("Transcription fetch error:", err);
+                transcribedText = "[Voice message - could not fetch audio]";
+            }
+        } else if (record.message_type === 'image') {
+            imageUrl = record.metadata || record.content;
+            console.log("Image received:", imageUrl);
+        }
+
+        // 4. Generate Contextual AI Reply using OpenAI
+        const now = new Date();
+        const currentDateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const currentTimeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+        const prompt = `You are a professional AI Health Coach.
+CURRENT DATE/TIME: ${currentDateStr} at ${currentTimeStr}
+
+USER PROFILE: ${JSON.stringify(onboarding.data || {})}
+FOOD LOGS (7 DAYS): ${JSON.stringify(foodHistory.data || [])}
+BUDGET LOGS (7 DAYS): ${JSON.stringify(budgetHistory.data || [])}
+PROGRESS LOGS (7 DAYS): ${JSON.stringify(measurements.data || [])}
+
+STRICT INSTRUCTIONS:
+1. GROUNDING: Only reference data explicitly provided in the LOGS above. If a log is empty, do not guess or exaggerate. 
+2. ACCURACY: Today is ${currentDateStr}. When discussing trends, be chronologically accurate.
+3. NO HALLUCINATION: If the user asks about something not in the logs (e.g., "What did I eat yesterday?" when logs are empty), state that you don't see that data yet and suggest they log it.
+4. NO EXAGGERATION: Do not use hyperbolic language. Be direct, professional, and evidence-based.
+5. MULTIMODAL: The user may have sent an image (screenshot/photo) or a voice message. If so, analyze the visual or audio content provided in their latest message.
+
+Recent Conversation:
 ${recentMessages.data?.reverse().map(m => `${m.sender_id === COACH_ID ? 'Health Coach' : 'User'}: ${m.content}`).join('\n')}
 
-User Message: "${record.content}"
+User's Latest Message: "${record.message_type === 'voice' ? transcribedText : record.content}" ${imageUrl ? '[Attached Image]' : ''}
 
-Reply concisely (max 3 sentences) in a direct, supportive, and professional tone.
-Output MUST be a valid JSON object with a single key "reply" containing your message.`;
+Response Requirement:
+- Be concise but thorough enough to be accurate (no strict sentence limit, but keep it brief).
+- Maintain a supportive, coaching tone.
+- Output MUST be a valid JSON object: {"reply": "..."}`;
+
+        // Prepare multimodal messages
+        const messages: any[] = [
+            {
+                role: "user",
+                content: [
+                    { type: "text", text: prompt }
+                ]
+            }
+        ];
+
+        if (imageUrl) {
+            (messages[0].content as any[]).push({
+                type: "image_url",
+                image_url: { url: imageUrl }
+            });
+        }
 
         const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
@@ -97,9 +168,10 @@ Output MUST be a valid JSON object with a single key "reply" containing your mes
             },
             body: JSON.stringify({
                 model: "gpt-4o",
-                messages: [{ role: "user", content: prompt }],
+                messages: messages,
                 response_format: { type: "json_object" },
                 max_tokens: 400,
+                temperature: 0.2,
             }),
         });
 
@@ -121,7 +193,8 @@ Output MUST be a valid JSON object with a single key "reply" containing your mes
                 conversation_id: conversationId,
                 sender_id: COACH_ID,
                 content: reply,
-                message_type: 'text'
+                message_type: 'text',
+                read_at: new Date().toISOString() // AI reads everything immediately
             });
 
             if (insertErr) console.error("Error inserting coach reply:", insertErr);

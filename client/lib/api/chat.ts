@@ -177,65 +177,21 @@ export const getConversationById = async (conversationId: string, userId: string
 }
 
 export const createPrivateConversation = async (userId: string, otherUserId: string) => {
-    // 1. Check if a private conversation already exists between these two users
-    const isSelf = userId === otherUserId;
+    // We now use a single secure RPC call to get or create the conversation.
+    // This avoids RLS issues and multiple round-trips.
+    const { data: convId, error } = await supabase.rpc('get_or_create_conversation', {
+        p_user_id: userId,
+        p_other_id: otherUserId
+    });
 
-    const { data: existing, error: searchError } = await (supabase
-        .from('conversations')
-        .select(`
-            id,
-            conversation_participants(user_id)
-        `)
-        .eq('is_group', false) as any);
-
-    if (searchError) {
-        console.error('Error searching for existing conversation:', searchError);
-    } else if (existing) {
-        for (const conv of existing) {
-            const parts = conv.conversation_participants;
-            if (isSelf) {
-                // For self chat, we look for a conversation with 1 or 2 participants, all being me
-                if (parts.length > 0 && parts.every((p: any) => p.user_id === userId)) {
-                    return conv;
-                }
-            } else {
-                // For regular chat, we look for both participants
-                const hasMe = parts.some((p: any) => p.user_id === userId);
-                const hasOther = parts.some((p: any) => p.user_id === otherUserId);
-                if (hasMe && hasOther && parts.length === 2 && userId !== otherUserId) {
-                    return conv;
-                }
-            }
-        }
+    if (error) {
+        console.error('Error in get_or_create_conversation:', error);
+        throw error;
     }
 
-    // 2. Create conversation record if not found
-    const { data: conv, error: convError } = await supabase
-        .from('conversations')
-        .insert({
-            is_group: false,
-            conversation_type: isSelf ? 'self' : 'direct'
-        } as any)
-        .select()
-        .single()
+    if (!convId) throw new Error('Failed to retrieve or create conversation ID');
 
-    if (convError) throw convError
-
-    // 3. Add participants
-    const participants = isSelf
-        ? [{ conversation_id: conv.id, user_id: userId }]
-        : [
-            { conversation_id: conv.id, user_id: userId },
-            { conversation_id: conv.id, user_id: otherUserId }
-        ];
-
-    const { error: partError } = await supabase
-        .from('conversation_participants')
-        .insert(participants)
-
-    if (partError) throw partError
-
-    return conv
+    return { id: convId };
 }
 
 export const getMyQRCodeData = async (userId: string) => {
@@ -302,8 +258,11 @@ export const sendMessage = async (
     conversationId: string,
     content: string,
     messageType: 'text' | 'voice' | 'video' | 'image' | 'file' | 'link' = 'text',
-    metadata?: any
+    metadata?: any,
+    isAI?: boolean,
+    isSelf?: boolean
 ) => {
+    const now = new Date().toISOString();
     const { data, error } = await supabase
         .from('messages')
         .insert({
@@ -312,11 +271,24 @@ export const sendMessage = async (
             message_type: messageType,
             content,
             metadata,
+            read_at: (isAI || isSelf) ? now : null
         })
         .select()
         .single()
 
     if (error) throw error
+
+    if (isAI) {
+        // Explicitly trigger the coach reply function if this is an AI chat
+        supabase.functions.invoke('coach-reply', {
+            body: {
+                type: 'INSERT',
+                table: 'messages',
+                record: data
+            }
+        }).catch(err => console.error("Coach reply trigger failed:", err));
+    }
+
     return data
 }
 
@@ -537,9 +509,13 @@ export const isChatVerified = async (userId: string) => {
 }
 
 export const findUserByPhone = async (phoneNumber: string) => {
+    if (!phoneNumber || phoneNumber.trim().length < 7) {
+        console.warn("[API] findUserByPhone called with invalid number:", phoneNumber);
+        return null;
+    }
     // We now use the secure RPC to bypass RLS and retrieve the contact instantly
     const { data, error } = await supabase.rpc('resolve_chat_contact', {
-        p_identifier: phoneNumber,
+        p_identifier: phoneNumber.trim(),
         p_is_id: false
     });
 
@@ -548,21 +524,39 @@ export const findUserByPhone = async (phoneNumber: string) => {
         throw error;
     }
 
-    if (!data || data.length === 0) return null;
+    const row = data && data.length > 0 ? data[0] : null;
+    if (!row) return null;
 
-    // The RPC returns a flat object, we can format it if needed, but the structure matches
-    return data[0];
+    // Map RPC result back to standard naming
+    return {
+        id: row.r_id,
+        full_name: row.r_full_name,
+        avatar_url: row.r_avatar_url,
+        phone_number: row.r_phone_number
+    };
 }
 
-export const findUserByIdSecure = async (userId: string) => {
+export const findUserByIdSecure = async (id: string | null) => {
+    if (!id) return null;
     const { data, error } = await supabase.rpc('resolve_chat_contact', {
-        p_identifier: userId,
+        p_identifier: id,
         p_is_id: true
     });
 
-    if (error) throw error;
-    if (!data || data.length === 0) return null;
-    return data[0];
+    if (error) {
+        console.error('findUserByIdSecure RPC error:', error);
+        return null;
+    }
+
+    const row = data && data.length > 0 ? data[0] : null;
+    if (!row) return null;
+
+    return {
+        id: row.r_id,
+        full_name: row.r_full_name,
+        avatar_url: row.r_avatar_url,
+        phone_number: row.r_phone_number
+    };
 }
 
 // ============================================================================

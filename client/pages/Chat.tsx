@@ -328,15 +328,9 @@ export default function Chat() {
               <p className="text-[10px] font-bold text-vic-green uppercase tracking-widest">{t('messages')}</p>
             </div>
           </div>
-          <div className="flex gap-4">
-            <button onClick={() => toast.info("Voice calling coming soon!")} className="text-slate-400">
-              <span className="material-symbols-outlined">call</span>
-            </button>
-            <button onClick={() => toast.info("Video calling coming soon!")} className="text-slate-400">
-              <span className="material-symbols-outlined">videocam</span>
-            </button>
+          <div className="flex items-center gap-4">
             <div className="relative">
-              <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-slate-400">
+              <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full p-2 transition-colors">
                 <span className="material-symbols-outlined">more_vert</span>
               </button>
               {isMenuOpen && (
@@ -365,10 +359,10 @@ export default function Chat() {
         </div>
 
         {currentView === 'chats' && (
-          <div className="flex gap-2 mt-2 overflow-x-auto pb-1 no-scrollbar">
+          <div className="grid grid-cols-3 gap-2 mt-2 pb-1">
             {['All', 'Unread', 'Groups'].map((tab) => (
               <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${activeTab === tab ? 'bg-vic-green/20 text-vic-green border border-vic-green/30' : 'bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400'}`}>
+                className={`py-2 rounded-full text-xs font-bold transition-all ${activeTab === tab ? 'bg-vic-green/20 text-vic-green border border-vic-green/30' : 'bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400'}`}>
                 {tab}
               </button>
             ))}
@@ -508,6 +502,33 @@ export default function Chat() {
         ) : (
           /* ── Contacts tab ── */
           <div className="divide-y divide-slate-50 dark:divide-white/[0.02]">
+            {/* ── Add Contact Action ── */}
+            {/* ── Add Contact Actions ── */}
+            <div className="grid grid-cols-2 bg-white dark:bg-[#0d1418] border-b dark:border-white/[0.05]">
+              <button
+                onClick={() => { setShowQRScanner(true); setCurrentView('chats'); }}
+                className="flex items-center gap-3 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors border-r dark:border-white/[0.05]"
+              >
+                <div className="size-10 rounded-full bg-vic-green/10 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-vic-green text-2xl">qr_code_scanner</span>
+                </div>
+                <div className="flex-1 text-left">
+                  <h3 className="font-bold text-sm dark:text-white">Scan QR</h3>
+                </div>
+              </button>
+              <button
+                onClick={() => setShowManualEntry(true)}
+                className="flex items-center gap-3 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors"
+              >
+                <div className="size-10 rounded-full bg-vic-pink/10 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-vic-pink text-2xl">dialpad</span>
+                </div>
+                <div className="flex-1 text-left">
+                  <h3 className="font-bold text-sm dark:text-white">Add Phone</h3>
+                </div>
+              </button>
+            </div>
+
             {contactList.map((contact: any) => (
               <button
                 key={contact.id}
@@ -580,13 +601,13 @@ export default function Chat() {
             </div>
             <div className="p-4">
               <div className="grid grid-cols-2 gap-3 mb-6">
-                <button onClick={() => { setShowQRScanner(true); setIsDiscoveryOpen(false); }} className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl">
-                  <span className="material-symbols-outlined text-3xl text-vic-green">qr_code_scanner</span>
-                  <span className="text-xs font-bold dark:text-white">Scan QR</span>
+                <button onClick={() => { setShowQRScanner(true); setIsDiscoveryOpen(false); }} className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl group active:scale-95 transition-transform">
+                  <span className="material-symbols-outlined text-3xl text-vic-green group-hover:scale-110 transition-transform">qr_code_scanner</span>
+                  <span className="text-xs font-bold dark:text-white">QR Code</span>
                 </button>
-                <button onClick={() => setShowManualEntry(true)} className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl">
-                  <span className="material-symbols-outlined text-3xl text-vic-pink">person_add</span>
-                  <span className="text-xs font-bold dark:text-white">Phone Number</span>
+                <button onClick={() => { setShowManualEntry(true); setIsDiscoveryOpen(false); }} className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl group active:scale-95 transition-transform">
+                  <span className="material-symbols-outlined text-3xl text-vic-pink group-hover:scale-110 transition-transform">dialpad</span>
+                  <span className="text-xs font-bold dark:text-white">Enter Phone</span>
                 </button>
               </div>
               <input type="text" placeholder="Search name..." value={discoveryQuery} onChange={(e) => setDiscoveryQuery(e.target.value)}

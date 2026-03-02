@@ -680,7 +680,7 @@ export default function ChatConversation() {
 
     const sendMutation = useMutation({
         mutationFn: (args: { content: string, type?: string, metadata?: string }) =>
-            sendMessage(user!.id, activeId!, args.content, (args.type as any) || 'text', args.metadata),
+            sendMessage(user!.id, activeId!, args.content, (args.type as any) || 'text', args.metadata, isAI, isSelf),
         onMutate: async (newMsg) => {
             await queryClient.cancelQueries({ queryKey: ['messages', activeId] });
             const previousMessages = queryClient.getQueryData(['messages', activeId]);
@@ -790,7 +790,7 @@ export default function ChatConversation() {
     }
 
     return (
-        <div className="flex flex-col h-screen bg-[#F0F2F5] dark:bg-[#111B21] transition-colors duration-300">
+        <div className="flex flex-col h-[100dvh] bg-[#F0F2F5] dark:bg-[#111B21] transition-colors duration-300 overflow-hidden relative">
             {/* Background Pattern Overlay */}
             <div className="absolute inset-0 opacity-[0.06] pointer-events-none bg-[url('https://static.whatsapp.net/rsrc.php/v3/yl/r/gi_tyrZ_m8E.png')] dark:invert"></div>
 
@@ -884,7 +884,7 @@ export default function ChatConversation() {
                 {/* Messages Area */}
                 <main
                     ref={scrollRef}
-                    className="flex-1 overflow-y-auto px-4 md:px-12 py-4 space-y-2 custom-scrollbar flex flex-col"
+                    className="flex-1 overflow-y-auto px-4 md:px-12 py-4 space-y-2 custom-scrollbar flex flex-col min-h-0"
                 >
                     {Object.keys(groupedMessages).length > 0 ? (
                         Object.entries(groupedMessages).map(([date, dateMsgs]) => (
@@ -1192,29 +1192,52 @@ export default function ChatConversation() {
                                 </label>
 
                                 {/* Audio */}
-                                <div className="flex items-center gap-3 group cursor-pointer" onClick={() => {
-                                    toast.info("Audio file sharing coming soon");
-                                    setShowAttachments(false);
-                                }}>
+                                <label className="flex items-center gap-3 group cursor-pointer">
                                     <div className="size-12 rounded-full bg-gradient-to-t from-[#F05522] to-[#F57143] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                                         <span className="material-symbols-outlined text-white text-[22px]">headphones</span>
                                     </div>
                                     <span className="bg-white dark:bg-[#202C33] px-2 py-1 rounded-md text-sm font-medium shadow-md">Audio</span>
-                                </div>
+                                    <input type="file" className="hidden" accept="audio/*" onChange={async (e) => {
+                                        const file = e.target?.files?.[0];
+                                        if (file) {
+                                            toast.loading('Uploading audio...', { id: 'audio-upload' });
+                                            try {
+                                                const url = await uploadChatMedia(user!.id, file);
+                                                sendMutation.mutate({ content: file.name, type: 'voice', metadata: url });
+                                                toast.success('Audio sent!', { id: 'audio-upload' });
+                                                setShowAttachments(false);
+                                            } catch (err) {
+                                                toast.error('Failed to upload audio', { id: 'audio-upload' });
+                                            }
+                                        }
+                                    }} />
+                                </label>
 
                                 {/* Contact */}
                                 <div className="flex items-center gap-3 group cursor-pointer" onClick={() => {
-                                    toast.info("Contact sharing coming soon");
-                                    setShowAttachments(false);
+                                    const contactPhone = window.prompt("Enter contact phone number to share:");
+                                    if (contactPhone && contactPhone.trim()) {
+                                        sendMutation.mutate({ content: `👤 Contact: ${contactPhone}`, type: 'text', metadata: `tel:${contactPhone}` });
+                                        toast.success("Contact shared!");
+                                        setShowAttachments(false);
+                                    }
                                 }}>
                                     <div className="size-12 rounded-full bg-gradient-to-t from-[#009DE2] to-[#00B2FF] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                                         <span className="material-symbols-outlined text-white text-[22px]">person</span>
                                     </div>
                                     <span className="bg-white dark:bg-[#202C33] px-2 py-1 rounded-md text-sm font-medium shadow-md">Contact</span>
                                 </div>
+
                                 {/* Row 3 - Poll & Event (Optional/Future) */}
                                 <div className="flex gap-6 justify-center">
-                                    <div className="flex flex-col items-center gap-1 group cursor-pointer" onClick={() => toast.info("Wait... Polls?")}>
+                                    <div className="flex flex-col items-center gap-1 group cursor-pointer" onClick={() => {
+                                        const pollQuestion = window.prompt("Enter your poll question:");
+                                        if (pollQuestion && pollQuestion.trim()) {
+                                            sendMutation.mutate({ content: `📊 Poll: ${pollQuestion}\n\n1️⃣ Option 1\n2️⃣ Option 2`, type: 'text' });
+                                            toast.success("Poll sent!");
+                                            setShowAttachments(false);
+                                        }
+                                    }}>
                                         <div className="size-[52px] rounded-full bg-gradient-to-t from-[#009688] to-[#1DE9B6] flex items-center justify-center shadow-lg group-active:scale-95 transition-transform">
                                             <span className="material-symbols-outlined text-white text-[24px]">poll</span>
                                         </div>

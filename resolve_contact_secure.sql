@@ -13,22 +13,18 @@ SECURITY DEFINER -- Crucial: runs with owner privileges to bypass RLS for lookup
 SET search_path = public
 AS $$
 DECLARE
-    v_user_id UUID;
+    v_user_id TEXT;
     v_normalized_phone TEXT;
 BEGIN
     IF p_is_id THEN
-        -- Safely cast to UUID and look up
-        BEGIN
-            v_user_id := p_identifier::UUID;
-        EXCEPTION WHEN invalid_text_representation THEN
-            RETURN; -- Invalid UUID format, return empty block
-        END;
+        -- Assign identifier
+        v_user_id := p_identifier;
     ELSE
         -- Normalize the phone number (strip everything but digits)
         v_normalized_phone := regexp_replace(p_identifier, '\D', '', 'g');
         
         -- Try to find exact match by phone number in chat_users
-        SELECT cu.user_id INTO v_user_id
+        SELECT cu.user_id::TEXT INTO v_user_id
         FROM chat_users cu
         WHERE cu.is_verified = true
         AND (
@@ -47,8 +43,8 @@ BEGIN
             up.avatar_url,
             cu.phone_number
         FROM user_profiles up
-        LEFT JOIN chat_users cu ON cu.user_id = up.id AND cu.is_verified = true
-        WHERE up.id = v_user_id
+        LEFT JOIN chat_users cu ON cu.user_id::TEXT = up.id::TEXT AND cu.is_verified = true
+        WHERE up.id::TEXT = v_user_id
         LIMIT 1;
     END IF;
     

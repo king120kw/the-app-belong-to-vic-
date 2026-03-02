@@ -193,6 +193,58 @@ export default function ChatConversation() {
         enabled: !!user?.id
     });
 
+    const isAI = useMemo(() => conversation?.conversation_type === 'ai', [conversation]);
+    const isSelf = useMemo(() => conversation?.conversation_type === 'self', [conversation]);
+    const isDirect = useMemo(() => conversation?.conversation_type === 'private' || conversation?.conversation_type === 'direct', [conversation]);
+
+    const otherParticipant = useMemo(() => {
+        if (isSelf) return null;
+        return conversation?.conversation_participants?.find((p: any) => p.user_id !== user?.id);
+    }, [conversation, user, isSelf]);
+
+    const otherParticipantId = otherParticipant?.user_id;
+
+    const { data: otherUserProfile } = useQuery({
+        queryKey: ['profile', otherParticipantId],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('user_profiles')
+                .select('id, full_name, username, avatar_url')
+                .eq('id', otherParticipantId)
+                .maybeSingle();
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!otherParticipantId && !isAI && !isSelf,
+        retry: false
+    });
+
+    // Profile Realtime Sync
+    useEffect(() => {
+        if (!otherParticipantId) return;
+
+        const profileChannel = supabase
+            .channel(`profile:${otherParticipantId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'user_profiles',
+                    filter: `id=eq.${otherParticipantId}`
+                },
+                (payload) => {
+                    queryClient.setQueryData(['profile', otherParticipantId], payload.new);
+                    queryClient.invalidateQueries({ queryKey: ['conversation', activeId] });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(profileChannel);
+        };
+    }, [otherParticipantId, queryClient, activeId]);
+
     // Guard: if the route param is not a valid UUID (e.g. '/chat/self'), redirect back
     useEffect(() => {
         if (activeId && !isValidUUID(activeId)) {
@@ -204,27 +256,18 @@ export default function ChatConversation() {
         return null;
     }
 
-    const isAI = useMemo(() => conversation?.conversation_type === 'ai', [conversation]);
-    const isSelf = useMemo(() => conversation?.conversation_type === 'self', [conversation]);
-    const isDirect = useMemo(() => conversation?.conversation_type === 'private' || conversation?.conversation_type === 'direct', [conversation]);
-
-    const otherParticipant = useMemo(() => {
-        if (isSelf) return null;
-        return conversation?.conversation_participants?.find((p: any) => p.user_id !== user?.id);
-    }, [conversation, user, isSelf]);
-
     const displayName = useMemo(() => {
         if (isAI) return 'Health Coach';
         if (isSelf) return (profile?.full_name ? `${profile.full_name} (Me)` : 'Personal Notes');
-        const otherProfile = otherParticipant?.user_profiles;
-        return otherProfile?.full_name || otherParticipant?.chat_users?.phone_number || 'User';
-    }, [isAI, isSelf, profile, otherParticipant]);
+        const p = otherUserProfile || otherParticipant?.user_profiles;
+        return p?.full_name || p?.username || otherParticipant?.chat_users?.phone_number || 'User';
+    }, [isAI, isSelf, profile, otherParticipant, otherUserProfile]);
 
     const displayAvatar = useMemo(() => {
         if (isAI) return '/APP%20LOGO.jpg';
         if (isSelf) return profile?.avatar_url || null;
-        return otherParticipant?.user_profiles?.avatar_url || null;
-    }, [isAI, isSelf, profile, otherParticipant]);
+        return otherUserProfile?.avatar_url || otherParticipant?.user_profiles?.avatar_url || null;
+    }, [isAI, isSelf, profile, otherParticipant, otherUserProfile]);
 
     // Handle initial scroll
     useEffect(() => {
@@ -823,17 +866,25 @@ export default function ChatConversation() {
                             />
                         ) : null}
 
-                        {/* Fallback Icon */}
+                        {/* Initials Fallback */}
                         {(!displayAvatar) && (
-                            <div className="avatar-fallback size-full bg-slate-400 flex items-center justify-center text-white">
-                                <span className="material-symbols-outlined">{isSelf ? 'bookmark' : 'person'}</span>
+                            <div className="avatar-fallback size-full bg-vic-green flex items-center justify-center text-white text-sm font-bold">
+                                {isSelf ? (
+                                    <span className="material-symbols-outlined">bookmark</span>
+                                ) : (
+                                    (displayName || '?').split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                                )}
                             </div>
                         )}
 
                         {/* Hidden Fallback for Image Errors */}
                         {displayAvatar && (
-                            <div className="avatar-fallback hidden size-full bg-slate-400 flex items-center justify-center text-white">
-                                <span className="material-symbols-outlined">{isSelf ? 'bookmark' : 'person'}</span>
+                            <div className="avatar-fallback hidden size-full bg-vic-green flex items-center justify-center text-white text-sm font-bold">
+                                {isSelf ? (
+                                    <span className="material-symbols-outlined">bookmark</span>
+                                ) : (
+                                    (displayName || '?').split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                                )}
                             </div>
                         )}
                     </div>

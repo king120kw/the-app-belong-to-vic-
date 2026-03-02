@@ -31,7 +31,7 @@ export const addContact = async (userId: string, contactUserId: string) => {
         .select('id')
         .eq('user_id', userId)
         .eq('contact_user_id', contactUserId)
-        .single();
+        .maybeSingle();
 
     if (existing) {
         throw new Error('Contact already exists');

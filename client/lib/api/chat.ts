@@ -2,7 +2,14 @@ import { supabase } from '../supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 export const getConversationsV2 = async (userId: string) => {
-    // 1. First get all conversation IDs where the user is a participant
+    // 1. Provision system conversations if needed (self-chat + Health Coach)
+    try {
+        await (supabase as any).rpc('provision_user_system_chats', { p_user_id: userId });
+    } catch (err) {
+        console.warn('provision_user_system_chats failed (non-fatal):', err);
+    }
+
+    // 2. Get all conversation IDs where the user is a participant
     const { data: participationData, error: participationError } = await (supabase
         .from('conversation_participants')
         .select('conversation_id, last_read_at, deleted_at')
@@ -14,26 +21,9 @@ export const getConversationsV2 = async (userId: string) => {
         throw participationError;
     }
 
-    // 2. Provision system conversations (self-chat + Health Coach) via secure DB function
-    //    This uses SECURITY DEFINER so it bypasses RLS - no 403 errors
-    try {
-        await (supabase as any).rpc('provision_user_system_chats', { p_user_id: userId });
-    } catch (err) {
-        console.warn('provision_user_system_chats failed (non-fatal):', err);
-    }
+    if (!participationData || participationData.length === 0) return [];
 
-    // 3. Re-fetch participation data (includes newly created system convs)
-    const { data: freshParticipation } = await (supabase
-        .from('conversation_participants')
-        .select('conversation_id, last_read_at, deleted_at')
-        .eq('user_id', userId)
-        .is('deleted_at', null) as any);
-
-    const updatedParticipation = freshParticipation || participationData || [];
-
-    if (updatedParticipation.length === 0) return [];
-
-    const conversationIds = updatedParticipation.map(p => p.conversation_id);
+    const conversationIds = participationData.map(p => p.conversation_id);
 
     // 2. Fetch the full conversations with ALL participants and messages
     const { data, error } = await supabase
@@ -44,6 +34,7 @@ export const getConversationsV2 = async (userId: string) => {
                 user_id,
                 user_profiles (
                     full_name, 
+                    username,
                     avatar_url,
                     chat_users(phone_number, is_verified)
                 )
@@ -103,7 +94,8 @@ export const getConversationsV2 = async (userId: string) => {
             if (otherParticipant) {
                 const profile = otherParticipant.user_profiles;
                 const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
-                display_name = profile?.full_name || conv.name || chatUser?.phone_number || 'User';
+                // Priority: Full Name > Username > Phone > "User"
+                display_name = profile?.full_name || profile?.username || conv.name || chatUser?.phone_number || 'User';
                 display_avatar = profile?.avatar_url || null;
                 display_phone = chatUser?.phone_number || null;
             } else {
@@ -138,6 +130,7 @@ export const getConversationById = async (conversationId: string, userId: string
                 user_id,
                 user_profiles(
                     full_name, 
+                    username,
                     avatar_url,
                     chat_users(phone_number, is_verified)
                 )
@@ -165,7 +158,7 @@ export const getConversationById = async (conversationId: string, userId: string
         if (otherParticipant) {
             const profile = otherParticipant.user_profiles;
             const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
-            data.display_name = profile?.full_name || data.name || chatUser?.phone_number || 'User';
+            data.display_name = profile?.full_name || profile?.username || data.name || chatUser?.phone_number || 'User';
             data.display_avatar = profile?.avatar_url;
             data.display_phone = chatUser?.phone_number;
         } else {
@@ -179,14 +172,14 @@ export const getConversationById = async (conversationId: string, userId: string
 }
 
 export const createPrivateConversation = async (userId: string, otherUserId: string) => {
-    // V11: Use atomic RPC that ensures both the contact relationship AND the conversation exist.
-    const { data: convId, error } = await (supabase as any).rpc('add_contact_and_chat', {
+    // V12: Use robust atomic RPC for bidirectional contact + conversation setup
+    const { data: convId, error } = await (supabase as any).rpc('add_contact_and_setup_chat', {
         p_user_id: userId,
         p_contact_id: otherUserId
     });
 
     if (error) {
-        console.error('Error in add_contact_and_chat:', error);
+        console.error('Error in add_contact_and_setup_chat:', error);
         throw error;
     }
 
@@ -202,6 +195,7 @@ export const getContacts = async (userId: string) => {
             contact_user_id,
             user_profiles:contact_user_id(
                 full_name,
+                username,
                 avatar_url,
                 chat_users(phone_number, is_verified)
             )
@@ -218,7 +212,7 @@ export const getContacts = async (userId: string) => {
         const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
         return {
             id: c.contact_user_id,
-            full_name: profile?.full_name || chatUser?.phone_number || 'Unknown',
+            full_name: profile?.full_name || profile?.username || chatUser?.phone_number || 'Unknown',
             avatar_url: profile?.avatar_url,
             phone_number: chatUser?.phone_number
         };
@@ -226,6 +220,13 @@ export const getContacts = async (userId: string) => {
 }
 
 export const getMyQRCodeData = async (userId: string) => {
+    // Get phone and username for the QR payload
+    const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('username')
+        .eq('id', userId)
+        .maybeSingle();
+
     const { data: chatUser } = await supabase
         .from('chat_users')
         .select('phone_number')
@@ -235,6 +236,7 @@ export const getMyQRCodeData = async (userId: string) => {
 
     return JSON.stringify({
         userId,
+        username: (profile as any)?.username,
         phone: chatUser?.phone_number
     });
 }
@@ -555,39 +557,33 @@ export const isChatVerified = async (userId: string) => {
     return data.some((row: any) => row.is_verified)
 }
 
-export const findUserByPhone = async (phoneNumber: string) => {
-    if (!phoneNumber || phoneNumber.trim().length < 7) {
-        console.warn("[API] findUserByPhone called with invalid number:", phoneNumber);
-        return null;
-    }
-    // We now use the secure RPC to bypass RLS and retrieve the contact instantly
-    const { data, error } = await supabase.rpc('resolve_chat_contact', {
-        p_identifier: phoneNumber.trim(),
-        p_is_id: false
+export const findUserByIdentifier = async (identifier: string) => {
+    if (!identifier || identifier.trim().length === 0) return null;
+
+    const { data, error } = await supabase.rpc('find_user_by_identifier', {
+        p_identifier: identifier.trim()
     });
 
     if (error) {
-        console.error("findUserByPhone RPC error:", error);
+        console.error("findUserByIdentifier RPC error:", error);
         throw error;
     }
 
-    const row = data && data.length > 0 ? data[0] : null;
-    if (!row) return null;
+    return (data && data.length > 0) ? data[0] : null;
+}
 
-    // Map RPC result back to standard naming
-    return {
-        id: row.r_id, // Corrected from r_user_id to match SQL
-        full_name: row.r_full_name,
-        avatar_url: row.r_avatar_url,
-        phone_number: row.r_phone_number
-    };
+export const findUserByPhone = async (phoneNumber: string) => {
+    return findUserByIdentifier(phoneNumber);
+}
+
+export const findUserByUsername = async (username: string) => {
+    return findUserByIdentifier(username);
 }
 
 export const findUserByIdSecure = async (id: string | null) => {
     if (!id) return null;
-    const { data, error } = await supabase.rpc('resolve_chat_contact', {
-        p_identifier: id,
-        p_is_id: true
+    const { data, error } = await supabase.rpc('find_user_by_identifier', {
+        p_identifier: id
     });
 
     if (error) {
@@ -595,15 +591,7 @@ export const findUserByIdSecure = async (id: string | null) => {
         return null;
     }
 
-    const row = data && data.length > 0 ? data[0] : null;
-    if (!row) return null;
-
-    return {
-        id: row.r_id, // Corrected from r_user_id
-        full_name: row.r_full_name,
-        avatar_url: row.r_avatar_url,
-        phone_number: row.r_phone_number
-    };
+    return (data && data.length > 0) ? data[0] : null;
 }
 
 // ============================================================================

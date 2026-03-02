@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
-import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByPhone, findUserByIdSecure, softDeleteConversation, getMyQRCodeData, getContacts } from "../lib/api/chat";
+import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByIdentifier, softDeleteConversation, getMyQRCodeData, getContacts } from "../lib/api/chat";
 import { searchUsers, getUserProfile } from "../lib/api/auth";
 import { MyQRCode } from "../components/MyQRCode";
 import { useTranslation } from "../lib/api/translation";
@@ -43,8 +43,8 @@ export default function Chat() {
   const [discoveryQuery, setDiscoveryQuery] = useState("");
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
-  const [manualPhone, setManualPhone] = useState("");
-  const [isSearchingPhone, setIsSearchingPhone] = useState(false);
+  const [manualIdentifier, setManualIdentifier] = useState("");
+  const [isSearchingIdentifier, setIsSearchingIdentifier] = useState(false);
   const [contactFound, setContactFound] = useState<any>(null);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [showMyQR, setShowMyQR] = useState(false);
@@ -63,7 +63,7 @@ export default function Chat() {
   const { data: contactsData = [], isLoading: isLoadingContacts } = useQuery({
     queryKey: ['contacts', user?.id],
     queryFn: () => getContacts(user!.id),
-    enabled: !!user?.id && currentView === 'contacts'
+    enabled: !!user?.id  // Always fetch, not gated by currentView
   });
 
   const { data: verified, isLoading: isVerifying } = useQuery({
@@ -167,6 +167,7 @@ export default function Chat() {
       supabase.removeChannel(presenceChannel);
       supabase.removeChannel(msgChannel);
       supabase.removeChannel(participantChannel);
+      supabase.removeChannel(contactChannel); // Fix: was missing from cleanup
     };
   }, [user?.id, verified, queryClient, navigate, location.pathname, location.state]);
 
@@ -175,6 +176,7 @@ export default function Chat() {
     mutationFn: (otherUserId: string) => createPrivateConversation(user!.id, otherUserId),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['conversations', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['contacts', user?.id] }); // Fix: refresh contact list
       setIsDiscoveryOpen(false);
       setShowManualEntry(false);
       setContactFound(null);
@@ -209,15 +211,11 @@ export default function Chat() {
   }, []);
 
   // ── Contact resolution ───────────────────────────────────────────
-  const resolveContact = async (phoneOrId: string, isId: boolean = false) => {
+  const resolveContact = async (identifier: string) => {
     try {
-      setIsSearchingPhone(true);
-      let targetUser = null;
-      if (isId) {
-        targetUser = await findUserByIdSecure(phoneOrId);
-      } else {
-        targetUser = await findUserByPhone(phoneOrId);
-      }
+      setIsSearchingIdentifier(true);
+      const targetUser = await findUserByIdentifier(identifier);
+
       if (!targetUser) {
         toast.error("User not found or not verified for chat");
         return;
@@ -227,16 +225,16 @@ export default function Chat() {
     } catch (err: any) {
       toast.error(`Resolution failed: ${err.message}`);
     } finally {
-      setIsSearchingPhone(false);
+      setIsSearchingIdentifier(false);
     }
   };
 
   const handleManualContact = async () => {
-    if (!manualPhone || manualPhone.length < 7) {
-      toast.error("Please enter a valid phone number");
+    if (!manualIdentifier || manualIdentifier.trim().length < 3) {
+      toast.error("Please enter a valid phone number or username");
       return;
     }
-    await resolveContact(manualPhone);
+    await resolveContact(manualIdentifier);
   };
 
   const openSelfChat = async () => {
@@ -279,36 +277,39 @@ export default function Chat() {
     });
   })();
 
+  // Contacts tab = PURE address book: only contacts with NO existing conversation
+  // Anyone with a conversation belongs in Chats, not here
   const contactList = useMemo(() => {
-    // Merge contacts from the dedicated table and active conversations
-    const merged = new Map<string, any>();
-
-    // 1. Add current conversation partners
-    if (conversations) {
-      conversations.forEach((conv: any) => {
-        if (conv.conversation_type === 'self' || conv.conversation_type === 'ai') return;
-        conv.conversation_participants?.forEach((p: any) => {
-          if (p.user_id !== user?.id && p.user_id !== COACH_ID) {
-            merged.set(p.user_id, {
-              id: p.user_id,
-              full_name: p.user_profiles?.full_name,
-              avatar_url: p.user_profiles?.avatar_url,
-              phone_number: p.user_profiles?.chat_users?.phone_number
-            });
-          }
-        });
-      });
-    }
-
-    // 2. Add explicit contacts (might be people we haven't messaged yet)
-    contactsData.forEach((c: any) => {
-      merged.set(c.id, c);
-    });
-
-    return Array.from(merged.values()).sort((a, b) =>
-      (a.full_name || "").localeCompare(b.full_name || "")
+    // Build set of user IDs who already have a conversation
+    const alreadyChattedIds = new Set<string>(
+      (conversations || [])
+        .filter((c: any) => c.conversation_type !== 'self' && c.conversation_type !== 'ai')
+        .flatMap((c: any) => c.conversation_participants || [])
+        .filter((p: any) => p.user_id !== user?.id && p.user_id !== COACH_ID)
+        .map((p: any) => p.user_id)
     );
-  }, [conversations, contactsData, user?.id]);
+
+    // Only show contacts who have NO active conversation yet
+    return contactsData
+      .filter((c: any) => c && !alreadyChattedIds.has(c.id) && (c.full_name || c.phone_number || c.username))
+      .sort((a: any, b: any) =>
+        (a.full_name || a.phone_number || '').localeCompare(b.full_name || b.phone_number || '')
+      );
+  }, [contactsData, conversations, user?.id]);
+
+  // When tapping a contact: navigate to existing conversation or create one
+  const handleContactTap = (contact: any) => {
+    const existingConv = conversations?.find((conv: any) =>
+      conv.conversation_type !== 'self' &&
+      conv.conversation_type !== 'ai' &&
+      conv.conversation_participants?.some((p: any) => p.user_id === contact.id)
+    );
+    if (existingConv) {
+      navigate(`/chat/${existingConv.id}`);
+    } else {
+      startConversationMutation.mutate(contact.id);
+    }
+  };
 
   // ─────────────────────────────────────────────────────────────────
   if (isVerifying) {
@@ -550,31 +551,36 @@ export default function Chat() {
                 className="flex items-center gap-3 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors"
               >
                 <div className="size-10 rounded-full bg-vic-pink/10 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-vic-pink text-2xl">dialpad</span>
+                  <span className="material-symbols-outlined text-vic-pink text-2xl">person_search</span>
                 </div>
                 <div className="flex-1 text-left">
-                  <h3 className="font-bold text-sm dark:text-white">Add Phone</h3>
+                  <h3 className="font-bold text-sm dark:text-white">Add by Username/Phone</h3>
                 </div>
               </button>
             </div>
 
+
             {contactList.map((contact: any) => (
               <button
                 key={contact.id}
-                onClick={() => startConversationMutation.mutate(contact.id)}
+                onClick={() => handleContactTap(contact)}
                 className="w-full flex gap-4 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.03] text-left transition-colors"
               >
                 <div className="size-12 rounded-full overflow-hidden shrink-0">
-                  <AvatarImg src={contact.avatar_url} name={contact.full_name} />
+                  <AvatarImg src={contact.avatar_url} name={contact.full_name || contact.phone_number || '?'} />
                 </div>
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  <h3 className="truncate dark:text-white font-bold">{contact.full_name}</h3>
-                  <p className="text-[12px] text-slate-500">{contact.phone_number}</p>
+                  <h3 className="truncate dark:text-white font-bold">
+                    {contact.full_name || contact.phone_number || 'Unknown'}
+                  </h3>
+                  {contact.phone_number && (
+                    <p className="text-[12px] text-slate-500">{contact.phone_number}</p>
+                  )}
                 </div>
                 <span className="material-symbols-outlined text-slate-300 self-center">chevron_right</span>
               </button>
             ))}
-            {contactList.length === 0 && (
+            {contactList.length === 0 && !coachConv && (
               <div className="p-12 text-center">
                 <span className="material-symbols-outlined text-4xl text-slate-300 mb-3 block">person_add</span>
                 <p className="text-slate-500">No contacts yet. Add your first friend!</p>
@@ -635,8 +641,8 @@ export default function Chat() {
                   <span className="text-xs font-bold dark:text-white">QR Code</span>
                 </button>
                 <button onClick={() => { setShowManualEntry(true); setIsDiscoveryOpen(false); }} className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl group active:scale-95 transition-transform">
-                  <span className="material-symbols-outlined text-3xl text-vic-pink group-hover:scale-110 transition-transform">dialpad</span>
-                  <span className="text-xs font-bold dark:text-white">Enter Phone</span>
+                  <span className="material-symbols-outlined text-3xl text-vic-pink group-hover:scale-110 transition-transform">person_search</span>
+                  <span className="text-xs font-bold dark:text-white">Username/Phone</span>
                 </button>
               </div>
               <input type="text" placeholder="Search name..." value={discoveryQuery} onChange={(e) => setDiscoveryQuery(e.target.value)}
@@ -658,19 +664,19 @@ export default function Chat() {
         </div>
       )}
 
-      {/* ── Manual phone entry ── */}
+      {/* ── Manual identifier entry ── */}
       {showManualEntry && (
         <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white dark:bg-[#1f2c34] w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl p-8">
-            <h2 className="text-2xl font-black dark:text-white mb-2 tracking-tight">Add by Phone</h2>
-            <p className="text-sm text-slate-500 mb-8">Enter the verified number including country code.</p>
-            <input autoFocus type="tel" placeholder="Phone Number"
-              value={manualPhone} onChange={(e) => setManualPhone(e.target.value.replace(/\D/g, ""))}
+            <h2 className="text-2xl font-black dark:text-white mb-2 tracking-tight">Add Friend</h2>
+            <p className="text-sm text-slate-500 mb-8">Enter a username or phone number (with country code).</p>
+            <input autoFocus type="text" placeholder="@username or +1234..."
+              value={manualIdentifier} onChange={(e) => setManualIdentifier(e.target.value)}
               className="w-full h-16 p-5 bg-slate-50 dark:bg-black/40 rounded-2xl border-2 border-transparent focus:border-vic-pink outline-none text-xl font-bold dark:text-white mb-8" />
             <div className="flex flex-col gap-3">
-              <button onClick={handleManualContact} disabled={manualPhone.length < 7 || isSearchingPhone}
+              <button onClick={handleManualContact} disabled={manualIdentifier.trim().length === 0 || isSearchingIdentifier}
                 className="w-full py-5 bg-vic-green text-slate-900 font-black rounded-2xl shadow-xl disabled:opacity-50">
-                {isSearchingPhone ? "FINDING..." : "FIND & ADD"}
+                {isSearchingIdentifier ? "SEARCHING..." : "SEARCH & ADD"}
               </button>
               <button onClick={() => setShowManualEntry(false)} className="w-full py-4 text-slate-500 font-bold">Cancel</button>
             </div>
@@ -685,11 +691,11 @@ export default function Chat() {
             setShowQRScanner(false);
             try {
               const qrData = JSON.parse(data);
-              if (qrData.userId) resolveContact(qrData.userId, true);
+              if (qrData.userId) resolveContact(qrData.userId);
               else if (qrData.phone) resolveContact(qrData.phone);
             } catch {
               const phoneRegex = /^\+?[0-9]{7,15}$/;
-              if (phoneRegex.test(data)) resolveContact(data);
+              if (phoneRegex.test(data) || data.length > 5) resolveContact(data);
               else toast.error('Invalid QR code format');
             }
           }}

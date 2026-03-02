@@ -75,7 +75,7 @@ export const getUserSettings = async (userId: string) => {
         .from('user_settings')
         .select('*')
         .eq('user_id', userId)
-        .single()
+        .maybeSingle()
 
     if (error && error.code !== 'PGRST116') throw error
     return data
@@ -152,7 +152,7 @@ export const updateSubscription = async (
         })
         .eq('user_id', userId)
         .select()
-        .single()
+        .maybeSingle()
 
     if (error) throw error
     return data

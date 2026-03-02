@@ -266,9 +266,9 @@ export default function Chat() {
       if (seen.has(conv.id)) return false;
       seen.add(conv.id);
       const matchesSearch = (
-        conv.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        conv.display_phone?.includes(searchQuery) ||
-        conv.last_message?.content?.toLowerCase().includes(searchQuery.toLowerCase())
+        (conv.display_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (conv.display_phone || '').includes(searchQuery) ||
+        (conv.last_message?.content || '').toLowerCase().includes(searchQuery.toLowerCase())
       );
       if (!matchesSearch) return false;
       if (activeTab === 'Unread') return isActuallyUnread(conv);

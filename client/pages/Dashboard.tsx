@@ -236,6 +236,14 @@ export default function Dashboard() {
             fat: analysis.fat,
             fiber: analysis.fiber,
             sugar: analysis.sugar,
+            portion_size_estimate: analysis.portion_size_estimate,
+            portion_assumptions: analysis.portion_assumptions,
+            clinical_evaluation: analysis.clinical_evaluation,
+            metabolic_impact: analysis.metabolic_impact,
+            clinical_synopsis: analysis.clinical_synopsis,
+            health_impact_score: analysis.health_impact_score,
+            healthRating: analysis.healthRating,
+            confidence_level: analysis.confidence_level,
             healthStatus: analysis.healthStatus,
             personalizedAdvice: analysis.personalizedAdvice
           }
@@ -277,6 +285,16 @@ export default function Dashboard() {
             protein: analysis.protein,
             carbs: analysis.carbs,
             fat: analysis.fat,
+            fiber: analysis.fiber,
+            sugar: analysis.sugar,
+            portion_size_estimate: analysis.portion_size_estimate,
+            portion_assumptions: analysis.portion_assumptions,
+            clinical_evaluation: analysis.clinical_evaluation,
+            metabolic_impact: analysis.metabolic_impact,
+            clinical_synopsis: analysis.clinical_synopsis,
+            health_impact_score: analysis.health_impact_score,
+            healthRating: analysis.healthRating,
+            confidence_level: analysis.confidence_level,
             healthStatus: analysis.healthStatus,
             personalizedAdvice: analysis.personalizedAdvice
           }
@@ -356,10 +374,16 @@ export default function Dashboard() {
         country: analysis.country_of_origin || country || "Global",
         expiry: "Fresh Info",
         calories: analysis.calories,
-        ai_insight: analysis.personalizedAdvice || analysis.ai_insight,
+        ai_insight: analysis.clinical_synopsis || analysis.insight || analysis.personalizedAdvice || analysis.ai_insight,
+        clinical_synopsis: analysis.clinical_synopsis,
+        health_impact_score: analysis.health_impact_score,
+        healthRating: analysis.healthRating,
+        ingredient_quality: analysis.ingredient_quality,
+        macro_balance_evaluation: analysis.macro_balance_evaluation,
+        health_impact_rationale: analysis.health_impact_rationale,
         financialImpact: analysis.financialImpact || "MODERATE",
         currentBalance: analysis.currentBalance || 0,
-        suggestions: analysis.suggestions || analysis.alternatives || []
+        alternatives: analysis.alternatives || analysis.suggestions || []
       };
 
       setProductData(formattedProduct);

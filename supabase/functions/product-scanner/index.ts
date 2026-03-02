@@ -72,24 +72,32 @@ serve(async (req) => {
         let aiAnalysis = {};
 
         if (apiKey) {
-            const prompt = `Analyze this scanned product for the VicCalary app.
+            const prompt = `Analyze this scanned product for the VicCalary app using clinical precision.
 Product: ${product.product_name || product.food_name}
 Nutrients: ${JSON.stringify(product.nutriments || product)}
 User Balance: $${currentBalance}
 User Goal: ${onboardingData?.goal || 'General Health'}
 
 TASKS:
-1. FINANCIAL EVALUATION: Is this product a good investment for their $${currentBalance} budget?
-2. HEALTH EVALUATION: Does it align with their goal of ${onboardingData?.goal}?
-3. ALTERNATIVES: Suggest 2 cheaper or healthier substitutes.
+1. CLINICAL EVALUATION: Reference exact label values to assess ingredient quality (processing level, additives, preservatives, sugar types).
+2. MACRO BALANCE: Evaluate the macronutrient ratio relative to the user's goal (${onboardingData?.goal || 'General Health'}).
+3. FINANCIAL IMPACT: Is this product a good $${currentBalance} investment?
+4. SUBSTITUTIONS: Provide 2 structured alternatives with improved macro ratios, lower sugars, or cleaner lists. Format as "Product Name: Reason".
 
 STRICT JSON OUTPUT:
 {
-  "insight": "1 sentence analysis",
+  "insight": "1 sentence clinical summary",
+  "clinical_synopsis": "A detailed clinical explanation (4-6 sentences) of the product's quality, nutritional gaps, and impact on goals.",
+  "ingredient_quality": "string",
+  "macro_balance_evaluation": "string",
+  "health_impact_rationale": "string",
   "financialImpact": "LOW" | "MODERATE" | "HIGH",
   "financialAdvice": "string",
-  "alternatives": ["string"]
-}`;
+  "alternatives": ["string"],
+  "health_impact_score": number (1-10),
+  "healthRating": number (1-10)
+}
+`;
 
             const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
                 method: "POST",

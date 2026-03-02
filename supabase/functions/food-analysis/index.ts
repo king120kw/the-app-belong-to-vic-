@@ -48,7 +48,7 @@ serve(async (req) => {
         const apiKey = clientApiKey || Deno.env.get('OPENAI_API_KEY');
         const spoonacularKey = Deno.env.get('SPOONACULAR_API_KEY');
 
-        const prompt = `You are an expert nutritional AI for the VicCalary app.
+        const prompt = `You are an expert clinical nutritional AI for the VicCalary app.
 Analyze the provided image with extreme precision using GPT-4o multimodal vision.
 
 USER CONTEXT:
@@ -58,10 +58,11 @@ USER CONTEXT:
 
 TASKS:
 1. IDENTIFY: Detect the exact meal or packaged product.
-2. PORTION ESTIMATION: Analyze visual cues (plates, hands, background) to estimate portion size.
+2. PORTION ESTIMATION: Analyze visual cues (plates, hands, background) to estimate portion size. Explicitly state assumptions.
 3. NUTRITION: provide estimated Calories, Protein, Carbs, Fat, Fiber, and Sugar.
-4. SEARCH QUERY: Provide a precise 1-3 word search query for this food.
-5. DETAILS: packaging_details and country_of_origin.
+4. CLINICAL EVALUATION: Provide a deep analysis of macronutrient distribution, glycemic load implications, lipid density, sodium concerns, protein quality, and fiber adequacy.
+5. METABOLIC IMPACT: Explain how this meal affects the user's specific goal (${userGoal}).
+6. CONFIDENCE: State your confidence level (0-100%) in this visual estimation.
 
 STRICT JSON OUTPUT:
 {
@@ -72,11 +73,24 @@ STRICT JSON OUTPUT:
   "fat": number,
   "fiber": number,
   "sugar": number,
-  "packaging_details": "string or null",
   "portion_size_estimate": "string",
-  "country_of_origin": "string or null",
+  "portion_assumptions": "string",
+  "clinical_evaluation": {
+    "macronutrient_distribution": "string",
+    "glycemic_load": "string",
+    "lipid_density": "string",
+    "sodium_concerns": "string",
+    "protein_quality": "string",
+    "fiber_adequacy": "string"
+  },
+  "metabolic_impact": "string",
+  "clinical_synopsis": "A deep, medically-structured paragraph (4-6 sentences) explaining the product's overall impact, nutritional quality, and clinical relevance to the user's goal.",
+  "health_impact_score": number (1-10),
+  "confidence_level": number,
+  "healthRating": number (1-10),
   "searchQuery": "string"
-}`;
+}
+`;
 
         console.log("Calling OpenAI GPT-4o...");
         const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {

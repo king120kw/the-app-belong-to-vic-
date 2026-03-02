@@ -10,9 +10,21 @@ interface FoodItem {
     fat?: number;
     fiber?: number;
     sugar?: number;
-    packaging_details?: string;
     portion_size_estimate?: string;
-    country_of_origin?: string;
+    portion_assumptions?: string;
+    clinical_evaluation?: {
+        macronutrient_distribution: string;
+        glycemic_load: string;
+        lipid_density: string;
+        sodium_concerns: string;
+        protein_quality: string;
+        fiber_adequacy: string;
+    };
+    metabolic_impact?: string;
+    clinical_synopsis?: string;
+    health_impact_score?: number;
+    healthRating?: number;
+    confidence_level?: number;
     healthStatus?: 'GOOD' | 'MODERATE' | 'POOR';
     personalizedAdvice?: string;
 }
@@ -94,117 +106,75 @@ export function MealAnalysis({ mealImage, heroImage, totalCalories, dailyCalorie
                         </div>
                     </div>
 
-                    {/* Stats & Health Status */}
-                    <div className="flex flex-col items-center mb-6">
-                        <div className={`px-4 py-8 rounded-2xl bg-white/5 border border-white/10 w-full flex flex-col items-center shadow-inner relative overflow-hidden`}>
-                            {/* Small Gauge for Visual Polish */}
-                            <div className="absolute top-0 left-0 w-full h-1 bg-white/10">
-                                <div
-                                    className="h-full bg-[#2ECC71] transition-all duration-1000"
-                                    style={{ width: `${Math.min((totalCalories / dailyCalorieGoal) * 100, 100)}%`, backgroundColor: getCalorieColor(totalCalories).replace('text-', '') === '[#2ECC71]' ? '#2ECC71' : getCalorieColor(totalCalories).includes('F1C40F') ? '#F1C40F' : '#E74C3C' }}
-                                ></div>
+                    {/* Enhanced Stats Row (Image 2 Style) */}
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="bg-[#EAF9EE] rounded-[32px] p-6 flex flex-col items-center justify-center shadow-sm border border-[#2ECC71]/10">
+                            <span className="text-[#0D1B1E]/40 text-[10px] font-black uppercase tracking-widest mb-2">Calories</span>
+                            <div className="text-[36px] font-black text-[#0D1B1E] leading-none">
+                                {totalCalories || 0}
                             </div>
-
-                            <span className="text-white/60 text-[10px] font-bold uppercase tracking-widest mb-1">Estimated Energy</span>
-                            <p className={`text-4xl font-bold ${getCalorieColor(totalCalories)}`}>
-                                {totalCalories} <span className="text-sm font-medium opacity-70">kcal</span>
-                            </p>
+                        </div>
+                        <div className="bg-[#FFF9EA] rounded-[32px] p-6 flex flex-col items-center justify-center shadow-sm border border-[#F1C40F]/10">
+                            <span className="text-[#E67E22]/60 text-[10px] font-black uppercase tracking-widest mb-2 text-center leading-tight">Health Impact</span>
+                            <div className="text-[36px] font-black text-[#E67E22] leading-none">
+                                {foodItems[0]?.healthRating || 5}/10
+                            </div>
                         </div>
                     </div>
 
-                    {/* Food Items & Breakdown */}
-                    <div className="flex flex-col gap-4 flex-1">
-                        {foodItems.map((item, index) => (
-                            <div key={index} className="flex flex-col gap-2">
-                                {/* Item Card */}
-                                <div className={`flex items-center h-20 rounded-2xl p-4 shadow-lg border-2 ${getStatusBg(item.healthStatus)} transition-all`}>
-                                    <div className="relative">
-                                        <img
-                                            src={item.image}
-                                            alt={item.name}
-                                            className="w-12 h-12 rounded-xl object-cover mr-4 ring-2 ring-white/50 shadow-md"
-                                        />
-                                        {item.healthStatus && (
-                                            <div className={`absolute -top-1 -right-1 size-4 rounded-full border-2 border-white flex items-center justify-center ${getStatusBadge(item.healthStatus)} shadow-sm`}>
-                                                <span className="material-symbols-outlined text-[10px] font-bold">
-                                                    {item.healthStatus === 'GOOD' ? 'check' : item.healthStatus === 'POOR' ? 'close' : 'warning'}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-start">
-                                            <p className="text-[#2C3D5D] text-lg font-bold leading-tight line-clamp-1">
-                                                {item.name}
-                                            </p>
-                                        </div>
-                                        <div className="flex gap-3 mt-1">
-                                            <span className="text-[#588053] text-[10px] font-bold px-2 py-0.5 bg-black/5 rounded-full uppercase">
-                                                {item.calories} {t('cal_unit')}
-                                            </span>
-                                            {item.healthStatus && (
-                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${item.healthStatus === 'GOOD' ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100'}`}>
-                                                    {item.healthStatus} CHOICE
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
+                    {/* Quick Macro Row */}
+                    <div className="bg-white/5 rounded-[24px] p-4 flex justify-around mb-6 border border-white/5">
+                        <div className="flex flex-col items-center">
+                            <span className="text-[9px] font-black text-white/40 uppercase mb-1">Carbs</span>
+                            <span className="text-sm font-bold text-white">{foodItems[0]?.carbs || 0}g</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <span className="text-[9px] font-black text-white/40 uppercase mb-1">Fat</span>
+                            <span className="text-sm font-bold text-white">{foodItems[0]?.fat || 0}g</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <span className="text-[9px] font-black text-white/40 uppercase mb-1">Fiber</span>
+                            <span className="text-sm font-bold text-white">{foodItems[0]?.fiber || 0}g</span>
+                        </div>
+                    </div>
+
+                    {/* Clinical Synopsis (The "Meat" of the analysis) */}
+                    <div className="bg-white rounded-[32px] p-6 mb-6 shadow-xl border border-white flex flex-col gap-3">
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-[#8696A0] uppercase tracking-widest">Clinical Synopsis</span>
+                        </div>
+                        <p className="text-[#0D1B1E] text-[15px] leading-[1.6] font-medium">
+                            {foodItems[0]?.personalizedAdvice || "Analyzing nutritional components and metabolic pathways..."}
+                        </p>
+                    </div>
+
+                    {/* Advanced Clinical Details Grid */}
+                    {foodItems[0]?.clinical_evaluation && (
+                        <div className="bg-white/5 rounded-3xl p-5 border border-white/5 mb-6">
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="material-symbols-outlined text-[16px] text-blue-400">clinical_notes</span>
+                                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Deep Analysis Breakdown</span>
+                            </div>
+                            <div className="grid grid-cols-1 gap-4">
+                                <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                                    <span className="text-[10px] font-bold text-white/30 uppercase">Glycemic Load</span>
+                                    <span className="text-xs text-white/80 font-medium">{foodItems[0].clinical_evaluation.glycemic_load}</span>
                                 </div>
-
-                                {/* Advanced Details (Portion & Packaging) */}
-                                {(item.portion_size_estimate || item.packaging_details || item.country_of_origin) && (
-                                    <div className="flex gap-2 px-1">
-                                        {item.portion_size_estimate && (
-                                            <div className="flex-1 bg-white/5 rounded-lg p-2 border border-white/5 flex flex-col">
-                                                <span className="text-[8px] font-bold text-white/40 uppercase mb-0.5">Portion</span>
-                                                <span className="text-[10px] text-white font-medium line-clamp-1">{item.portion_size_estimate}</span>
-                                            </div>
-                                        )}
-                                        {item.packaging_details && (
-                                            <div className="flex-1 bg-white/5 rounded-lg p-2 border border-white/5 flex flex-col">
-                                                <span className="text-[8px] font-bold text-white/40 uppercase mb-0.5">Package</span>
-                                                <span className="text-[10px] text-white font-medium line-clamp-1">{item.packaging_details}</span>
-                                            </div>
-                                        )}
-                                        {item.country_of_origin && (
-                                            <div className="flex-1 bg-white/5 rounded-lg p-2 border border-white/5 flex flex-col">
-                                                <span className="text-[8px] font-bold text-white/40 uppercase mb-0.5">Origin</span>
-                                                <span className="text-[10px] text-white font-medium line-clamp-1">{item.country_of_origin}</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Personalized Insight */}
-                                {item.personalizedAdvice && (
-                                    <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/5 shadow-sm mx-1">
-                                        <div className="flex gap-2 items-start">
-                                            <span className="material-symbols-outlined text-vic-green text-sm pt-0.5">verified_user</span>
-                                            <p className="text-white/90 text-xs italic leading-snug">
-                                                "{item.personalizedAdvice}"
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Macro Breakdown */}
-                                <div className="grid grid-cols-4 gap-2 px-1">
-                                    {[
-                                        { label: 'Prot', val: item.protein, color: 'bg-blue-400' },
-                                        { label: 'Carb', val: item.carbs, color: 'bg-amber-400' },
-                                        { label: 'Fat', val: item.fat, color: 'bg-rose-400' },
-                                        { label: 'Fib', val: item.fiber, color: 'bg-emerald-400' }
-                                    ].map((macro, i) => (
-                                        <div key={i} className="flex flex-col items-center bg-white/5 rounded-lg py-1.5 border border-white/5">
-                                            <span className="text-[8px] font-black text-white/40 uppercase mb-0.5">{macro.label}</span>
-                                            <span className="text-xs font-bold text-white">{macro.val ?? 0}g</span>
-                                            <div className={`w-6 h-0.5 ${macro.color} rounded-full mt-1 opacity-60`}></div>
-                                        </div>
-                                    ))}
+                                <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                                    <span className="text-[10px] font-bold text-white/30 uppercase">Macronutrient</span>
+                                    <span className="text-xs text-white/80 font-medium text-right max-w-[180px]">{foodItems[0].clinical_evaluation.macronutrient_distribution}</span>
+                                </div>
+                                <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                                    <span className="text-[10px] font-bold text-white/30 uppercase">Lipid Density</span>
+                                    <span className="text-xs text-white/80 font-medium">{foodItems[0].clinical_evaluation.lipid_density}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-white/30 uppercase">Protein Quality</span>
+                                    <span className="text-xs text-white/80 font-medium">{foodItems[0].clinical_evaluation.protein_quality}</span>
                                 </div>
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    )}
                 </main>
 
                 {/* Action Button */}

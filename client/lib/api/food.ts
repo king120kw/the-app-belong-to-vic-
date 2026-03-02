@@ -14,6 +14,8 @@ export interface FoodAnalysisResult {
     fiber?: number
     sugar?: number
     healthRating: number
+    health_impact_score?: number
+    clinical_synopsis?: string
     price?: number
     image_url: string
 }
@@ -91,6 +93,13 @@ export const saveFoodAnalysis = async (userId: string, analysis: any) => {
             fiber: analysis.fiber,
             sugar: analysis.sugar,
             health_rating: analysis.healthRating,
+            clinical_evaluation: analysis.clinical_evaluation,
+            metabolic_impact: analysis.metabolic_impact,
+            clinical_synopsis: analysis.clinical_synopsis,
+            health_impact_score: analysis.health_impact_score,
+            confidence_level: analysis.confidence_level,
+            health_status: analysis.healthStatus,
+            personalized_advice: analysis.personalizedAdvice,
             serving_size: analysis.serving_size || '1 serving',
             image_url: analysis.image_url || analysis.mealImage,
         })

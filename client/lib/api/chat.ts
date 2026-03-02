@@ -91,7 +91,7 @@ export const getConversationsV2 = async (userId: string) => {
             const myProfile = myParticipant?.user_profiles;
             display_name = myProfile?.full_name ? `${myProfile.full_name} (Me)` : 'Personal Notes';
             display_avatar = myProfile?.avatar_url || null;
-            display_phone = myProfile?.chat_users?.phone_number || null;
+            display_phone = (Array.isArray(myProfile?.chat_users) ? myProfile.chat_users[0]?.phone_number : myProfile?.chat_users?.phone_number) || null;
         } else if (conv.conversation_type === 'ai') {
             // Health Coach: always use fixed identity
             display_name = 'Health Coach';
@@ -102,10 +102,12 @@ export const getConversationsV2 = async (userId: string) => {
             const otherParticipant = conv.conversation_participants?.find((p: any) => p.user_id !== userId);
             if (otherParticipant) {
                 const profile = otherParticipant.user_profiles;
-                const chatUser = profile?.chat_users;
-                display_name = profile?.full_name || chatUser?.phone_number || 'User';
+                const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
+                display_name = profile?.full_name || conv.name || chatUser?.phone_number || 'User';
                 display_avatar = profile?.avatar_url || null;
                 display_phone = chatUser?.phone_number || null;
+            } else {
+                display_name = conv.name || 'User';
             }
         }
 
@@ -153,7 +155,7 @@ export const getConversationById = async (conversationId: string, userId: string
         const myProfile = data.conversation_participants.find((p: any) => p.user_id === userId)?.user_profiles;
         data.display_name = myProfile?.full_name ? `${myProfile.full_name} (Me)` : 'Personal Notes';
         data.display_avatar = myProfile?.avatar_url;
-        data.display_phone = myProfile?.chat_users?.phone_number;
+        data.display_phone = (Array.isArray(myProfile?.chat_users) ? myProfile.chat_users[0]?.phone_number : myProfile?.chat_users?.phone_number) || null;
     } else if (data.conversation_type === 'ai') {
         data.display_name = 'Health Coach';
         data.display_avatar = '/APP%20LOGO.jpg';
@@ -162,13 +164,13 @@ export const getConversationById = async (conversationId: string, userId: string
         const otherParticipant = data.conversation_participants.find((p: any) => p.user_id !== userId && p.user_id !== COACH_ID);
         if (otherParticipant) {
             const profile = otherParticipant.user_profiles;
-            const chatUser = profile?.chat_users;
-            data.display_name = profile?.full_name || chatUser?.phone_number || 'User';
+            const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
+            data.display_name = profile?.full_name || data.name || chatUser?.phone_number || 'User';
             data.display_avatar = profile?.avatar_url;
             data.display_phone = chatUser?.phone_number;
         } else {
             // Fallback
-            data.display_name = 'User';
+            data.display_name = data.name || 'User';
             data.display_avatar = null;
         }
     }
@@ -177,21 +179,50 @@ export const getConversationById = async (conversationId: string, userId: string
 }
 
 export const createPrivateConversation = async (userId: string, otherUserId: string) => {
-    // We now use a single secure RPC call to get or create the conversation.
-    // This avoids RLS issues and multiple round-trips.
-    const { data: convId, error } = await supabase.rpc('get_or_create_conversation', {
+    // V11: Use atomic RPC that ensures both the contact relationship AND the conversation exist.
+    const { data: convId, error } = await (supabase as any).rpc('add_contact_and_chat', {
         p_user_id: userId,
-        p_other_id: otherUserId
+        p_contact_id: otherUserId
     });
 
     if (error) {
-        console.error('Error in get_or_create_conversation:', error);
+        console.error('Error in add_contact_and_chat:', error);
         throw error;
     }
 
     if (!convId) throw new Error('Failed to retrieve or create conversation ID');
 
     return { id: convId };
+}
+
+export const getContacts = async (userId: string) => {
+    const { data, error } = await supabase
+        .from('contacts')
+        .select(`
+            contact_user_id,
+            user_profiles:contact_user_id(
+                full_name,
+                avatar_url,
+                chat_users(phone_number, is_verified)
+            )
+        `)
+        .eq('user_id', userId);
+
+    if (error) {
+        console.error('Error fetching contacts:', error);
+        return [];
+    }
+
+    return data.map((c: any) => {
+        const profile = c.user_profiles;
+        const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
+        return {
+            id: c.contact_user_id,
+            full_name: profile?.full_name || chatUser?.phone_number || 'Unknown',
+            avatar_url: profile?.avatar_url,
+            phone_number: chatUser?.phone_number
+        };
+    });
 }
 
 export const getMyQRCodeData = async (userId: string) => {
@@ -413,16 +444,28 @@ export const unsubscribeFromMessages = (channel: RealtimeChannel) => {
     supabase.removeChannel(channel)
 }
 
-// ============================================================================
-// TYPING INDICATORS
-// ============================================================================
+// --- Typing Indicator Singleton ---
+// This prevents creating dozens of unsubscribed channels and falling back to REST
+const typingChannels = new Map<string, RealtimeChannel>();
 
 export const sendTypingIndicator = async (userId: string, conversationId: string, isTyping: boolean) => {
-    await supabase.channel(`conversation:${conversationId}`).send({
+    let channel = typingChannels.get(conversationId);
+
+    if (!channel) {
+        channel = supabase.channel(`typing:${conversationId}`);
+        await new Promise((resolve) => {
+            channel!.subscribe((status) => {
+                if (status === 'SUBSCRIBED') resolve(true);
+            });
+        });
+        typingChannels.set(conversationId, channel);
+    }
+
+    return channel.send({
         type: 'broadcast',
         event: 'typing',
-        payload: { userId: userId, isTyping }
-    })
+        payload: { userId, isTyping }
+    });
 }
 
 // ============================================================================
@@ -443,7 +486,11 @@ export const initiateCallV2 = async (conversationId: string, callerId: string, r
     }
 
     console.log('[Call] Room created successfully:', roomData);
-    const roomUrl = roomData.room_url;
+    const roomUrl = roomData?.room_url;
+
+    if (!roomUrl) {
+        throw new Error('Room URL missing from RPC response');
+    }
 
     // 2. Insert call record
     const { data, error } = await supabase
@@ -529,7 +576,7 @@ export const findUserByPhone = async (phoneNumber: string) => {
 
     // Map RPC result back to standard naming
     return {
-        id: row.r_id,
+        id: row.r_id, // Corrected from r_user_id to match SQL
         full_name: row.r_full_name,
         avatar_url: row.r_avatar_url,
         phone_number: row.r_phone_number
@@ -552,7 +599,7 @@ export const findUserByIdSecure = async (id: string | null) => {
     if (!row) return null;
 
     return {
-        id: row.r_id,
+        id: row.r_id, // Corrected from r_user_id
         full_name: row.r_full_name,
         avatar_url: row.r_avatar_url,
         phone_number: row.r_phone_number

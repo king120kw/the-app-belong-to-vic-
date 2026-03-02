@@ -10,9 +10,12 @@ interface ProductDetailsProps {
     expiry?: string;
     calories: number;
     ai_insight?: string;
+    ingredient_quality?: string;
+    macro_balance_evaluation?: string;
+    health_impact_rationale?: string;
     financialImpact?: "LOW" | "MODERATE" | "HIGH";
     currentBalance?: number;
-    suggestions?: string[]; // AI generated alternatives
+    alternatives?: string[]; // Better UI for suggestions
     onClose: () => void;
     onAddToDiary: () => void;
 }
@@ -26,9 +29,12 @@ export function ProductDetails({
     expiry = "N/A",
     calories,
     ai_insight,
+    ingredient_quality,
+    macro_balance_evaluation,
+    health_impact_rationale,
     financialImpact,
     currentBalance,
-    suggestions = [],
+    alternatives = [],
     onClose,
     onAddToDiary,
 }: ProductDetailsProps) {
@@ -115,14 +121,44 @@ export function ProductDetails({
                                     </p>
                                 </div>
                             )}
+
+                            {/* Clinical Evaluation Layer */}
+                            {(ingredient_quality || macro_balance_evaluation || health_impact_rationale) && (
+                                <div className="mt-4 space-y-3 bg-black/20 rounded-2xl p-4 border border-white/5">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="material-symbols-outlined text-[16px] text-blue-400">clinical_notes</span>
+                                        <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">Clinical Analysis</span>
+                                    </div>
+
+                                    {ingredient_quality && (
+                                        <div>
+                                            <span className="block text-[8px] font-bold text-white/30 uppercase mb-0.5">Ingredient Quality</span>
+                                            <p className="text-xs text-white/80 leading-snug">{ingredient_quality}</p>
+                                        </div>
+                                    )}
+
+                                    {macro_balance_evaluation && (
+                                        <div>
+                                            <span className="block text-[8px] font-bold text-white/30 uppercase mb-0.5">Macro Balance</span>
+                                            <p className="text-xs text-white/80 leading-snug">{macro_balance_evaluation}</p>
+                                        </div>
+                                    )}
+
+                                    {health_impact_rationale && (
+                                        <div className="pt-2 border-t border-white/5">
+                                            <p className="text-[10px] italic text-white/60 leading-tight">{health_impact_rationale}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {/* AI Alternatives */}
-                        {suggestions.length > 0 && (
+                        {alternatives && alternatives.length > 0 && (
                             <div className="flex flex-col gap-3">
                                 <h3 className="text-sm font-bold uppercase tracking-widest text-white/40">{t('healthier_alternatives')}</h3>
                                 <div className="flex flex-col gap-2">
-                                    {suggestions.map((alt, idx) => (
+                                    {alternatives.map((alt, idx) => (
                                         <div key={idx} className="bg-white/5 rounded-xl p-3 border border-white/5 flex items-center gap-3">
                                             <div className="size-8 rounded-full bg-vic-green/20 flex items-center justify-center">
                                                 <span className="material-symbols-outlined text-vic-green text-sm">restaurant</span>

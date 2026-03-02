@@ -142,11 +142,11 @@ export const searchUsers = async (query: string, currentUserId: string) => {
             id, 
             full_name, 
             avatar_url,
-            chat_users!inner(is_verified)
+            chat_users!inner(phone_number, is_verified)
         `)
         .neq('id', currentUserId)
         .eq('chat_users.is_verified', true)
-        .or(`full_name.ilike.%${query}%, email.ilike.%${query}%`) as any)
+        .or(`full_name.ilike.%${query}%, email.ilike.%${query}%, chat_users.phone_number.ilike.%${query}%`) as any)
         .limit(10);
 
     if (error) throw error;

@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
-import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByPhone, findUserByIdSecure, softDeleteConversation, getMyQRCodeData } from "../lib/api/chat";
+import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByPhone, findUserByIdSecure, softDeleteConversation, getMyQRCodeData, getContacts } from "../lib/api/chat";
 import { searchUsers, getUserProfile } from "../lib/api/auth";
 import { MyQRCode } from "../components/MyQRCode";
 import { useTranslation } from "../lib/api/translation";
@@ -54,11 +54,16 @@ export default function Chat() {
   const [longPressConv, setLongPressConv] = useState<any>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch current user profile
   const { data: profile } = useQuery({
     queryKey: ['profile', user?.id],
     queryFn: () => getUserProfile(user!.id),
     enabled: !!user?.id
+  });
+
+  const { data: contactsData = [], isLoading: isLoadingContacts } = useQuery({
+    queryKey: ['contacts', user?.id],
+    queryFn: () => getContacts(user!.id),
+    enabled: !!user?.id && currentView === 'contacts'
   });
 
   const { data: verified, isLoading: isVerifying } = useQuery({
@@ -139,7 +144,21 @@ export default function Chat() {
       }, (payload: any) => {
         if (payload.new?.user_id === user.id || payload.new?.conversation_id) {
           queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
+          queryClient.invalidateQueries({ queryKey: ['contacts', user.id] });
         }
+      })
+      .subscribe();
+
+    // Real-time: New contact added
+    const contactChannel = supabase
+      .channel('new-contacts')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'contacts'
+      }, () => {
+        queryClient.invalidateQueries({ queryKey: ['contacts', user.id] });
+        queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
       })
       .subscribe();
 
@@ -260,26 +279,36 @@ export default function Chat() {
     });
   })();
 
-  const contactList = (() => {
-    if (!conversations) return [];
-    const contactsMap = new Map<string, any>();
-    conversations.forEach((conv: any) => {
-      if (conv.conversation_type === 'self' || conv.conversation_type === 'ai') return;
-      conv.conversation_participants?.forEach((p: any) => {
-        if (p.user_id !== user?.id && p.user_id !== COACH_ID) {
-          contactsMap.set(p.user_id, {
-            id: p.user_id,
-            full_name: p.user_profiles?.full_name,
-            avatar_url: p.user_profiles?.avatar_url,
-            phone_number: p.user_profiles?.chat_users?.phone_number
-          });
-        }
+  const contactList = useMemo(() => {
+    // Merge contacts from the dedicated table and active conversations
+    const merged = new Map<string, any>();
+
+    // 1. Add current conversation partners
+    if (conversations) {
+      conversations.forEach((conv: any) => {
+        if (conv.conversation_type === 'self' || conv.conversation_type === 'ai') return;
+        conv.conversation_participants?.forEach((p: any) => {
+          if (p.user_id !== user?.id && p.user_id !== COACH_ID) {
+            merged.set(p.user_id, {
+              id: p.user_id,
+              full_name: p.user_profiles?.full_name,
+              avatar_url: p.user_profiles?.avatar_url,
+              phone_number: p.user_profiles?.chat_users?.phone_number
+            });
+          }
+        });
       });
+    }
+
+    // 2. Add explicit contacts (might be people we haven't messaged yet)
+    contactsData.forEach((c: any) => {
+      merged.set(c.id, c);
     });
-    return Array.from(contactsMap.values()).sort((a, b) =>
+
+    return Array.from(merged.values()).sort((a, b) =>
       (a.full_name || "").localeCompare(b.full_name || "")
     );
-  })();
+  }, [conversations, contactsData, user?.id]);
 
   // ─────────────────────────────────────────────────────────────────
   if (isVerifying) {

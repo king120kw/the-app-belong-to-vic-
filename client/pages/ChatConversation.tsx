@@ -194,9 +194,13 @@ export default function ChatConversation() {
     });
 
     // Guard: if the route param is not a valid UUID (e.g. '/chat/self'), redirect back
-    const navigate_redirect = useNavigate();
+    useEffect(() => {
+        if (activeId && !isValidUUID(activeId)) {
+            navigate('/chat');
+        }
+    }, [activeId, navigate]);
+
     if (activeId && !isValidUUID(activeId)) {
-        navigate_redirect('/chat');
         return null;
     }
 
@@ -298,7 +302,7 @@ export default function ChatConversation() {
         try {
             const publicUrl = await uploadChatMedia(user.id, file);
             const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
-            sendMutation.mutate({ content: file.name, type, metadata: publicUrl });
+            sendMutation.mutate({ content: file.name, type, metadata: { url: publicUrl } });
             toast.dismiss();
             toast.success("Sent!");
         } catch (err) {
@@ -347,7 +351,7 @@ export default function ChatConversation() {
                 console.error("Audio Context Init Failed", e);
             }
 
-            recorder.start();
+            recorder.start(1000); // Send data chunks every second to prevent data loss
             setIsRecording(true);
             setIsRecordingLocked(false);
             setRecordingDragY(0);
@@ -395,7 +399,7 @@ export default function ChatConversation() {
                     // Important: Explicitly set MIME type on File object
                     const audioFile = new File([blob], `voice_note_${Date.now()}.webm`, { type: 'audio/webm' });
                     const publicUrl = await uploadChatMedia(user!.id, audioFile);
-                    sendMutation.mutate({ content: "Voice Message", type: 'voice', metadata: publicUrl });
+                    sendMutation.mutate({ content: "Voice Message", type: 'voice', metadata: { url: publicUrl, duration: Math.round((Date.now()) / 1000) } });
                     toast.dismiss();
                     toast.success("Sent!");
                 } catch (err) {
@@ -730,7 +734,7 @@ export default function ChatConversation() {
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = setTimeout(() => {
             sendTypingIndicator(user.id, activeId, false);
-        }, 3000);
+        }, 2000);
     };
 
     // --- Rendering Helpers ---
@@ -741,16 +745,20 @@ export default function ChatConversation() {
     };
 
     const renderMessageContent = (msg: any) => {
+        // Handle new JSON metadata vs old raw string metadata
+        const metadata = msg.metadata;
+        const mediaUrl = (typeof metadata === 'object' && metadata !== null) ? metadata.url : metadata;
+
         switch (msg.message_type) {
             case 'image':
-                return <img src={msg.metadata} alt="Shared" className="max-w-full rounded-lg cursor-pointer" onClick={() => window.open(msg.metadata)} />;
+                return <img src={mediaUrl} alt="Shared" className="max-w-full rounded-lg cursor-pointer" onClick={() => window.open(mediaUrl)} />;
             case 'video':
-                return <video src={msg.metadata} controls className="max-w-full rounded-lg" />;
+                return <video src={mediaUrl} controls className="max-w-full rounded-lg" />;
             case 'voice':
-                return <AudioMessage src={msg.metadata} />;
+                return <AudioMessage src={mediaUrl} />;
             case 'link':
                 return (
-                    <a href={msg.metadata} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline flex items-center gap-1">
+                    <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline flex items-center gap-1">
                         <span className="material-symbols-outlined text-[14px]">link</span>
                         {msg.content}
                     </a>
@@ -761,7 +769,7 @@ export default function ChatConversation() {
                         <span className="material-symbols-outlined">description</span>
                         <div className="flex-1 overflow-hidden">
                             <p className="text-sm font-medium truncate">{msg.content}</p>
-                            <a href={msg.metadata} target="_blank" download className="text-vic-green text-xs font-bold uppercase">Download</a>
+                            <a href={mediaUrl} target="_blank" download className="text-vic-green text-xs font-bold uppercase">Download</a>
                         </div>
                     </div>
                 );

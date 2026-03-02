@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
-import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByPhone, softDeleteConversation, getMyQRCodeData } from "../lib/api/chat";
+import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByPhone, findUserByIdSecure, softDeleteConversation, getMyQRCodeData } from "../lib/api/chat";
 import { searchUsers, getUserProfile } from "../lib/api/auth";
 import { MyQRCode } from "../components/MyQRCode";
 import { useTranslation } from "../lib/api/translation";
@@ -195,7 +195,7 @@ export default function Chat() {
       setIsSearchingPhone(true);
       let targetUser = null;
       if (isId) {
-        targetUser = await getUserProfile(phoneOrId);
+        targetUser = await findUserByIdSecure(phoneOrId);
       } else {
         targetUser = await findUserByPhone(phoneOrId);
       }

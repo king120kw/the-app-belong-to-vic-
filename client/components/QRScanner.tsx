@@ -84,7 +84,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
             if (ctx) {
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);

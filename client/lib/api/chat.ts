@@ -537,43 +537,32 @@ export const isChatVerified = async (userId: string) => {
 }
 
 export const findUserByPhone = async (phoneNumber: string) => {
-    // 1. Normalize input (remove +, spaces, etc)
-    const normalized = phoneNumber.replace(/\D/g, '');
-
-    // 2. Query chat_users. We check for variations:
-    // a. Exact match with phone_number
-    // b. Match with country_code + phone_number
-    const { data: matches, error: chatError } = await (supabase
-        .from('chat_users')
-        .select('user_id, phone_number, country_code')
-        .eq('is_verified', true) as any);
-
-    if (chatError) throw chatError;
-
-    // Filter in JS to handle concatenation comparison easily and robustly
-    const target = matches?.find((cu: any) => {
-        const full = (cu.country_code + cu.phone_number).replace(/\D/g, '');
-        const local = cu.phone_number.replace(/\D/g, '');
-        return full === normalized || local === normalized || normalized.endsWith(local);
+    // We now use the secure RPC to bypass RLS and retrieve the contact instantly
+    const { data, error } = await supabase.rpc('resolve_chat_contact', {
+        p_identifier: phoneNumber,
+        p_is_id: false
     });
 
-    if (!target) return null;
-
-    // 3. Return the profile
-    const { data: profile, error: profError } = await (supabase
-        .from('user_profiles')
-        .select('id, full_name, avatar_url, chat_users!chat_users_user_id_fkey(phone_number)')
-        .eq('id', target.user_id)
-        .single() as any);
-
-    if (profError) throw profError;
-
-    // Attach phone to top level for convenience
-    if (profile && profile.chat_users) {
-        profile.phone_number = profile.chat_users.phone_number;
+    if (error) {
+        console.error("findUserByPhone RPC error:", error);
+        throw error;
     }
 
-    return profile;
+    if (!data || data.length === 0) return null;
+
+    // The RPC returns a flat object, we can format it if needed, but the structure matches
+    return data[0];
+}
+
+export const findUserByIdSecure = async (userId: string) => {
+    const { data, error } = await supabase.rpc('resolve_chat_contact', {
+        p_identifier: userId,
+        p_is_id: true
+    });
+
+    if (error) throw error;
+    if (!data || data.length === 0) return null;
+    return data[0];
 }
 
 // ============================================================================

@@ -137,9 +137,10 @@ export const getConversationById = async (conversationId: string, userId: string
             )
         `)
         .eq('id', conversationId)
-        .single() as any);
+        .maybeSingle() as any);
 
     if (error) throw error;
+    if (!data) return null;
 
     // Process display info using strict identity detection
     const COACH_ID = '00000000-0000-0000-0000-000000000001';

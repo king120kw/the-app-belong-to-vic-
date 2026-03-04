@@ -101,8 +101,24 @@ const AudioMessage = ({ src }: { src: string }) => {
                 </div>
 
                 <div className="flex justify-between text-[11px] text-[#667781] dark:text-[#8696A0] font-medium">
-                    <span>{audioRef.current ? new Date(audioRef.current.currentTime * 1000).toISOString().substr(14, 5) : "0:00"}</span>
-                    <span>{audioRef.current && !isNaN(audioRef.current.duration) ? new Date(audioRef.current.duration * 1000).toISOString().substr(14, 5) : "0:00"}</span>
+                    <span>
+                        {(() => {
+                            if (!audioRef.current) return "0:00";
+                            const cur = audioRef.current.currentTime;
+                            if (isNaN(cur) || !isFinite(cur)) return "0:00";
+                            const d = new Date(cur * 1000);
+                            return `${d.getUTCMinutes()}:${d.getUTCSeconds().toString().padStart(2, '0')}`;
+                        })()}
+                    </span>
+                    <span>
+                        {(() => {
+                            if (!audioRef.current) return "0:00";
+                            const dur = audioRef.current.duration;
+                            if (isNaN(dur) || !isFinite(dur)) return "0:00";
+                            const d = new Date(dur * 1000);
+                            return `${d.getUTCMinutes()}:${d.getUTCSeconds().toString().padStart(2, '0')}`;
+                        })()}
+                    </span>
                 </div>
             </div>
 

@@ -81,6 +81,42 @@ export type Database = {
           },
         ]
       }
+      contacts: {
+        Row: {
+          id: string
+          user_id: string
+          contact_user_id: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          contact_user_id: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          contact_user_id?: string
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_contact_user_id_fkey"
+            columns: ["contact_user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_users: {
         Row: {
           country_code: string
@@ -169,6 +205,7 @@ export type Database = {
           created_by: string | null
           id: string
           name: string | null
+          last_message_at: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -177,6 +214,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           name?: string | null
+          last_message_at?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -185,6 +223,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           name?: string | null
+          last_message_at?: string | null
         }
         Relationships: [
           {
@@ -368,6 +407,7 @@ export type Database = {
           message_type: string
           metadata: Json | null
           sender_id: string
+          is_read: boolean
         }
         Insert: {
           content?: string | null
@@ -379,6 +419,7 @@ export type Database = {
           message_type: string
           metadata?: Json | null
           sender_id: string
+          is_read?: boolean
         }
         Update: {
           content?: string | null
@@ -390,6 +431,7 @@ export type Database = {
           message_type?: string
           metadata?: Json | null
           sender_id?: string
+          is_read?: boolean
         }
         Relationships: [
           {

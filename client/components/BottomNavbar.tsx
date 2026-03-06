@@ -11,41 +11,17 @@ export const BottomNavbar: React.FC = () => {
 
     const { user } = useAuth();
 
-    // Fetch unread count using the new timestamp-based logic
+    // Fetch unread count using the efficient RPC fix (V10)
     const { data: unreadCount = 0, refetch } = useQuery({
         queryKey: ['unread-messages-global', user?.id],
         queryFn: async () => {
             if (!user) return 0;
-
-            // 1. Get all conversations and last_read_at for this user
-            const { data: participants, error: pError } = await supabase
-                .from('conversation_participants')
-                .select('conversation_id, last_read_at')
-                .eq('user_id', user.id);
-
-            if (pError || !participants || participants.length === 0) return 0;
-
-            const conversationIds = participants.map(p => p.conversation_id);
-
-            // 2. Count messages created after last_read_at for each conversation
-            // This is a bit complex for a single query, so we'll fetch messages or use a more optimized approach if needed.
-            // For now, to keep it strictly aligned with the new logic:
-            let totalUnread = 0;
-
-            for (const participant of participants) {
-                const { count, error } = await supabase
-                    .from('messages')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('conversation_id', participant.conversation_id)
-                    .neq('sender_id', user.id)
-                    .gt('created_at', participant.last_read_at || new Date(0).toISOString());
-
-                if (!error && count) {
-                    totalUnread += count;
-                }
+            const { data, error } = await (supabase as any).rpc('get_unread_count', { p_user_id: user.id });
+            if (error) {
+                console.error('[Navbar] Error fetching unread count:', error);
+                return 0;
             }
-
-            return totalUnread;
+            return Number(data || 0);
         },
         enabled: !!user,
         refetchInterval: 30000 // Polling backup

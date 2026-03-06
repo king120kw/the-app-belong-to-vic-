@@ -25,31 +25,13 @@ export const getContacts = async (userId: string) => {
 };
 
 export const addContact = async (userId: string, contactUserId: string) => {
-    // Check if contact already exists
-    const { data: existing } = await supabase
-        .from('contacts')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('contact_user_id', contactUserId)
-        .maybeSingle();
-
-    if (existing) {
-        throw new Error('Contact already exists');
-    }
-
-    // Create contact
-    const { data, error } = await supabase
-        .from('contacts')
-        .insert({
-            user_id: userId,
-            contact_user_id: contactUserId,
-            status: 'active'
-        })
-        .select()
-        .single();
+    const { error } = await supabase.rpc('add_contact_pure', {
+        p_user_id: userId,
+        p_contact_id: contactUserId
+    });
 
     if (error) throw error;
-    return data;
+    return { user_id: userId, contact_user_id: contactUserId };
 };
 
 export const removeContact = async (userId: string, contactUserId: string) => {
@@ -109,26 +91,11 @@ export const acceptContactRequest = async (requestId: string, userId: string, fr
 
     if (updateError) throw updateError;
 
-    // Create bidirectional contacts
-    const { error: contact1Error } = await supabase
-        .from('contacts')
-        .insert({
-            user_id: userId,
-            contact_user_id: fromUserId,
-            status: 'active'
-        });
-
-    if (contact1Error) throw contact1Error;
-
-    const { error: contact2Error } = await supabase
-        .from('contacts')
-        .insert({
-            user_id: fromUserId,
-            contact_user_id: userId,
-            status: 'active'
-        });
-
-    if (contact2Error) throw contact2Error;
+    // Create bidirectional contacts using the pure RPC
+    await Promise.all([
+        supabase.rpc('add_contact_pure', { p_user_id: userId, p_contact_id: fromUserId }),
+        supabase.rpc('add_contact_pure', { p_user_id: fromUserId, p_contact_id: userId })
+    ]);
 };
 
 export const declineContactRequest = async (requestId: string) => {

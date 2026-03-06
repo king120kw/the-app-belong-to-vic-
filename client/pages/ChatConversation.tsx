@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { getConversationById, getMessages, sendMessage, uploadChatMedia, markAsRead, sendTypingIndicator, initiateCallV2, updateCallStatus, softDeleteConversation } from '../lib/api/chat';
+import { getConversationById, getMessages, sendMessage, uploadChatMedia, markAsRead, sendTypingIndicator, initiateCallV2, updateCallStatus, softDeleteConversation, findUserByIdSecure, provisionAndSendMessage, findConversationByParticipants } from '../lib/api/chat';
 import { useAuth } from '../lib/AuthContext';
 import { getUserProfile } from '../lib/api/auth';
 import { toast } from 'sonner';
@@ -126,6 +126,7 @@ const AudioMessage = ({ src }: { src: string }) => {
                 ref={audioRef}
                 src={src}
                 preload="metadata"
+                crossOrigin="anonymous"
                 onTimeUpdate={() => {
                     const duration = audioRef.current?.duration || 0;
                     const currentTime = audioRef.current?.currentTime || 0;
@@ -155,6 +156,9 @@ const isValidUUID = (id: string | undefined): boolean => {
 
 export default function ChatConversation() {
     const { id: activeId } = useParams();
+    const isVirtual = activeId?.startsWith('new-');
+    const virtualTargetId = isVirtual ? activeId?.replace('new-', '') : null;
+
     const { user } = useAuth();
     const { t } = useTranslation();
     const queryClient = useQueryClient();
@@ -164,16 +168,19 @@ export default function ChatConversation() {
     const [showEmoji, setShowEmoji] = useState(false);
     const [showAttachments, setShowAttachments] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
+    const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording' | 'preview'>('idle');
     const [isRecordingLocked, setIsRecordingLocked] = useState(false);
     const [recordedAudio, setRecordedAudio] = useState<{ blob: Blob, url: string } | null>(null);
     const [showCamera, setShowCamera] = useState(false);
     const [otherUserTyping, setOtherUserTyping] = useState(false);
+    const [otherUserOnline, setOtherUserOnline] = useState(false);
     const [recordingStartY, setRecordingStartY] = useState<number | null>(null);
     const [recordingDragY, setRecordingDragY] = useState(0);
     const [recordingDragX, setRecordingDragX] = useState(0);
     const [recordingStartX, setRecordingStartX] = useState<number | null>(null);
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -188,7 +195,7 @@ export default function ChatConversation() {
 
     // --- Queries ---
 
-    const { data: conversation, isLoading: isLoadingConv } = useQuery({
+    const { data: conversationData, isLoading: isLoadingConv } = useQuery({
         queryKey: ['conversation', activeId],
         queryKeyHashFn: () => `conversation-${activeId}`, // Force unique hash
         queryFn: () => getConversationById(activeId!, user!.id),
@@ -198,8 +205,19 @@ export default function ChatConversation() {
 
     const { data: messages = [], isLoading: isLoadingMessages } = useQuery({
         queryKey: ['messages', activeId],
-        queryFn: () => getMessages(activeId!),
-        enabled: isValidUUID(activeId),
+        queryFn: async () => {
+            if (isVirtual && virtualTargetId) {
+                // V7/V8: Check if a direct conversation already exists to load history using RPC
+                const existingId = await findConversationByParticipants(user!.id, virtualTargetId);
+
+                if (existingId) {
+                    return getMessages(existingId);
+                }
+                return [];
+            }
+            return getMessages(activeId!);
+        },
+        enabled: (isValidUUID(activeId) || !!isVirtual) && !!user?.id,
         refetchOnWindowFocus: false
     });
 
@@ -209,30 +227,45 @@ export default function ChatConversation() {
         enabled: !!user?.id
     });
 
-    const isAI = useMemo(() => conversation?.conversation_type === 'ai', [conversation]);
-    const isSelf = useMemo(() => conversation?.conversation_type === 'self', [conversation]);
+    const { data: virtualProfile } = useQuery({
+        queryKey: ['profile', virtualTargetId],
+        queryFn: () => findUserByIdSecure(virtualTargetId!),
+        enabled: !!isVirtual && !!virtualTargetId
+    });
+
+    const isAI = useMemo(() => conversationData?.conversation_type === 'ai' || (isVirtual && virtualTargetId === '00000000-0000-0000-0000-000000000001'), [conversationData, isVirtual, virtualTargetId]);
+    const isSelf = useMemo(() => conversationData?.conversation_type === 'self' || (isVirtual && virtualTargetId === user?.id), [conversationData, isVirtual, virtualTargetId, user?.id]);
+
+    // Construct a "resolvedConversation" that handles virtual IDs for the UI to render
+    const conversation = useMemo(() => {
+        if (conversationData) return conversationData;
+        if (isVirtual && virtualProfile) {
+            return {
+                id: activeId,
+                conversation_type: isAI ? 'ai' : isSelf ? 'self' : 'direct',
+                conversation_participants: [
+                    { user_id: user?.id, user_profiles: profile },
+                    { user_id: virtualTargetId, user_profiles: virtualProfile }
+                ]
+            };
+        }
+        return null;
+    }, [conversationData, isVirtual, virtualProfile, activeId, isAI, isSelf, user?.id, profile, virtualTargetId]);
+
     const isDirect = useMemo(() => conversation?.conversation_type === 'private' || conversation?.conversation_type === 'direct', [conversation]);
 
     const otherParticipant = useMemo(() => {
         if (isSelf) return null;
         return conversation?.conversation_participants?.find((p: any) => p.user_id !== user?.id);
+
     }, [conversation, user, isSelf]);
 
     const otherParticipantId = otherParticipant?.user_id;
 
     const { data: otherUserProfile } = useQuery({
         queryKey: ['profile', otherParticipantId],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('user_profiles')
-                .select('id, full_name, username, avatar_url')
-                .eq('id', otherParticipantId)
-                .maybeSingle();
-            if (error) throw error;
-            return data;
-        },
-        enabled: !!otherParticipantId && !isAI && !isSelf,
-        retry: false
+        queryFn: () => findUserByIdSecure(otherParticipantId!),
+        enabled: !!otherParticipantId && !isAI && !isSelf && !isVirtual
     });
 
     // Profile Realtime Sync
@@ -261,29 +294,33 @@ export default function ChatConversation() {
         };
     }, [otherParticipantId, queryClient, activeId]);
 
-    // Guard: if the route param is not a valid UUID (e.g. '/chat/self'), redirect back
+    // Guard: if the route param is not a valid UUID and not virtual, redirect back
     useEffect(() => {
-        if (activeId && !isValidUUID(activeId)) {
+        if (activeId && !isValidUUID(activeId) && !isVirtual) {
             navigate('/chat');
         }
-    }, [activeId, navigate]);
+    }, [activeId, navigate, isVirtual]);
 
-    if (activeId && !isValidUUID(activeId)) {
+    if (activeId && !isValidUUID(activeId) && !isVirtual) {
         return null;
     }
 
     const displayName = useMemo(() => {
         if (isAI) return 'Health Coach';
         if (isSelf) return (profile?.full_name ? `${profile.full_name} (Me)` : 'Personal Notes');
-        const p = otherUserProfile || otherParticipant?.user_profiles;
+        const rawP = isVirtual ? virtualProfile : (otherUserProfile || otherParticipant?.user_profiles);
+        const p = Array.isArray(rawP) ? rawP[0] : rawP;
         return p?.full_name || p?.username || otherParticipant?.chat_users?.phone_number || 'User';
-    }, [isAI, isSelf, profile, otherParticipant, otherUserProfile]);
+    }, [isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile]);
 
     const displayAvatar = useMemo(() => {
         if (isAI) return '/APP%20LOGO.jpg';
         if (isSelf) return profile?.avatar_url || null;
-        return otherUserProfile?.avatar_url || otherParticipant?.user_profiles?.avatar_url || null;
-    }, [isAI, isSelf, profile, otherParticipant, otherUserProfile]);
+        if (isVirtual) return virtualProfile?.avatar_url || null;
+        const rawP = otherUserProfile || otherParticipant?.user_profiles;
+        const p = Array.isArray(rawP) ? rawP[0] : rawP;
+        return p?.avatar_url || null;
+    }, [isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile]);
 
     // Handle initial scroll
     useEffect(() => {
@@ -373,6 +410,7 @@ export default function ChatConversation() {
     // Recording Logic
     const startRecording = async (e?: React.MouseEvent | React.TouchEvent) => {
         try {
+            console.log("[Voice] Starting recording session...");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const recorder = new MediaRecorder(stream);
             mediaRecorderRef.current = recorder;
@@ -383,9 +421,9 @@ export default function ChatConversation() {
                 const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
                 const url = URL.createObjectURL(blob);
                 setRecordedAudio({ blob, url });
+                setRecordingStatus('preview');
                 stream.getTracks().forEach(track => track.stop());
 
-                // Cleanup AudioContext on actual stop
                 if (audioContextRef.current) {
                     audioContextRef.current.close().catch(console.error);
                     audioContextRef.current = null;
@@ -396,13 +434,12 @@ export default function ChatConversation() {
                 }
             };
 
-            // Audio Visualizer Setup
             try {
                 const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
                 const analyser = audioContext.createAnalyser();
                 analyser.fftSize = 64;
                 const source = audioContext.createMediaStreamSource(stream);
-                source.connect(analyser); // Source -> Analyser Only
+                source.connect(analyser);
 
                 audioContextRef.current = audioContext;
                 analyserRef.current = analyser;
@@ -410,8 +447,9 @@ export default function ChatConversation() {
                 console.error("Audio Context Init Failed", e);
             }
 
-            recorder.start(1000); // Send data chunks every second to prevent data loss
+            recorder.start(1000);
             setIsRecording(true);
+            setRecordingStatus('recording');
             setIsRecordingLocked(false);
             setRecordingDragY(0);
 
@@ -422,58 +460,64 @@ export default function ChatConversation() {
                 setRecordingStartX(x);
             }
         } catch (err) {
+            console.error("[Voice] Mic access denied:", err);
             toast.error("Microphone access denied");
         }
     };
 
     const stopRecording = (cancel = false) => {
         if (mediaRecorderRef.current && isRecording) {
-            mediaRecorderRef.current.onstop = async () => {
-                if (cancel) {
-                    console.log("[Recording] Cancelled by user");
-                    toast.info("Recording cancelled");
-                    // Just reset state
+            if (cancel) {
+                mediaRecorderRef.current.onstop = () => {
+                    console.log("[Voice] Recording cancelled");
                     setIsRecording(false);
+                    setRecordingStatus('idle');
                     setIsRecordingLocked(false);
-                    setRecordingStartY(null);
-                    setRecordingDragY(0);
                     setRecordedAudio(null);
-                    return;
-                }
-
-                const blob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
-                // Validate blob size
-                if (blob.size < 100) {
-                    toast.error("Audio recording too short");
-                    setIsRecording(false);
-                    setIsRecordingLocked(false);
-                    return;
-                }
-
-                // UI Optimistic Update could go here
-
-                // Upload logic
-                toast.loading("Sending audio...");
-                try {
-                    // Important: Explicitly set MIME type on File object
-                    const audioFile = new File([blob], `voice_note_${Date.now()}.webm`, { type: 'audio/webm' });
-                    const publicUrl = await uploadChatMedia(user!.id, audioFile);
-                    sendMutation.mutate({ content: "Voice Message", type: 'voice', metadata: { url: publicUrl, duration: Math.round((Date.now()) / 1000) } });
-                    toast.dismiss();
-                    toast.success("Sent!");
-                } catch (err) {
-                    console.error("Failed to upload audio:", err);
-                    toast.dismiss();
-                    toast.error("Failed to send audio");
-                }
-
-                setIsRecording(false);
-                setIsRecordingLocked(false);
-                setRecordingStartY(null);
-                setRecordingDragY(0);
-            };
+                    setRecordingDragY(0);
+                };
+            }
             mediaRecorderRef.current.stop();
+            setIsRecording(false);
         }
+    };
+
+    const confirmVoiceSend = async () => {
+        if (!recordedAudio || !user?.id) return;
+
+        const { blob } = recordedAudio;
+        if (blob.size < 100) {
+            toast.error("Audio recording too short");
+            setRecordedAudio(null);
+            setRecordingStatus('idle');
+            return;
+        }
+
+        toast.loading("Sending audio...", { id: 'voice-upload' });
+        try {
+            const audioFile = new File([blob], `voice_note_${Date.now()}.webm`, { type: 'audio/webm' });
+            const publicUrl = await uploadChatMedia(user.id, audioFile);
+
+            sendMutation.mutate({
+                content: "Voice Message",
+                type: 'voice',
+                metadata: { url: publicUrl, duration: recordingDuration }
+            });
+
+            toast.success("Sent!", { id: 'voice-upload' });
+        } catch (err) {
+            console.error("Failed to upload audio:", err);
+            toast.error("Failed to send audio", { id: 'voice-upload' });
+        } finally {
+            setRecordedAudio(null);
+            setRecordingStatus('idle');
+        }
+    };
+
+    const discardRecording = () => {
+        setRecordedAudio(null);
+        setRecordingStatus('idle');
+        toast.info("Recording discarded");
     };
 
     const handleRecordingMove = useCallback((e: MouseEvent | TouchEvent) => {
@@ -592,98 +636,161 @@ export default function ChatConversation() {
 
     // Robust Read Status Sync
     const markConversationAsReadLocal = useCallback(async (convId: string) => {
-        if (!user?.id || !convId || !isValidUUID(convId)) return;
+        if (!user?.id || !convId) return;
 
-        console.log(`[Chat] Marking as read: ${convId}`);
+        let realId = convId;
+
+        // If it's a virtual ID, we need to find the REAL underlying UUID to mark it as read
+        if (convId.startsWith('new-')) {
+            const targetId = convId.replace('new-', '');
+            const existingId = await findConversationByParticipants(user.id, targetId);
+            if (!existingId) return; // Truly no conversation, nothing to mark
+            realId = existingId;
+        } else if (!isValidUUID(convId)) {
+            return;
+        }
+
+        console.log(`[Chat] Marking as read: ${realId}`);
         // 1. Optimistic UI update for the sidebar and local state
         queryClient.setQueryData(['conversations', user.id], (old: any) => {
             if (!old) return old;
-            return old.map((c: any) => c.id === convId ? { ...c, unread_count: 0, is_read: true } : c);
+            return old.map((c: any) => c.id === realId ? { ...c, unread_count: 0, is_read: true } : c);
         });
 
         try {
             // Use current timestamp for absolute precision
-            await markAsRead(user.id, convId, new Date().toISOString());
+            await markAsRead(user.id, realId, new Date().toISOString());
 
             // Force invalidate conversation related queries to clear sidebar/navbar badges
             queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
             queryClient.invalidateQueries({ queryKey: ['chat-verified', user.id] });
+            queryClient.invalidateQueries({ queryKey: ['unread-messages-global', user.id] });
         } catch (err) {
             console.error('[Chat] Failed to clear unread:', err);
         }
     }, [user?.id, queryClient]);
 
-    // Continuous Sync Handler using Ref
-    const messageHandlerRef = useRef<((payload: any) => void) | null>(null);
+    // V11: Ground Truth Persistence Logic
+    const activeChannelRef = useRef<any>(null);
+    const lastReadAtTimestampRef = useRef<string | null>(null);
+
+    // Refs for handlers to avoid useEffect dependency churn
+    const onMessageEventRef = useRef<((payload: any) => void) | null>(null);
+
     useEffect(() => {
-        messageHandlerRef.current = (payload: any) => {
+        onMessageEventRef.current = (payload: any) => {
+            console.log(`[Chat] V11 Real-time event [${payload.eventType}]:`, payload);
+
             if (payload.eventType === 'INSERT') {
                 const newMessage = payload.new;
-                if (!activeId || newMessage.conversation_id !== activeId) return;
 
-                console.log("[Chat] New message received:", newMessage);
-
-                // 1. Instant update to local message list cache
+                // 1. Update local cache
                 queryClient.setQueryData(['messages', activeId], (old: any) => {
                     const base = Array.isArray(old) ? old : [];
-                    const filtered = base.filter((m: any) => m.id !== newMessage.id && !m.id?.toString().startsWith('opt-'));
-                    return [...filtered, newMessage].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                    if (base.some((m: any) => m.id === newMessage.id)) return old;
+                    const filtered = base.filter((m: any) => !m.id?.toString().startsWith('opt-'));
+                    return [...filtered, newMessage].sort((a, b) =>
+                        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                    );
                 });
 
-                // 2. Real-time Read Sync: if we're in the chat, mark it read immediately
-                if (newMessage.sender_id !== user?.id) {
+                // 2. Mark as read if not from us
+                if (newMessage.sender_id !== user?.id && activeId) {
                     markConversationAsReadLocal(activeId);
                 }
+
+                // --- Sidebar Sync ---
+                // Invalidate conversations to update preview text and unread count in Sidebar
+                queryClient.invalidateQueries({ queryKey: ['conversations', user?.id] });
             } else if (payload.eventType === 'UPDATE') {
                 const updatedMessage = payload.new;
-                if (!activeId || updatedMessage.conversation_id !== activeId) return;
-
-                console.log("[Chat] Message updated (Read Receipt?):", updatedMessage);
-
                 queryClient.setQueryData(['messages', activeId], (old: any) => {
                     if (!old) return old;
-                    // Robust merge to handle cases with partial payload (non-FULL replica identity)
                     return old.map((m: any) => m.id === updatedMessage.id ? { ...m, ...updatedMessage } : m);
+                });
+            } else if (payload.eventType === 'DELETE') {
+                queryClient.setQueryData(['messages', activeId], (old: any) => {
+                    if (!old) return old;
+                    return old.filter((m: any) => m.id !== payload.old.id);
                 });
             }
         };
     }, [activeId, user?.id, queryClient, markConversationAsReadLocal]);
 
-    // Stable Subscription
     useEffect(() => {
         if (!activeId || !user?.id) return;
 
-        const channelName = `chat_room_${activeId}`;
-        console.log(`[Chat] Subscribing to channel: ${channelName}`);
+        // Skip for uninitialized virtual chats until first message
+        const isV = activeId.startsWith('new-');
+        const vTargetId = isV ? activeId.replace('new-', '') : null;
 
-        const channel = supabase
-            .channel(channelName)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*', // Listen to INSERT and UPDATE
-                    schema: 'public',
-                    table: 'messages',
-                    filter: `conversation_id=eq.${activeId}`
-                },
-                (payload) => messageHandlerRef.current?.(payload)
-            )
-            .on(
-                'broadcast',
-                { event: 'typing' },
-                (payload) => {
-                    if (payload.payload.userId !== user?.id) {
-                        setOtherUserTyping(payload.payload.isTyping);
-                    }
+        // Cleanup previous channel if activeId changed
+        if (activeChannelRef.current) {
+            console.log(`[Chat] V11 Cleaning up channel before switch: ${activeChannelRef.current.topic}`);
+            supabase.removeChannel(activeChannelRef.current);
+            activeChannelRef.current = null;
+        }
+
+        const channelName = isV
+            ? `private_chat_${[user.id, vTargetId].sort().join('_')}`
+            : `chat_room_${activeId}`;
+
+        console.log(`[Chat] V11 INITIALIZING PERSISTENT CHANNEL: ${channelName}`);
+        const channel = supabase.channel(channelName);
+
+        channel
+            .on('presence', { event: 'sync' }, () => {
+                const state = channel.presenceState();
+                let isTyping = false;
+                let isOnline = false;
+                const targetId = isV ? vTargetId : otherParticipantId;
+
+                Object.values(state).forEach((presences: any) => {
+                    presences.forEach((p: any) => {
+                        if (p.user_id === targetId) {
+                            isOnline = true;
+                            if (p.typing && (p.conversation_id === activeId || isV)) {
+                                isTyping = true;
+                            }
+                        }
+                    });
+                });
+
+                setOtherUserTyping(isTyping);
+                setOtherUserOnline(isOnline);
+            })
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'messages',
+                filter: isV ? undefined : `conversation_id=eq.${activeId}`
+            }, (payload) => {
+                onMessageEventRef.current?.(payload);
+            })
+            .subscribe(async (status, err) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log(`[Chat] V11 Channel ${channelName} SUBSCRIBED.`);
+                    await channel.track({
+                        user_id: user.id,
+                        conversation_id: activeId,
+                        online_at: new Date().toISOString(),
+                        typing: false
+                    });
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error(`[Chat] V11 Channel ${channelName} Error:`, err);
                 }
-            )
-            .subscribe();
+            });
+
+        activeChannelRef.current = channel;
 
         return () => {
-            console.log(`[Chat] Unsubscribing from channel: ${channelName}`);
-            supabase.removeChannel(channel);
+            console.log(`[Chat] V11 TEARING DOWN CHANNEL: ${channelName}`);
+            if (activeChannelRef.current) {
+                supabase.removeChannel(activeChannelRef.current);
+                activeChannelRef.current = null;
+            }
         };
-    }, [activeId, user?.id]);
+    }, [activeId, user?.id]); // STRICT DEPENDENCY: Only re-initialize when conversation context changes
 
     // On mount or switch: clear unread
     useEffect(() => {
@@ -742,9 +849,20 @@ export default function ChatConversation() {
     // --- Message Actions ---
 
     const sendMutation = useMutation({
-        mutationFn: (args: { content: string, type?: string, metadata?: string }) =>
-            sendMessage(user!.id, activeId!, args.content, (args.type as any) || 'text', args.metadata, isAI, isSelf),
+        mutationFn: async (args: { content: string, type?: string, metadata?: any }) => {
+            if (!user?.id || !activeId) throw new Error("Missing context");
+
+            if (isVirtual && virtualTargetId) {
+                console.log("[Chat] V11 Provisioning new conversation for virtual ID:", activeId);
+                const newId = await provisionAndSendMessage(user.id, virtualTargetId, args.content, args.type || 'text', args.metadata);
+                // The navigate will happen in onSettled or handleSend to avoid race conditions with Query cache
+                return { id: 'new', realId: newId };
+            }
+
+            return sendMessage(user.id, activeId, args.content, (args.type as any) || 'text', args.metadata, isAI, isSelf);
+        },
         onMutate: async (newMsg) => {
+            console.log("[Chat] sendMutation.onMutate", newMsg);
             await queryClient.cancelQueries({ queryKey: ['messages', activeId] });
             const previousMessages = queryClient.getQueryData(['messages', activeId]);
 
@@ -774,32 +892,55 @@ export default function ChatConversation() {
             queryClient.setQueryData(['messages', activeId], context.previousMessages);
             toast.error("Failed to send message");
         },
+        onSuccess: (data: any) => {
+            if (data?.realId) {
+                console.log("[Chat] V11 Conversation provisioned! Navigating to:", data.realId);
+                navigate(`/chat/${data.realId}`, { replace: true });
+            }
+        },
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ['messages', activeId] });
         }
     });
+    const handleSend = async () => {
+        if (!message.trim() || !user || !activeId || isSubmitting) return;
+        const content = message.trim();
 
-    const handleSend = () => {
-        if (!message.trim() || !user || !activeId) return;
-        sendMutation.mutate({ content: message.trim() });
+        console.log(`[Chat] handleSend to ${activeId}`);
+        sendMutation.mutate({ content });
     };
 
     const typingTimeoutRef = useRef<any>(null);
-    const handleTyping = () => {
-        if (!user || !activeId) return;
+    const handleTyping = async () => {
+        if (!user || !activeId || !activeChannelRef.current) return;
 
-        sendTypingIndicator(user.id, activeId, true);
+        // EPHEMERAL PRESENCE TYPING (WhatsApp Style per V7 Spec)
+        await activeChannelRef.current.track({
+            user_id: user.id,
+            conversation_id: activeId,
+            typing: true,
+            online_at: new Date().toISOString()
+        });
 
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(() => {
-            sendTypingIndicator(user.id, activeId, false);
-        }, 2000);
+        typingTimeoutRef.current = setTimeout(async () => {
+            if (activeChannelRef.current) {
+                await activeChannelRef.current.track({
+                    user_id: user.id,
+                    conversation_id: activeId,
+                    typing: false,
+                    online_at: new Date().toISOString()
+                });
+            }
+        }, 3000);
     };
 
     // --- Rendering Helpers ---
 
     const formatMessageTime = (dateStr: string) => {
+        if (!dateStr) return '';
         const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return '';
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
@@ -841,7 +982,8 @@ export default function ChatConversation() {
     const groupedMessages = useMemo(() => {
         const groups: { [date: string]: any[] } = {};
         messages.forEach(msg => {
-            const date = new Date(msg.created_at).toLocaleDateString();
+            const d = new Date(msg.created_at);
+            const date = isNaN(d.getTime()) ? 'Unknown Date' : d.toLocaleDateString();
             if (!groups[date]) groups[date] = [];
             groups[date].push(msg);
         });
@@ -905,7 +1047,12 @@ export default function ChatConversation() {
                         )}
                     </div>
 
-                    <div className="flex-1 min-w-0" onClick={() => { if (!isSelf && !isAI && otherParticipant?.chat_users?.phone_number) navigate(`/expert/${otherParticipant.chat_users.phone_number}`) }}>
+                    <div className="flex-1 min-w-0" onClick={() => {
+                        if (!isSelf && !isAI) {
+                            const chatUser = Array.isArray(otherParticipant?.chat_users) ? otherParticipant.chat_users[0] : otherParticipant?.chat_users;
+                            if (chatUser?.phone_number) navigate(`/expert/${chatUser.phone_number}`);
+                        }
+                    }}>
                         <h2 className="text-[16px] font-semibold text-[#111B21] dark:text-[#e9edef] truncate flex items-center gap-1.5">
                             {displayName}
                             {isAI && <span className="text-[9px] font-bold bg-vic-green/20 text-vic-green px-1.5 py-0.5 rounded-full">AI</span>}
@@ -913,12 +1060,14 @@ export default function ChatConversation() {
                         <p className="text-[13px] text-[#667781] dark:text-[#8696a0] truncate">
                             {otherUserTyping ? (
                                 <span className="text-vic-green font-medium animate-pulse">typing...</span>
+                            ) : otherUserOnline ? (
+                                <span className="text-vic-green font-medium">Online</span>
                             ) : isAI ? (
                                 'AI Coach'
                             ) : isSelf ? (
                                 'Personal Workspace'
                             ) : (
-                                expertStatus
+                                expertStatus || 'Offline'
                             )}
                         </p>
                     </div>
@@ -996,7 +1145,7 @@ export default function ChatConversation() {
                                                         </span>
                                                         {isMe && (
                                                             <span className={`material-symbols-outlined text-[15.5px] -ml-0.5 ${msg.read_at ? 'text-[#34B7F1]' : 'text-[#8696A0]'}`}>
-                                                                done_all
+                                                                {msg.delivered_at || msg.is_delivered ? 'done_all' : 'done'}
                                                             </span>
                                                         )}
                                                     </div>
@@ -1040,7 +1189,7 @@ export default function ChatConversation() {
                 {/* Input Footer */}
                 <footer className="px-3 md:px-4 py-2 bg-[#F0F2F5] dark:bg-[#202c33] flex items-end gap-2 relative z-40 pb-safe shrink-0">
                     <div className="flex-1 flex items-end gap-2 w-full max-w-[1200px] mx-auto min-w-0">
-                        {!conversation ? (
+                        {(!conversation && !isVirtual) ? (
                             <div className="w-full flex items-center justify-center p-4 text-slate-500 text-sm">
                                 <div className="animate-spin size-5 border-2 border-vic-green border-t-transparent rounded-full"></div>
                             </div>
@@ -1086,16 +1235,39 @@ export default function ChatConversation() {
                         )}
 
                         <div className="flex items-center gap-2 relative">
+                            {/* Recording Preview Overlay */}
+                            {recordingStatus === 'preview' && recordedAudio && (
+                                <div className="absolute bottom-[60px] right-0 left-[-300px] md:left-[-400px] bg-white dark:bg-[#202c33] p-3 rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 flex items-center gap-4 animate-in slide-in-from-bottom-2">
+                                    <button
+                                        onClick={discardRecording}
+                                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
+                                        title="Discard"
+                                    >
+                                        <span className="material-symbols-outlined text-[24px]">delete</span>
+                                    </button>
+
+                                    <audio src={recordedAudio.url} controls className="flex-1 h-8 max-w-[200px] md:max-w-none" />
+
+                                    <button
+                                        onClick={confirmVoiceSend}
+                                        className="size-[40px] bg-vic-green text-white rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
+                                        title="Send Voice Message"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">send</span>
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Microphone / Send Button */}
                             <div className="relative">
                                 <button
                                     onMouseDown={(e) => {
-                                        if (!message.trim()) {
+                                        if (!message.trim() && recordingStatus === 'idle') {
                                             startRecording(e);
                                         }
                                     }}
                                     onTouchStart={(e) => {
-                                        if (!message.trim()) {
+                                        if (!message.trim() && recordingStatus === 'idle') {
                                             e.preventDefault();
                                             startRecording(e);
                                         }
@@ -1103,20 +1275,17 @@ export default function ChatConversation() {
                                     onClick={() => {
                                         if (message.trim()) {
                                             handleSend();
-                                        } else if (isRecordingLocked || isRecording) {
-                                            // Clicked Stop (Send)
+                                        } else if (recordingStatus === 'recording') {
                                             stopRecording();
                                         }
                                     }}
-                                    // Use onMouseUp/onTouchEnd to handle "release to send" if not locked
                                     onMouseUp={() => {
-                                        if (isRecording && !isRecordingLocked) {
-                                            // Release to Send logic
+                                        if (recordingStatus === 'recording' && !isRecordingLocked) {
                                             stopRecording();
                                         }
                                     }}
                                     onTouchEnd={() => {
-                                        if (isRecording && !isRecordingLocked) {
+                                        if (recordingStatus === 'recording' && !isRecordingLocked) {
                                             stopRecording();
                                         }
                                     }}
@@ -1124,17 +1293,19 @@ export default function ChatConversation() {
                                     className={`size-[48px] shrink-0 rounded-full flex items-center justify-center shadow-md transition-all active:scale-95 z-20 
                                       ${message.trim() || isRecordingLocked
                                             ? 'bg-[#00A884] text-white hover:bg-[#008f6f]'
-                                            : isRecording
+                                            : recordingStatus === 'recording'
                                                 ? 'bg-red-500 text-white animate-pulse shadow-red-500/50'
-                                                : 'bg-[#00A884] text-white hover:bg-[#008f6f]'
+                                                : recordingStatus === 'preview'
+                                                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                                                    : 'bg-[#00A884] text-white hover:bg-[#008f6f]'
                                         }`}
                                     style={{
-                                        transform: isRecording && !isRecordingLocked ? `translateY(${-Math.min(recordingDragY, 60)}px)` : 'none',
+                                        transform: recordingStatus === 'recording' && !isRecordingLocked ? `translateY(${-Math.min(recordingDragY, 60)}px)` : 'none',
                                         transition: 'transform 0.1s ease-out'
                                     }}
                                 >
                                     <span className="material-symbols-outlined text-[24px]">
-                                        {message.trim() ? 'send' : (isRecording ? 'send' : 'mic')}
+                                        {message.trim() ? 'send' : (recordingStatus === 'recording' ? 'stop' : (recordingStatus === 'preview' ? 'audiotrack' : 'mic'))}
                                     </span>
                                 </button>
                             </div>

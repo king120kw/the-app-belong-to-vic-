@@ -2,11 +2,13 @@ import { supabase } from '../supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 export const getConversationsV2 = async (userId: string) => {
+    console.log(`[API] getConversationsV2 for user: ${userId}`);
     // 1. Provision system conversations if needed (self-chat + Health Coach)
     try {
-        await (supabase as any).rpc('provision_user_system_chats', { p_user_id: userId });
+        const { error: rpcError } = await (supabase as any).rpc('provision_user_system_chats', { p_user_id: userId });
+        if (rpcError) console.warn('[API] provision_user_system_chats RPC error:', rpcError);
     } catch (err) {
-        console.warn('provision_user_system_chats failed (non-fatal):', err);
+        console.warn('[API] provision_user_system_chats failed (non-fatal):', err);
     }
 
     // 2. Get all conversation IDs where the user is a participant
@@ -17,90 +19,77 @@ export const getConversationsV2 = async (userId: string) => {
         .is('deleted_at', null) as any);
 
     if (participationError) {
-        console.error('Error fetching participation:', participationError);
+        console.error('[API] Error fetching participation:', participationError);
         throw participationError;
     }
 
+    console.log(`[API] Found ${participationData?.length || 0} participations`);
     if (!participationData || participationData.length === 0) return [];
 
     const conversationIds = participationData.map(p => p.conversation_id);
 
-    // 2. Fetch the full conversations with ALL participants and messages
-    const { data, error } = await supabase
+    // 2. Fetch the full conversations with participants, profiles, and the DENORMALIZED last message fields
+    const { data: rawConvs, error: convError } = await supabase
         .from('conversations')
         .select(`
             *,
             conversation_participants (
                 user_id,
+                last_read_at,
                 user_profiles (
                     full_name, 
                     username,
-                    avatar_url,
-                    chat_users(phone_number, is_verified)
+                    avatar_url
                 )
-            ),
-            messages (
-                content,
-                message_type,
-                created_at,
-                sender_id,
-                read_at,
-                delivered_at
             )
         `)
-        .in('id', conversationIds) as any;
+        .in('id', conversationIds)
+        .order('last_message_at', { ascending: false }) as any;
 
-    if (error) {
-        console.error('Error fetching conversations:', error);
-        throw error;
+    if (convError) {
+        console.error('[API] Error fetching conversations details:', convError);
+        throw convError;
     }
 
-    // 3. Process to get the ACTUAL last message, unread count, and display info
-    const processed = data?.map((conv: any) => {
-        // Sort messages manually
-        const sortedMsgs = (conv.messages || []).sort((a: any, b: any) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-
-        // Calculate unread count using last_read_at from participationData
-        const participantInfo = participationData.find(p => p.conversation_id === conv.id);
+    // 4. Process and calc unread counts locally
+    const processed = rawConvs?.map((conv: any) => {
+        const participantInfo = conv.conversation_participants?.find((p: any) => p.user_id === userId);
         const lastRead = participantInfo?.last_read_at ? new Date(participantInfo.last_read_at) : new Date(0);
 
-        const unread_count = sortedMsgs.filter((msg: any) =>
-            msg.sender_id !== userId && new Date(msg.created_at) > lastRead
-        ).length;
+        // V9: Use denormalized fields for lightning fast previews
+        const lastMsg = conv.last_message_content ? {
+            content: conv.last_message_content,
+            message_type: conv.last_message_type || 'text',
+            sender_id: conv.last_message_sender_id,
+            created_at: conv.last_message_at
+        } : null;
 
-        // Process display info - use conversation_type for strict identity separation
+        // Note: For unread_count at scale, we'd use a dedicated column, but for now we look at the last_message_at vs lastRead
+        // We assume 1 unread if last_message_at > lastRead AND sender != userId
+        const unread_count = (lastMsg && lastMsg.sender_id !== userId && new Date(lastMsg.created_at) > lastRead) ? 1 : 0;
+
+        // Process display info
         const COACH_ID = '00000000-0000-0000-0000-000000000001';
         let display_name = 'Unknown';
         let display_avatar: string | null = null;
         let display_phone = null;
 
         if (conv.conversation_type === 'self') {
-            // Self-chat: use the user's own profile
-            const myParticipant = conv.conversation_participants?.find((p: any) => p.user_id === userId);
-            const myProfile = myParticipant?.user_profiles;
-            display_name = myProfile?.full_name ? `${myProfile.full_name} (Me)` : 'Personal Notes';
-            display_avatar = myProfile?.avatar_url || null;
-            display_phone = (Array.isArray(myProfile?.chat_users) ? myProfile.chat_users[0]?.phone_number : myProfile?.chat_users?.phone_number) || null;
+            const profileArray = participantInfo?.user_profiles;
+            const profile = Array.isArray(profileArray) ? profileArray[0] : profileArray;
+            display_name = profile?.full_name ? `${profile.full_name} (Me)` : 'Personal Notes';
+            display_avatar = profile?.avatar_url || null;
+            display_phone = profile?.chat_users?.phone_number || null;
         } else if (conv.conversation_type === 'ai') {
-            // Health Coach: always use fixed identity
             display_name = 'Health Coach';
             display_avatar = '/APP%20LOGO.jpg';
-            display_phone = null;
         } else {
-            // Peer conversation: find the OTHER participant
             const otherParticipant = conv.conversation_participants?.find((p: any) => p.user_id !== userId);
-            if (otherParticipant) {
-                const profile = otherParticipant.user_profiles;
-                const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
-                // Priority: Full Name > Username > Phone > "User"
-                display_name = profile?.full_name || profile?.username || conv.name || chatUser?.phone_number || 'User';
-                display_avatar = profile?.avatar_url || null;
-                display_phone = chatUser?.phone_number || null;
-            } else {
-                display_name = conv.name || 'User';
-            }
+            const profileArray = otherParticipant?.user_profiles;
+            const profile = Array.isArray(profileArray) ? profileArray[0] : profileArray;
+
+            display_name = profile?.full_name || profile?.username || conv.name || 'User';
+            display_avatar = profile?.avatar_url || null;
         }
 
         return {
@@ -108,17 +97,12 @@ export const getConversationsV2 = async (userId: string) => {
             display_name,
             display_avatar,
             display_phone,
-            last_message: sortedMsgs[0] || null,
+            last_message: lastMsg,
             unread_count
         };
     }) || [];
 
-    // Sort conversations by last message timestamp
-    return processed.sort((a: any, b: any) => {
-        const timeA = new Date(a.last_message?.created_at || a.created_at).getTime();
-        const timeB = new Date(b.last_message?.created_at || b.created_at).getTime();
-        return timeB - timeA;
-    });
+    return processed;
 }
 
 export const getConversationById = async (conversationId: string, userId: string) => {
@@ -146,10 +130,13 @@ export const getConversationById = async (conversationId: string, userId: string
     const COACH_ID = '00000000-0000-0000-0000-000000000001';
 
     if (data.conversation_type === 'self') {
-        const myProfile = data.conversation_participants.find((p: any) => p.user_id === userId)?.user_profiles;
-        data.display_name = myProfile?.full_name ? `${myProfile.full_name} (Me)` : 'Personal Notes';
-        data.display_avatar = myProfile?.avatar_url;
-        data.display_phone = (Array.isArray(myProfile?.chat_users) ? myProfile.chat_users[0]?.phone_number : myProfile?.chat_users?.phone_number) || null;
+        const participant = data.conversation_participants.find((p: any) => p.user_id === userId);
+        const rawProfile = participant?.user_profiles;
+        const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
+
+        data.display_name = profile?.full_name ? `${profile.full_name} (Me)` : 'Personal Notes';
+        data.display_avatar = profile?.avatar_url;
+        data.display_phone = (Array.isArray(profile?.chat_users) ? profile.chat_users[0]?.phone_number : profile?.chat_users?.phone_number) || null;
     } else if (data.conversation_type === 'ai') {
         data.display_name = 'Health Coach';
         data.display_avatar = '/APP%20LOGO.jpg';
@@ -157,13 +144,14 @@ export const getConversationById = async (conversationId: string, userId: string
     } else {
         const otherParticipant = data.conversation_participants.find((p: any) => p.user_id !== userId && p.user_id !== COACH_ID);
         if (otherParticipant) {
-            const profile = otherParticipant.user_profiles;
+            const rawProfile = otherParticipant.user_profiles;
+            const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
             const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
+
             data.display_name = profile?.full_name || profile?.username || data.name || chatUser?.phone_number || 'User';
             data.display_avatar = profile?.avatar_url;
             data.display_phone = chatUser?.phone_number;
         } else {
-            // Fallback
             data.display_name = data.name || 'User';
             data.display_avatar = null;
         }
@@ -172,21 +160,64 @@ export const getConversationById = async (conversationId: string, userId: string
     return data;
 }
 
-export const createPrivateConversation = async (userId: string, otherUserId: string) => {
-    // V12: Use robust atomic RPC for bidirectional contact + conversation setup
-    const { data: convId, error } = await (supabase as any).rpc('add_contact_and_setup_chat', {
+export const addContactPure = async (userId: string, contactUserId: string) => {
+    const { error } = await (supabase as any).rpc('add_contact_pure', {
         p_user_id: userId,
-        p_contact_id: otherUserId
+        p_contact_id: contactUserId
+    });
+    if (error) throw error;
+}
+
+export const provisionAndSendMessage = async (
+    senderId: string,
+    receiverId: string,
+    content: string,
+    messageType: string = 'text',
+    metadata: any = {}
+) => {
+    console.log(`[API] provisionAndSendMessage: ${senderId} -> ${receiverId}`);
+    const { data: convId, error } = await (supabase as any).rpc('provision_and_send_message', {
+        p_sender_id: senderId,
+        p_receiver_id: receiverId,
+        p_content: content,
+        p_message_type: messageType,
+        p_metadata: metadata
     });
 
     if (error) {
-        console.error('Error in add_contact_and_setup_chat:', error);
+        console.error('[API] provision_and_send_message RPC error:', error);
         throw error;
     }
+    console.log(`[API] provisionAndSendMessage success. ConvId: ${convId}`);
+    return convId; // Returns the UUID of the conversation (new or existing)
+}
 
-    if (!convId) throw new Error('Failed to retrieve or create conversation ID');
+export const createPrivateConversation = async (userId: string, otherUserId: string) => {
+    // NOTE: In V6, we prefer interaction-driven creation via provisionAndSendMessage.
+    // This function is kept for backward compatibility but should be avoided if possible.
+    const { data: convId, error } = await (supabase as any).rpc('provision_and_send_message', {
+        p_sender_id: userId,
+        p_receiver_id: otherUserId,
+        p_content: 'Conversation started',
+        p_message_type: 'system'
+    });
 
+    if (error) throw error;
     return { id: convId };
+}
+
+export const findConversationByParticipants = async (user1Id: string, user2Id: string) => {
+    const { data, error } = await (supabase as any).rpc('find_conversation_by_participants', {
+        p_user1: user1Id,
+        p_user2: user2Id
+    });
+
+    if (error) {
+        console.error('[API] Error finding conversation:', error);
+        return null;
+    }
+
+    return data && data[0] ? data[0].id : null;
 }
 
 export const getContacts = async (userId: string) => {
@@ -209,15 +240,19 @@ export const getContacts = async (userId: string) => {
     }
 
     return data.map((c: any) => {
-        const profile = c.user_profiles;
-        const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
+        const rawProfile = c.user_profiles;
+        const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
+        const chatUserArray = profile?.chat_users;
+        const chatUser = Array.isArray(chatUserArray) ? chatUserArray[0] : chatUserArray;
+
         return {
             id: c.contact_user_id,
             full_name: profile?.full_name || profile?.username || chatUser?.phone_number || 'Unknown',
             avatar_url: profile?.avatar_url,
-            phone_number: chatUser?.phone_number
+            phone_number: chatUser?.phone_number,
+            is_verified: !!chatUser?.is_verified
         };
-    });
+    }).filter(c => c.is_verified); // ONLY show verified contacts as per requirement
 }
 
 export const getMyQRCodeData = async (userId: string) => {
@@ -304,13 +339,25 @@ export const sendMessage = async (
             sender_id: userId,
             message_type: messageType,
             content,
-            metadata,
-            read_at: (isAI || isSelf) ? now : null
+            metadata: {
+                ...metadata,
+                timestamp: now
+            },
+            is_delivered: true, // Optimistically delivered
+            delivered_at: now,
+            read_at: (isAI || isSelf) ? now : null,
+            is_read: (isAI || isSelf)
         })
         .select()
         .single()
 
     if (error) throw error
+
+    // Update conversation last_message_at (Migration trigger handles this too, but for speed:)
+    supabase.from('conversations')
+        .update({ last_message_at: now } as any)
+        .eq('id', conversationId)
+        .then();
 
     if (isAI) {
         // Explicitly trigger the coach reply function if this is an AI chat
@@ -318,7 +365,10 @@ export const sendMessage = async (
             body: {
                 type: 'INSERT',
                 table: 'messages',
-                record: data
+                record: data,
+                system_context: {
+                    current_time: new Date().toISOString()
+                }
             }
         }).catch(err => console.error("Coach reply trigger failed:", err));
     }
@@ -361,14 +411,17 @@ export const markAsRead = async (userId: string, conversationId: string, timesta
         return false;
     }
 
-    // Also mark individual messages as read
+    // Also mark individual messages as read (inc. is_read flag per spec)
+    // ONLY update messages NOT sent by the current user
     await supabase
         .from('messages')
-        .update({ read_at: lastReadAt } as any)
+        .update({
+            is_read: true,
+            read_at: lastReadAt
+        } as any)
         .eq('conversation_id', conversationId)
         .neq('sender_id', userId)
-        .is('read_at', null)
-        .lt('created_at', lastReadAt);
+        .is('read_at', null);
 
     return true;
 };

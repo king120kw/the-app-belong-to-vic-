@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
-import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByIdentifier, softDeleteConversation, getMyQRCodeData, getContacts } from "../lib/api/chat";
+import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByIdentifier, softDeleteConversation, getMyQRCodeData, getContacts, addContactPure } from "../lib/api/chat";
 import { searchUsers, getUserProfile } from "../lib/api/auth";
 import { MyQRCode } from "../components/MyQRCode";
 import { useTranslation } from "../lib/api/translation";
@@ -76,8 +76,7 @@ export default function Chat() {
   const { data: conversations, isLoading } = useQuery({
     queryKey: ['conversations', user?.id],
     queryFn: () => getConversationsV2(user!.id),
-    enabled: !!user?.id && !!verified,
-    refetchInterval: 15000
+    enabled: !!user?.id && !!verified
   });
 
   // Search users for discovery
@@ -122,66 +121,66 @@ export default function Chat() {
         }
       });
 
-    // Real-time: New messages → update conversation list instantly
-    const msgChannel = supabase
-      .channel('chat-new-messages')
+    // V10: Unified Real-time Manager for the Sidebar/Chat List
+    const listUpdateChannel = supabase
+      .channel('chat-list-global-manager')
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages'
-      }, () => {
-        queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
-      })
-      .subscribe();
-
-    // Real-time: New participant added → refresh contacts/conversations list instantly
-    const participantChannel = supabase
-      .channel('new-participants')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'conversation_participants'
       }, (payload: any) => {
-        if (payload.new?.user_id === user.id || payload.new?.conversation_id) {
-          queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
-          queryClient.invalidateQueries({ queryKey: ['contacts', user.id] });
-        }
+        // A new message was inserted in SOME conversation.
+        // We invalidate the conversations list to ensure the latest message preview and sorting are updated.
+        console.log("[Chat] V10 Global message event:", payload.new.conversation_id);
+        queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
       })
-      .subscribe();
-
-    // Real-time: New contact added
-    const contactChannel = supabase
-      .channel('new-contacts')
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'contacts'
+        table: 'conversation_participants',
+        filter: `user_id=eq.${user.id}`
       }, () => {
-        queryClient.invalidateQueries({ queryKey: ['contacts', user.id] });
+        // User was added to a new conversation (either they sent a first message or someone added them)
+        console.log("[Chat] V10 Participant event: refreshing list");
         queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
+        queryClient.invalidateQueries({ queryKey: ['contacts', user.id] });
       })
-      .subscribe();
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'contacts',
+        filter: `user_id=eq.${user.id}`
+      }, () => {
+        // New contact added to the address book
+        console.log("[Chat] V10 Contact event: refreshing address book");
+        queryClient.invalidateQueries({ queryKey: ['contacts', user.id] });
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log("[Chat] V10 Global List Manager Subscribed.");
+        }
+      });
 
     return () => {
       window.removeEventListener('focus', handleFocus);
       supabase.removeChannel(presenceChannel);
-      supabase.removeChannel(msgChannel);
-      supabase.removeChannel(participantChannel);
-      supabase.removeChannel(contactChannel); // Fix: was missing from cleanup
+      supabase.removeChannel(listUpdateChannel);
     };
   }, [user?.id, verified, queryClient, navigate, location.pathname, location.state]);
 
   // ── Mutations ────────────────────────────────────────────────────
-  const startConversationMutation = useMutation({
-    mutationFn: (otherUserId: string) => createPrivateConversation(user!.id, otherUserId),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['conversations', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['contacts', user?.id] }); // Fix: refresh contact list
+  const addContactMutation = useMutation({
+    mutationFn: (otherUserId: string) => addContactPure(user!.id, otherUserId),
+    onSuccess: (_, otherUserId) => {
+      queryClient.invalidateQueries({ queryKey: ['contacts', user?.id] });
       setIsDiscoveryOpen(false);
       setShowManualEntry(false);
       setContactFound(null);
-      navigate(`/chat/${data.id}`);
-    }
+      toast.success("Contact added to address book");
+      // Auto-navigate to conversation
+      handleContactTap({ id: otherUserId });
+    },
+    onError: (err: any) => toast.error(`Failed to add contact: ${err.message}`)
   });
 
   const deleteConversationMutation = useMutation({
@@ -220,6 +219,21 @@ export default function Chat() {
         toast.error("User not found or not verified for chat");
         return;
       }
+
+      // V7: If we found a user, check if we already have a conversation with them
+      const existingConv = conversations?.find((conv: any) =>
+        conv.conversation_type !== 'self' &&
+        conv.conversation_type !== 'ai' &&
+        conv.conversation_participants?.some((p: any) => p.user_id === targetUser.id)
+      );
+
+      if (existingConv) {
+        navigate(`/chat/${existingConv.id}`);
+        setIsDiscoveryOpen(false);
+        setContactFound(null);
+        return;
+      }
+
       setContactFound(targetUser);
       setShowManualEntry(false);
     } catch (err: any) {
@@ -235,6 +249,37 @@ export default function Chat() {
       return;
     }
     await resolveContact(manualIdentifier);
+  };
+
+  const handleQRScan = async (data: string) => {
+    console.log("[Chat] QR Data scanned:", data);
+    setShowQRScanner(false);
+
+    try {
+      let targetId = data;
+      // 1. Try to parse as JSON first (standard payload)
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.userId) targetId = parsed.userId;
+      } catch (e) {
+        // Fallback: use raw data if not JSON (maybe just a UUID or phone)
+      }
+
+      toast.loading("Resolving contact...", { id: 'qr-resolve' });
+      const targetUser = await findUserByIdentifier(targetId);
+
+      if (!targetUser) {
+        toast.error("User not found or not verified", { id: 'qr-resolve' });
+        return;
+      }
+
+      toast.success(`Found ${targetUser.full_name || 'User'}!`, { id: 'qr-resolve' });
+      setContactFound(targetUser);
+      setIsDiscoveryOpen(true); // Open discovery to show the "Add" button
+    } catch (err: any) {
+      console.error("[Chat] QR Resolution failed:", err);
+      toast.error("Failed to resolve QR code", { id: 'qr-resolve' });
+    }
   };
 
   const openSelfChat = async () => {
@@ -254,9 +299,37 @@ export default function Chat() {
   // ── Derived data ─────────────────────────────────────────────────
   const selfConv = conversations?.find((c: any) => c.conversation_type === 'self');
   const coachConv = conversations?.find((c: any) => c.conversation_type === 'ai');
-  const peerConvs = conversations?.filter((c: any) =>
-    c.conversation_type !== 'self' && c.conversation_type !== 'ai'
-  ) || [];
+
+  // V7: Merge actual conversations and contacts who don't have a conversation yet
+  const peerConvs = useMemo(() => {
+    const baseConvs = conversations?.filter((c: any) =>
+      c.conversation_type !== 'self' && c.conversation_type !== 'ai'
+    ) || [];
+
+    // Map existing conversation participant IDs for quick lookup
+    const existingParticipantIds = new Set(
+      baseConvs.flatMap(c => c.conversation_participants?.map((p: any) => p.user_id))
+    );
+
+    // Create "Virtual" conversation objects for contacts who don't have a chat history yet
+    const contactConvs = contactsData
+      .filter((contact: any) => contact && contact.id !== user?.id && !existingParticipantIds.has(contact.id))
+      .map((contact: any) => ({
+        id: `new-${contact.id}`,
+        display_name: contact.full_name || contact.phone_number || 'Unknown',
+        display_avatar: contact.avatar_url,
+        display_phone: contact.phone_number,
+        conversation_type: 'direct',
+        is_virtual: true,
+        conversation_participants: [
+          { user_id: contact.id, user_profiles: contact }
+        ],
+        created_at: new Date(0).toISOString(), // Sort at the bottom
+        last_message: null
+      }));
+
+    return [...baseConvs, ...contactConvs];
+  }, [conversations, contactsData, user?.id]);
 
   const isActuallyUnread = (conv: any) => (conv?.unread_count || 0) > 0;
 
@@ -277,27 +350,18 @@ export default function Chat() {
     });
   })();
 
-  // Contacts tab = PURE address book: only contacts with NO existing conversation
-  // Anyone with a conversation belongs in Chats, not here
+  // Contacts tab = PURE address book: list ALL friends/contacts
+  // This matches WhatsApp's design of having a complete contact list
   const contactList = useMemo(() => {
-    // Build set of user IDs who already have a conversation
-    const alreadyChattedIds = new Set<string>(
-      (conversations || [])
-        .filter((c: any) => c.conversation_type !== 'self' && c.conversation_type !== 'ai')
-        .flatMap((c: any) => c.conversation_participants || [])
-        .filter((p: any) => p.user_id !== user?.id && p.user_id !== COACH_ID)
-        .map((p: any) => p.user_id)
-    );
-
-    // Only show contacts who have NO active conversation yet
     return contactsData
-      .filter((c: any) => c && !alreadyChattedIds.has(c.id) && (c.full_name || c.phone_number || c.username))
+      .filter((c: any) => c && (c.full_name || c.phone_number || c.username))
       .sort((a: any, b: any) =>
         (a.full_name || a.phone_number || '').localeCompare(b.full_name || b.phone_number || '')
       );
-  }, [contactsData, conversations, user?.id]);
+  }, [contactsData]);
 
   // When tapping a contact: navigate to existing conversation or create one
+  // When tapping a contact: navigate to existing conversation or a "new chat" virtual route
   const handleContactTap = (contact: any) => {
     const existingConv = conversations?.find((conv: any) =>
       conv.conversation_type !== 'self' &&
@@ -307,7 +371,8 @@ export default function Chat() {
     if (existingConv) {
       navigate(`/chat/${existingConv.id}`);
     } else {
-      startConversationMutation.mutate(contact.id);
+      // Navigate using a special prefix or state to signal this is a NEW conversation
+      navigate(`/chat/new-${contact.id}`);
     }
   };
 
@@ -379,14 +444,6 @@ export default function Chat() {
           </div>
         </div>
 
-        <div className="flex gap-2 mb-2 overflow-x-auto pb-1 no-scrollbar">
-          {['Chats', 'Contacts'].map((view) => (
-            <button key={view} onClick={() => setCurrentView(view.toLowerCase() as any)}
-              className={`px-6 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all ${currentView === view.toLowerCase() ? 'bg-vic-green text-slate-900 shadow-md' : 'bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400'}`}>
-              {view}
-            </button>
-          ))}
-        </div>
 
         {currentView === 'chats' && (
           <div className="grid grid-cols-3 gap-2 mt-2 pb-1">
@@ -419,7 +476,7 @@ export default function Chat() {
           <div className="flex items-center justify-center p-12">
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-vic-green"></div>
           </div>
-        ) : currentView === 'chats' ? (
+        ) : (
           <div className="divide-y divide-slate-50 dark:divide-white/[0.02]">
 
             {/* ── Health Coach (pinned AI chat) ── */}
@@ -440,7 +497,18 @@ export default function Chat() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <p className="text-[13px] truncate text-slate-500">{coachConv.last_message?.content || "Ask your Health Coach anything..."}</p>
+                    <p className={`text-[13px] truncate ${isActuallyUnread(coachConv) ? 'font-bold text-[#111B21] dark:text-[#E9EDEF]' : 'text-slate-500'}`}>
+                      {coachConv.last_message ? (
+                        <>
+                          {coachConv.last_message.sender_id === user?.id && <span className="text-[#8696A0]">You: </span>}
+                          {coachConv.last_message.message_type === 'image' ? '📷 Image' :
+                            coachConv.last_message.message_type === 'voice' ? '🎤 Voice Message' :
+                              coachConv.last_message.message_type === 'video' ? '📹 Video' :
+                                coachConv.last_message.message_type === 'file' ? '📄 Document' :
+                                  coachConv.last_message.content}
+                        </>
+                      ) : "Ask your Health Coach anything..."}
+                    </p>
                     {isActuallyUnread(coachConv) && (
                       <div className="min-w-[20px] h-5 px-1.5 bg-vic-green rounded-full flex items-center justify-center ml-2">
                         <span className="text-[10px] font-bold text-white">{coachConv.unread_count}</span>
@@ -473,7 +541,17 @@ export default function Chat() {
                     {selfConv?.last_message ? new Date(selfConv.last_message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                   </span>
                 </div>
-                <p className="text-[13px] truncate text-slate-500">{selfConv?.last_message?.content || "Send a message to yourself..."}</p>
+                <p className={`text-[13px] truncate ${selfConv && isActuallyUnread(selfConv) ? 'font-bold text-[#111B21] dark:text-[#E9EDEF]' : 'text-slate-500'}`}>
+                  {selfConv?.last_message ? (
+                    <>
+                      {selfConv.last_message.message_type === 'image' ? '📷 Image' :
+                        selfConv.last_message.message_type === 'voice' ? '🎤 Voice Message' :
+                          selfConv.last_message.message_type === 'video' ? '📹 Video' :
+                            selfConv.last_message.message_type === 'file' ? '📄 Document' :
+                              selfConv.last_message.content}
+                    </>
+                  ) : "Send a message to yourself..."}
+                </p>
               </div>
             </button>
 
@@ -508,8 +586,25 @@ export default function Chat() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className={`text-[13px] truncate ${isUnread ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500'}`}>
-                        {conv.last_message?.content || "Tap to chat"}
+                      <p className={`text-[13px] truncate ${isUnread ? 'font-bold text-[#111B21] dark:text-[#E9EDEF]' : 'text-slate-500'}`}>
+                        {conv.last_message ? (
+                          <>
+                            {conv.last_message.sender_id === user?.id && (
+                              <span className={`material-symbols-outlined text-[15px] align-middle mr-1 ${conv.last_message.read_at ? 'text-[#34B7F1]' : 'text-[#8696A0]'}`}>
+                                {conv.last_message.delivered_at || conv.last_message.is_delivered ? 'done_all' : 'done'}
+                              </span>
+                            )}
+                            {conv.last_message.message_type === 'image' ? (
+                              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">image</span> Image</span>
+                            ) : conv.last_message.message_type === 'voice' ? (
+                              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">mic</span> Voice Message</span>
+                            ) : conv.last_message.message_type === 'video' ? (
+                              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">videocam</span> Video</span>
+                            ) : conv.last_message.message_type === 'file' ? (
+                              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">description</span> Document</span>
+                            ) : conv.last_message.content}
+                          </>
+                        ) : "No messages yet"}
                       </p>
                       {isUnread && (
                         <div className="min-w-[20px] h-5 px-1.5 bg-vic-green rounded-full flex items-center justify-center ml-2">
@@ -526,64 +621,6 @@ export default function Chat() {
               <div className="p-12 text-center">
                 <span className="material-symbols-outlined text-4xl text-slate-300 mb-3 block">chat_bubble_outline</span>
                 <p className="text-slate-500">No conversations yet. Add a friend to get started!</p>
-              </div>
-            )}
-          </div>
-        ) : (
-          /* ── Contacts tab ── */
-          <div className="divide-y divide-slate-50 dark:divide-white/[0.02]">
-            {/* ── Add Contact Action ── */}
-            {/* ── Add Contact Actions ── */}
-            <div className="grid grid-cols-2 bg-white dark:bg-[#0d1418] border-b dark:border-white/[0.05]">
-              <button
-                onClick={() => { setShowQRScanner(true); setCurrentView('chats'); }}
-                className="flex items-center gap-3 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors border-r dark:border-white/[0.05]"
-              >
-                <div className="size-10 rounded-full bg-vic-green/10 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-vic-green text-2xl">qr_code_scanner</span>
-                </div>
-                <div className="flex-1 text-left">
-                  <h3 className="font-bold text-sm dark:text-white">Scan QR</h3>
-                </div>
-              </button>
-              <button
-                onClick={() => setShowManualEntry(true)}
-                className="flex items-center gap-3 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors"
-              >
-                <div className="size-10 rounded-full bg-vic-pink/10 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-vic-pink text-2xl">person_search</span>
-                </div>
-                <div className="flex-1 text-left">
-                  <h3 className="font-bold text-sm dark:text-white">Add by Username/Phone</h3>
-                </div>
-              </button>
-            </div>
-
-
-            {contactList.map((contact: any) => (
-              <button
-                key={contact.id}
-                onClick={() => handleContactTap(contact)}
-                className="w-full flex gap-4 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.03] text-left transition-colors"
-              >
-                <div className="size-12 rounded-full overflow-hidden shrink-0">
-                  <AvatarImg src={contact.avatar_url} name={contact.full_name || contact.phone_number || '?'} />
-                </div>
-                <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  <h3 className="truncate dark:text-white font-bold">
-                    {contact.full_name || contact.phone_number || 'Unknown'}
-                  </h3>
-                  {contact.phone_number && (
-                    <p className="text-[12px] text-slate-500">{contact.phone_number}</p>
-                  )}
-                </div>
-                <span className="material-symbols-outlined text-slate-300 self-center">chevron_right</span>
-              </button>
-            ))}
-            {contactList.length === 0 && !coachConv && (
-              <div className="p-12 text-center">
-                <span className="material-symbols-outlined text-4xl text-slate-300 mb-3 block">person_add</span>
-                <p className="text-slate-500">No contacts yet. Add your first friend!</p>
               </div>
             )}
           </div>
@@ -629,35 +666,116 @@ export default function Chat() {
       {/* ── Discovery modal ── */}
       {isDiscoveryOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1f2c34] w-full max-w-lg rounded-[32px] overflow-hidden shadow-2xl">
-            <div className="p-6 border-b dark:border-white/5 flex items-center justify-between">
-              <h2 className="text-2xl font-black dark:text-white tracking-tight">Add Friends</h2>
-              <button onClick={() => setIsDiscoveryOpen(false)}><span className="material-symbols-outlined">close</span></button>
+          <div className="bg-white dark:bg-[#1f2c34] w-full max-w-lg rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[90dvh]">
+            <div className="p-6 border-b dark:border-white/5 flex items-center justify-between shrink-0">
+              <h2 className="text-2xl font-black dark:text-white tracking-tight">New Message</h2>
+              <button
+                onClick={() => {
+                  setIsDiscoveryOpen(false);
+                  setDiscoveryQuery("");
+                }}
+                className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-full"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
             </div>
-            <div className="p-4">
+
+            <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
+              {/* Actions Header */}
               <div className="grid grid-cols-2 gap-3 mb-6">
-                <button onClick={() => { setShowQRScanner(true); setIsDiscoveryOpen(false); }} className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl group active:scale-95 transition-transform">
+                <button onClick={() => { setShowQRScanner(true); setIsDiscoveryOpen(false); }}
+                  className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl group active:scale-95 transition-transform">
                   <span className="material-symbols-outlined text-3xl text-vic-green group-hover:scale-110 transition-transform">qr_code_scanner</span>
-                  <span className="text-xs font-bold dark:text-white">QR Code</span>
+                  <span className="text-xs font-bold dark:text-white text-center">Scan VicCode</span>
                 </button>
-                <button onClick={() => { setShowManualEntry(true); setIsDiscoveryOpen(false); }} className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl group active:scale-95 transition-transform">
+                <button onClick={() => { setShowManualEntry(true); setIsDiscoveryOpen(false); }}
+                  className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl group active:scale-95 transition-transform">
                   <span className="material-symbols-outlined text-3xl text-vic-pink group-hover:scale-110 transition-transform">person_search</span>
-                  <span className="text-xs font-bold dark:text-white">Username/Phone</span>
+                  <span className="text-xs font-bold dark:text-white text-center">Search for Friends</span>
                 </button>
               </div>
-              <input type="text" placeholder="Search name..." value={discoveryQuery} onChange={(e) => setDiscoveryQuery(e.target.value)}
-                className="w-full p-4 bg-slate-50 dark:bg-black/20 rounded-xl outline-none dark:text-white" />
-              <div className="max-h-60 overflow-y-auto mt-4">
-                {isSearching && <div className="p-4 text-center text-slate-500 text-sm">Searching...</div>}
-                {searchResults?.map((result: any) => (
-                  <button key={result.id} onClick={() => startConversationMutation.mutate(result.id)}
-                    className="w-full flex items-center gap-4 p-3 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl text-left">
-                    <div className="size-10 rounded-full overflow-hidden shrink-0">
-                      <AvatarImg src={result.avatar_url} name={result.full_name} />
+
+              {/* Discovery Search */}
+              <div className="relative mb-6">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
+                <input
+                  type="text"
+                  placeholder="Type a name or username..."
+                  value={discoveryQuery}
+                  onChange={(e) => setDiscoveryQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-4 bg-slate-50 dark:bg-black/20 rounded-xl outline-none dark:text-white placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Results Area */}
+              <div className="space-y-4">
+                {discoveryQuery.length > 0 ? (
+                  <>
+                    <p className="text-[10px] font-bold text-vic-pink uppercase tracking-widest pl-2">Global Search</p>
+                    {isSearching && <div className="p-4 text-center text-slate-500 text-sm">Searching...</div>}
+                    <div className="space-y-1">
+                      {searchResults?.map((result: any) => {
+                        const isAlreadyContact = contactsData?.some((c: any) => c.id === result.id);
+                        return (
+                          <button
+                            key={result.id}
+                            onClick={() => !isAlreadyContact && addContactMutation.mutate(result.id)}
+                            disabled={isAlreadyContact || addContactMutation.isPending}
+                            className={`w-full flex items-center gap-4 p-3 rounded-xl text-left transition-colors ${isAlreadyContact ? 'hover:bg-slate-50 dark:hover:bg-white/5' : 'hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                          >
+                            <div className="size-12 rounded-full overflow-hidden shrink-0 border-2 border-transparent group-hover:border-vic-green/30">
+                              <AvatarImg src={result.avatar_url} name={result.full_name} />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-bold dark:text-white">{result.full_name}</h4>
+                              <p className="text-xs text-slate-500">{result.username || result.phone_number}</p>
+                              {isAlreadyContact && <p className="text-[10px] text-vic-green font-bold mt-0.5">ALREADY IN CONTACTS</p>}
+                            </div>
+                            {!isAlreadyContact && (
+                              <span className="material-symbols-outlined text-vic-green">person_add</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                      {searchResults?.length === 0 && !isSearching && (
+                        <div className="p-4 text-center text-slate-400 text-sm italic">No people found matching "{discoveryQuery}"</div>
+                      )}
                     </div>
-                    <h4 className="font-bold dark:text-white">{result.full_name}</h4>
-                  </button>
-                ))}
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[10px] font-bold text-vic-green uppercase tracking-widest pl-2">Your Friends</p>
+                    <div className="space-y-1">
+                      {contactList.map((contact: any) => (
+                        <button
+                          key={contact.id}
+                          onClick={() => {
+                            handleContactTap(contact);
+                            setIsDiscoveryOpen(false);
+                          }}
+                          className="w-full flex items-center gap-4 p-3 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl text-left transition-colors group"
+                        >
+                          <div className="size-12 rounded-full overflow-hidden shrink-0 relative">
+                            <AvatarImg src={contact.avatar_url} name={contact.full_name} />
+                            {onlineUsers.has(contact.id) && (
+                              <div className="absolute bottom-0 right-0 size-3 bg-vic-green rounded-full border-2 border-white dark:border-[#1f2c34]" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-bold dark:text-white group-hover:text-vic-green transition-colors">{contact.full_name}</h4>
+                            <p className="text-xs text-slate-500">{contact.phone_number}</p>
+                          </div>
+                        </button>
+                      ))}
+                      {contactList.length === 0 && (
+                        <div className="p-8 text-center text-slate-500">
+                          <span className="material-symbols-outlined text-4xl text-slate-200 mb-2">face</span>
+                          <p className="text-sm">You haven't added any friends yet.</p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -687,18 +805,7 @@ export default function Chat() {
       {/* ── QR Scanner ── */}
       {showQRScanner && (
         <QRScanner
-          onScan={async (data) => {
-            setShowQRScanner(false);
-            try {
-              const qrData = JSON.parse(data);
-              if (qrData.userId) resolveContact(qrData.userId);
-              else if (qrData.phone) resolveContact(qrData.phone);
-            } catch {
-              const phoneRegex = /^\+?[0-9]{7,15}$/;
-              if (phoneRegex.test(data) || data.length > 5) resolveContact(data);
-              else toast.error('Invalid QR code format');
-            }
-          }}
+          onScan={(data) => handleQRScan(data)}
           onClose={() => setShowQRScanner(false)}
         />
       )}
@@ -713,7 +820,13 @@ export default function Chat() {
             <h2 className="text-2xl font-black dark:text-white mb-1">{contactFound.full_name}</h2>
             <p className="text-vic-green font-bold text-sm mb-8">{contactFound.phone_number}</p>
             <div className="flex flex-col w-full gap-3">
-              <button onClick={() => startConversationMutation.mutate(contactFound.id)} className="w-full py-5 bg-vic-green text-slate-900 font-black rounded-2xl shadow-xl">ADD CONTACT & CHAT</button>
+              {contactsData?.some((c: any) => c.id === contactFound.id) ? (
+                <div className="w-full py-5 bg-vic-green/10 text-vic-green font-black rounded-2xl border border-vic-green/20">
+                  ALREADY IN CONTACTS
+                </div>
+              ) : (
+                <button onClick={() => addContactMutation.mutate(contactFound.id)} className="w-full py-5 bg-vic-green text-slate-900 font-black rounded-2xl shadow-xl">ADD CONTACT</button>
+              )}
               <button onClick={() => setContactFound(null)} className="w-full py-4 text-slate-500 font-bold">Cancel</button>
             </div>
           </div>

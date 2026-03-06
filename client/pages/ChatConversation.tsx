@@ -14,23 +14,76 @@ import CameraCapture from '../components/CameraCapture';
 
 const AudioMessage = ({ src }: { src: string }) => {
     const audioRef = useRef<HTMLAudioElement>(null);
+    const [internalSrc, setInternalSrc] = useState(src);
     const [isPlaying, setIsPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState(false);
-    // Format duration helper if needed
+    const [retryCount, setRetryCount] = useState(0);
     const [duration, setDuration] = useState(0);
+    const MAX_RETRIES = 3;
 
-    // Reset state if src changes
+    // Reset state if src prop changes
     useEffect(() => {
+        setInternalSrc(src);
         setIsPlaying(false);
         setProgress(0);
         setError(false);
+        setRetryCount(0);
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
             audioRef.current.load(); // Reload audio source
         }
     }, [src]);
+
+    const performRetry = async (currentAttempt: number) => {
+        const delay = Math.pow(2, currentAttempt) * 1000; // 2s, 4s, 8s
+        console.log(`[Audio] Exponential backoff: Waiting ${delay}ms before attempt ${currentAttempt}/${MAX_RETRIES}...`);
+
+        setTimeout(async () => {
+            try {
+                let blob: Blob;
+
+                if (src.startsWith('blob:')) {
+                    const res = await fetch(src);
+                    blob = await res.blob();
+                } else {
+                    // Try to extract bucket and path for Supabase URLs
+                    const match = src.match(/object\/public\/([^\/]+)\/(.+)/);
+                    if (match) {
+                        const bucket = match[1];
+                        const path = match[2];
+                        console.log(`[Audio] Fetching via SDK from bucket: ${bucket}, path: ${path}`);
+
+                        const { data, error: downloadErr } = await supabase.storage.from(bucket).download(path);
+                        if (downloadErr) throw downloadErr;
+                        if (!data) throw new Error("No data returned from Supabase download");
+                        blob = data;
+                    } else {
+                        // Fallback to fetch if it doesn't match the pattern
+                        const res = await fetch(src, { mode: 'cors' });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        blob = await res.blob();
+                    }
+                }
+
+                const objUrl = URL.createObjectURL(blob);
+                if (audioRef.current) audioRef.current.removeAttribute('crossorigin');
+                setInternalSrc(objUrl); // Success triggers native <audio> load
+                console.log("[Audio] Successfully recovered via Blob URL!");
+            } catch (err) {
+                console.error(`[Audio] Fetch recovery attempt ${currentAttempt} failed:`, err);
+                if (currentAttempt < MAX_RETRIES) {
+                    setRetryCount(currentAttempt + 1);
+                    performRetry(currentAttempt + 1);
+                } else {
+                    console.error("[Audio] Max retries exhausted. Final error triggered.");
+                    setError(true);
+                    setIsPlaying(false);
+                }
+            }
+        }, delay);
+    };
 
     const togglePlay = () => {
         if (audioRef.current && !error) {
@@ -46,15 +99,6 @@ const AudioMessage = ({ src }: { src: string }) => {
             setIsPlaying(!isPlaying);
         }
     };
-
-    // Waveform visualization placeholder (static for now, could be dynamic)
-    const renderWaveform = () => (
-        <div className="flex items-center gap-1 h-4 w-full opacity-50">
-            {[...Array(20)].map((_, i) => (
-                <div key={i} className="w-1 bg-current rounded-full" style={{ height: `${Math.random() * 100}%` }}></div>
-            ))}
-        </div>
-    );
 
     return (
         <div className="flex items-center gap-3 bg-[#D9FDD3] dark:bg-[#005c4b] p-3 rounded-xl min-w-[240px] shadow-sm border border-black/5">
@@ -124,7 +168,7 @@ const AudioMessage = ({ src }: { src: string }) => {
 
             <audio
                 ref={audioRef}
-                src={src}
+                src={internalSrc}
                 preload="metadata"
                 onTimeUpdate={() => {
                     const duration = audioRef.current?.duration || 0;
@@ -138,13 +182,19 @@ const AudioMessage = ({ src }: { src: string }) => {
                 onEnded={() => { setIsPlaying(false); setProgress(0); }}
                 onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
                 onError={() => {
-                    console.warn("Audio failed to load, trying without CORS...");
-                    // Try reloading without crossOrigin to recover
-                    if (audioRef.current) {
-                        audioRef.current.removeAttribute('crossorigin');
-                        audioRef.current.load();
+                    // Prevent infinite loops if internalSrc is already the blob
+                    if (internalSrc.startsWith('blob:')) {
+                        console.error("[Audio] Final error triggered on Blob URL.");
+                        setError(true);
+                        setIsPlaying(false);
+                        return;
                     }
-                    setError(true);
+
+                    console.warn(`[Audio] Failed to load via <audio>: ${src}`);
+                    if (retryCount === 0) {
+                        setRetryCount(1);
+                        performRetry(1);
+                    }
                 }}
                 className="hidden"
             />
@@ -240,6 +290,7 @@ export default function ChatConversation() {
     const [isRecording, setIsRecording] = useState(false);
     const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording' | 'preview'>('idle');
     const [isRecordingLocked, setIsRecordingLocked] = useState(false);
+    const [activeMediaTab, setActiveMediaTab] = useState<'emoji' | 'gif' | 'sticker'>('emoji');
     const [recordedAudio, setRecordedAudio] = useState<{ blob: Blob, url: string } | null>(null);
     const [showCamera, setShowCamera] = useState(false);
     const [otherUserTyping, setOtherUserTyping] = useState(false);
@@ -472,13 +523,25 @@ export default function ChatConversation() {
         try {
             console.log("[Voice] Starting recording session...");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const recorder = new MediaRecorder(stream);
+
+            // Determine optimal supported audio MIME type for cross-browser compatibility
+            let mimeType = '';
+            if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                mimeType = 'audio/mp4'; // Safari preferred
+            } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                mimeType = 'audio/webm;codecs=opus'; // Chrome preferred
+            } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+                mimeType = 'audio/webm';
+            }
+
+            const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
             mediaRecorderRef.current = recorder;
             chunksRef.current = [];
 
             recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
             recorder.onstop = () => {
-                const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+                const finalMimeType = mimeType || 'audio/webm';
+                const blob = new Blob(chunksRef.current, { type: finalMimeType });
                 const url = URL.createObjectURL(blob);
                 setRecordedAudio({ blob, url });
                 setRecordingStatus('preview');
@@ -784,71 +847,81 @@ export default function ChatConversation() {
         const isV = activeId.startsWith('new-');
         const vTargetId = isV ? activeId.replace('new-', '') : null;
 
-        // Cleanup previous channel if activeId changed
-        if (activeChannelRef.current) {
-            console.log(`[Chat] V11 Cleaning up channel before switch: ${activeChannelRef.current.topic}`);
-            supabase.removeChannel(activeChannelRef.current);
-            activeChannelRef.current = null;
-        }
-
         const channelName = isV
             ? `private_chat_${[user.id, vTargetId].sort().join('_')}`
             : `chat_room_${activeId}`;
 
-        console.log(`[Chat] V11 INITIALIZING PERSISTENT CHANNEL: ${channelName}`);
-        const channel = supabase.channel(channelName);
+        // Debounce connection logic to prevent flapping during rapid transitions
+        const initChannel = () => {
+            // Check if we're already subscribed to this exact channel
+            if (activeChannelRef.current && activeChannelRef.current.topic === `realtime:${channelName}`) {
+                console.log(`[Chat] V11 Connection Manager: Already subscribed to ${channelName}. Skipping initialization.`);
+                return;
+            }
 
-        channel
-            .on('presence', { event: 'sync' }, () => {
-                const state = channel.presenceState();
-                let isTyping = false;
-                let isOnline = false;
-                const targetId = isV ? vTargetId : otherParticipantId;
-
-                Object.values(state).forEach((presences: any) => {
-                    presences.forEach((p: any) => {
-                        if (p.user_id === targetId) {
-                            isOnline = true;
-                            if (p.typing && (p.conversation_id === activeId || isV)) {
-                                isTyping = true;
-                            }
-                        }
-                    });
-                });
-
-                setOtherUserTyping(isTyping);
-                setOtherUserOnline(isOnline);
-            })
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'messages',
-                filter: isV ? undefined : `conversation_id=eq.${activeId}`
-            }, (payload) => {
-                onMessageEventRef.current?.(payload);
-            })
-            .subscribe(async (status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`[Chat] V11 Channel ${channelName} SUBSCRIBED.`);
-                    await channel.track({
-                        user_id: user.id,
-                        conversation_id: activeId,
-                        online_at: new Date().toISOString(),
-                        typing: false
-                    });
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error(`[Chat] V11 Channel ${channelName} Error:`, err);
-                }
-            });
-
-        activeChannelRef.current = channel;
-
-        return () => {
-            console.log(`[Chat] V11 TEARING DOWN CHANNEL: ${channelName}`);
+            // Cleanup previous channel if activeId changed and we have an old channel
             if (activeChannelRef.current) {
+                console.log(`[Chat] V11 Connection Manager: Cleaning up old channel before switch: ${activeChannelRef.current.topic}`);
                 supabase.removeChannel(activeChannelRef.current);
                 activeChannelRef.current = null;
             }
+
+            console.log(`[Chat] V11 INITIALIZING PERSISTENT CHANNEL: ${channelName}`);
+            const channel = supabase.channel(channelName);
+
+            channel
+                .on('presence', { event: 'sync' }, () => {
+                    const state = channel.presenceState();
+                    let isTyping = false;
+                    let isOnline = false;
+                    const targetId = isV ? vTargetId : otherParticipantId;
+
+                    Object.values(state).forEach((presences: any) => {
+                        presences.forEach((p: any) => {
+                            if (p.user_id === targetId) {
+                                isOnline = true;
+                                if (p.typing && (p.conversation_id === activeId || isV)) {
+                                    isTyping = true;
+                                }
+                            }
+                        });
+                    });
+
+                    setOtherUserTyping(isTyping);
+                    setOtherUserOnline(isOnline);
+                })
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: isV ? undefined : `conversation_id=eq.${activeId}`
+                }, (payload) => {
+                    onMessageEventRef.current?.(payload);
+                })
+                .subscribe(async (status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log(`[Chat] V11 Channel ${channelName} SUBSCRIBED.`);
+                        await channel.track({
+                            user_id: user.id,
+                            conversation_id: activeId,
+                            online_at: new Date().toISOString(),
+                            typing: false
+                        });
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.error(`[Chat] V11 Channel ${channelName} Error:`, err);
+                    }
+                });
+
+            activeChannelRef.current = channel;
+        };
+
+        // Delay initialization slightly to batch rapid navigation changes
+        const connectionTimer = setTimeout(initChannel, 150);
+
+        return () => {
+            clearTimeout(connectionTimer);
+            // Only teardown immediately if component is unmounting, otherwise let the next effect handle cleanup
+            // to avoid flapping. We keep activeChannelRef.current alive for the next tick.
         };
     }, [activeId, user?.id]); // STRICT DEPENDENCY: Only re-initialize when conversation context changes
 
@@ -1462,37 +1535,84 @@ export default function ChatConversation() {
                         </div>
                     </div>
 
-                    {/* Emoji Picker Popover */}
+                    {/* Emoji/GIF/Sticker Picker Popover */}
                     {showEmoji && (
                         <div className="absolute bottom-[70px] left-0 md:left-auto md:w-[400px] z-40 bg-white dark:bg-[#1f2c34] rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden animate-in slide-in-from-bottom-5 fade-in duration-200">
                             {/* Tabs */}
                             <div className="flex border-b border-slate-100 dark:border-slate-700">
-                                <button className="flex-1 py-3 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-vic-green border-b-2 border-vic-green">
+                                <button
+                                    onClick={() => setActiveMediaTab('emoji')}
+                                    className={`flex-1 py-3 text-sm font-medium transition-colors ${activeMediaTab === 'emoji' ? 'text-vic-green border-b-2 border-vic-green' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                                >
                                     Emoji
                                 </button>
                                 <button
-                                    onClick={() => toast.info("GIFs coming soon!")}
-                                    className="flex-1 py-3 text-sm font-medium text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                    onClick={() => setActiveMediaTab('gif')}
+                                    className={`flex-1 py-3 text-sm font-medium transition-colors ${activeMediaTab === 'gif' ? 'text-vic-green border-b-2 border-vic-green' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
                                 >
                                     GIF
                                 </button>
                                 <button
-                                    onClick={() => toast.info("Stickers coming soon!")}
-                                    className="flex-1 py-3 text-sm font-medium text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                    onClick={() => setActiveMediaTab('sticker')}
+                                    className={`flex-1 py-3 text-sm font-medium transition-colors ${activeMediaTab === 'sticker' ? 'text-vic-green border-b-2 border-vic-green' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
                                 >
                                     Sticker
                                 </button>
                             </div>
-                            <div className="h-[350px]">
-                                <EmojiPicker
-                                    width="100%"
-                                    height={350}
-                                    onEmojiClick={onEmojiClick}
-                                    theme={Theme.AUTO}
-                                    emojiStyle={EmojiStyle.NATIVE}
-                                    previewConfig={{ showPreview: false }}
-                                    searchDisabled={false}
-                                />
+                            <div className="h-[350px] overflow-y-auto custom-scrollbar bg-[#F0F2F5] dark:bg-[#111B21]">
+                                {activeMediaTab === 'emoji' && (
+                                    <EmojiPicker
+                                        width="100%"
+                                        height={350}
+                                        onEmojiClick={onEmojiClick}
+                                        theme={Theme.AUTO}
+                                        emojiStyle={EmojiStyle.NATIVE}
+                                        previewConfig={{ showPreview: false }}
+                                        searchDisabled={false}
+                                    />
+                                )}
+                                {activeMediaTab === 'gif' && (
+                                    <div className="p-2 grid grid-cols-2 gap-2">
+                                        {/* Mock GIFs from Giphy/Tenor */}
+                                        {[
+                                            'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', // Hello
+                                            'https://media.giphy.com/media/11ISwbgCxEzMyY/giphy.gif', // Thumbs up
+                                            'https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif', // OK
+                                            'https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif', // Laugh
+                                            'https://media.giphy.com/media/3o6ozh46EBuEFtl0ig/giphy.gif', // Mind blown
+                                            'https://media.giphy.com/media/l41YtZOb9EUABnuqA/giphy.gif'  // Yes
+                                        ].map((gifUrl, idx) => (
+                                            <div key={idx} className="cursor-pointer hover:opacity-80 transition-opacity" onClick={() => {
+                                                sendMutation.mutate({ content: "GIF", type: 'image', metadata: gifUrl });
+                                                setShowEmoji(false);
+                                            }}>
+                                                <img src={gifUrl} alt="GIF" className="w-full h-24 object-cover rounded-lg" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {activeMediaTab === 'sticker' && (
+                                    <div className="p-3 grid grid-cols-4 gap-3">
+                                        {/* Mock Stickers (transparent emojis/icons) */}
+                                        {[
+                                            'https://cdn-icons-png.flaticon.com/512/10433/10433048.png', // Heart
+                                            'https://cdn-icons-png.flaticon.com/512/10433/10433100.png', // Fire
+                                            'https://cdn-icons-png.flaticon.com/512/10433/10433066.png', // LOL
+                                            'https://cdn-icons-png.flaticon.com/512/10433/10433054.png', // Party
+                                            'https://cdn-icons-png.flaticon.com/512/10433/10433095.png', // Sad
+                                            'https://cdn-icons-png.flaticon.com/512/10433/10433050.png', // Angry
+                                            'https://cdn-icons-png.flaticon.com/512/10433/10433085.png', // Cool
+                                            'https://cdn-icons-png.flaticon.com/512/10433/10433076.png'  // Thinking
+                                        ].map((stickerUrl, idx) => (
+                                            <div key={idx} className="cursor-pointer hover:scale-110 active:scale-95 transition-transform" onClick={() => {
+                                                sendMutation.mutate({ content: "Sticker", type: 'image', metadata: stickerUrl });
+                                                setShowEmoji(false);
+                                            }}>
+                                                <img src={stickerUrl} alt="Sticker" className="w-full h-16 object-contain drop-shadow-md" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

@@ -450,16 +450,6 @@ export default function ChatConversation() {
         setMessage(prev => prev + emojiData.emoji);
     };
 
-    const handleLocationShare = () => {
-        if ("geolocation" in navigator) {
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                const { latitude, longitude } = position.coords;
-                const locationUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
-                sendMutation.mutate({ content: "📍 Current Location", type: 'link', metadata: locationUrl });
-            });
-        }
-    };
-
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !user) return;

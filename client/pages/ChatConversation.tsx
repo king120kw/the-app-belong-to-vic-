@@ -126,7 +126,6 @@ const AudioMessage = ({ src }: { src: string }) => {
                 ref={audioRef}
                 src={src}
                 preload="metadata"
-                crossOrigin="anonymous"
                 onTimeUpdate={() => {
                     const duration = audioRef.current?.duration || 0;
                     const currentTime = audioRef.current?.currentTime || 0;
@@ -138,12 +137,83 @@ const AudioMessage = ({ src }: { src: string }) => {
                 }}
                 onEnded={() => { setIsPlaying(false); setProgress(0); }}
                 onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
-                onError={(e) => {
-                    console.error("Audio Load Error:", e);
+                onError={() => {
+                    console.warn("Audio failed to load, trying without CORS...");
+                    // Try reloading without crossOrigin to recover
+                    if (audioRef.current) {
+                        audioRef.current.removeAttribute('crossorigin');
+                        audioRef.current.load();
+                    }
                     setError(true);
                 }}
                 className="hidden"
             />
+        </div>
+    );
+};
+
+// --- Location Message Component (WhatsApp-style) ---
+const LocationMessage = ({ lat, lng, name }: { lat: number; lng: number; name?: string }) => {
+    const [imgError, setImgError] = useState(false);
+    // Use OpenStreetMap static tile via Leaflet's tile convention (free, no API key needed)
+    const zoom = 15;
+    // Static map URL using OpenStreetMap Nominatim/Overpass static image via geoapify (free tier)
+    // Fallback: show a placeholder with coordinates if image fails
+    const mapUrl = `https://static-maps.yandex.ru/1.x/?lang=en_US&ll=${lng},${lat}&z=${zoom}&l=map&size=400,200&pt=${lng},${lat},pm2rdm`;
+    const googleMapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    const appleMapsUrl = `https://maps.apple.com/?q=${lat},${lng}`;
+
+    const openMap = () => {
+        // Open native app or browser maps
+        const ua = navigator.userAgent;
+        const isIOS = /iPad|iPhone|iPod/.test(ua);
+        window.open(isIOS ? appleMapsUrl : googleMapsUrl, '_blank');
+    };
+
+    return (
+        <div
+            className="relative overflow-hidden rounded-xl cursor-pointer group"
+            style={{ minWidth: 220, maxWidth: 280 }}
+            onClick={openMap}
+        >
+            {/* Map Preview */}
+            {!imgError ? (
+                <img
+                    src={mapUrl}
+                    alt="Location"
+                    onError={() => setImgError(true)}
+                    className="w-full h-[140px] object-cover rounded-t-xl"
+                />
+            ) : (
+                // Fallback: OpenStreetMap tile via a different provider
+                <div className="w-full h-[140px] bg-[#e8f4e8] dark:bg-[#1a2e1a] flex flex-col items-center justify-center gap-2 rounded-t-xl">
+                    <span className="material-symbols-outlined text-[48px] text-vic-green">location_on</span>
+                    <p className="text-xs text-[#667781] font-mono">{lat.toFixed(4)}, {lng.toFixed(4)}</p>
+                </div>
+            )}
+
+            {/* Red Pin Overlay */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="relative">
+                    <span className="material-symbols-outlined text-[36px] text-red-500 drop-shadow-lg" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))' }}>location_on</span>
+                </div>
+            </div>
+
+            {/* Dark Overlay on Hover */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all rounded-t-xl" />
+
+            {/* Location Info Bar */}
+            <div className="bg-white dark:bg-[#202c33] px-3 py-2 flex items-center gap-2 border-t border-black/5 rounded-b-xl">
+                <span className="material-symbols-outlined text-[18px] text-vic-green shrink-0">near_me</span>
+                <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-[#111B21] dark:text-[#E9EDEF] truncate">
+                        {name || 'Shared Location'}
+                    </p>
+                    <p className="text-[11px] text-[#667781] dark:text-[#8696A0]">
+                        Tap to open in Maps
+                    </p>
+                </div>
+            </div>
         </div>
     );
 };
@@ -910,6 +980,52 @@ export default function ChatConversation() {
         sendMutation.mutate({ content });
     };
 
+    const handleLocationShare = async () => {
+        if (!navigator.geolocation) {
+            toast.error('Location sharing is not supported by your browser');
+            return;
+        }
+
+        const toastId = 'location-share';
+        toast.loading('Getting your location...', { id: toastId });
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const { latitude: lat, longitude: lng } = position.coords;
+
+                // Reverse geocode for a nice address using Nominatim (free)
+                let locationName = 'Current Location';
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                    const data = await res.json();
+                    if (data?.display_name) {
+                        // Trim to just neighborhood + city
+                        locationName = data.address?.suburb || data.address?.quarter || data.address?.city || data.display_name.split(',')[0];
+                    }
+                } catch {
+                    // Silently fall back to generic name
+                }
+
+                toast.dismiss(toastId);
+                sendMutation.mutate({
+                    content: locationName,
+                    type: 'location',
+                    metadata: { lat, lng, name: locationName }
+                });
+                toast.success('Location sent!');
+            },
+            (error) => {
+                toast.dismiss(toastId);
+                if (error.code === error.PERMISSION_DENIED) {
+                    toast.error('Location permission denied. Please enable it in browser settings.');
+                } else {
+                    toast.error('Could not get your location. Please try again.');
+                }
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    };
+
     const typingTimeoutRef = useRef<any>(null);
     const handleTyping = async () => {
         if (!user || !activeId || !activeChannelRef.current) return;
@@ -956,6 +1072,14 @@ export default function ChatConversation() {
                 return <video src={mediaUrl} controls className="max-w-full rounded-lg" />;
             case 'voice':
                 return <AudioMessage src={mediaUrl} />;
+            case 'location': {
+                const locMeta = typeof metadata === 'object' && metadata !== null ? metadata : {};
+                const lat = Number(locMeta.lat || locMeta.latitude || 0);
+                const lng = Number(locMeta.lng || locMeta.longitude || 0);
+                const locName = locMeta.name || msg.content || 'Shared Location';
+                if (!lat || !lng) return <p className="text-[14.2px] leading-[19px]">📍 {msg.content || 'Location'}</p>;
+                return <LocationMessage lat={lat} lng={lng} name={locName} />;
+            }
             case 'link':
                 return (
                     <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline flex items-center gap-1">

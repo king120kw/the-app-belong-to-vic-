@@ -7,6 +7,10 @@ import { supabase } from '../supabase'
 
 export interface FoodAnalysisResult {
     name: string
+    brand?: string
+    manufacturer?: string
+    country_of_origin?: string
+    ingredients?: string
     calories: number
     protein: number
     carbs: number
@@ -16,11 +20,17 @@ export interface FoodAnalysisResult {
     healthRating: number
     health_impact_score?: number
     clinical_synopsis?: string
+    healthStatus?: string
+    recommended_pairings?: string
+    is_compliant?: boolean
+    political_warning?: string
+    estimated_price?: string
+    cheaper_alternatives?: any[]
     price?: number
     image_url: string
 }
 
-export const analyzeFoodImage = async (userId: string, file: File) => {
+export const analyzeFoodImage = async (userId: string, file: File, options?: any) => {
     try {
         console.log("Analyzing image with backend Edge Function...");
 
@@ -39,11 +49,25 @@ export const analyzeFoodImage = async (userId: string, file: File) => {
             .from('food-images')
             .getPublicUrl(filePath);
 
-        // 2. Invoke Edge Function (Send Key explicitly to bypass server secret issues)
+        // Convert file to base64 for direct AI processing (faster & avoids download timeouts)
+        const reader = new FileReader();
+        const base64Promise = new Promise((resolve) => {
+            reader.onload = () => {
+                const base64 = typeof reader.result === 'string' ? reader.result.split(',')[1] : null;
+                resolve(base64);
+            };
+            reader.readAsDataURL(file);
+        });
+        const base64Data = await base64Promise;
+
+        // 2. Invoke Edge Function
         const { data, error } = await supabase.functions.invoke('food-analysis', {
             body: {
                 imageUrl: publicUrl,
-                apiKey: import.meta.env.VITE_OPENAI_API_KEY
+                imageBase64: base64Data, // Added base64 data
+                apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+                userId,
+                ...options
             }
         });
 
@@ -67,12 +91,13 @@ export const analyzeFoodImage = async (userId: string, file: File) => {
     }
 }
 
-export const scanProduct = async (userId: string, barcode: string) => {
+export const scanProduct = async (userId: string, barcode: string, options?: any) => {
     const { data, error: edgeError } = await supabase.functions.invoke('product-scanner', {
         body: {
             barcode,
             userId: userId,
-            apiKey: import.meta.env.VITE_OPENAI_API_KEY
+            apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+            ...options
         }
     })
 
@@ -86,28 +111,24 @@ export const saveFoodAnalysis = async (userId: string, analysis: any) => {
         .from('food_items') as any)
         .insert({
             name: analysis.name,
-            calories: analysis.calories,
-            protein: analysis.protein,
-            carbs: analysis.carbs,
-            fat: analysis.fat,
-            fiber: analysis.fiber,
-            sugar: analysis.sugar,
-            health_rating: analysis.healthRating,
-            clinical_evaluation: analysis.clinical_evaluation,
-            metabolic_impact: analysis.metabolic_impact,
-            clinical_synopsis: analysis.clinical_synopsis,
-            health_impact_score: analysis.health_impact_score,
-            confidence_level: analysis.confidence_level,
-            health_status: analysis.healthStatus,
-            personalized_advice: analysis.personalizedAdvice,
+            calories: Number(analysis.calories || 0),
+            protein: Number(analysis.protein || 0),
+            carbs: Number(analysis.carbs || 0),
+            fat: Number(analysis.fat || 0),
+            fiber: Number(analysis.fiber || 0),
+            sugar: Number(analysis.sugar || 0),
+            health_rating: Number(analysis.healthRating || 5),
+            description: analysis.description,
             serving_size: analysis.serving_size || '1 serving',
             image_url: analysis.image_url || analysis.mealImage,
+            barcode: analysis.barcode,
         })
         .select()
-        .limit(1)
 
     if (foodError) throw foodError
     const foodItem = foodItemRows && foodItemRows.length > 0 ? foodItemRows[0] : null;
+
+    if (!foodItem) throw new Error("Failed to create food item");
 
     // 2. Save to history
     const { data: historyRows, error: historyError } = await supabase
@@ -116,18 +137,17 @@ export const saveFoodAnalysis = async (userId: string, analysis: any) => {
             user_id: userId,
             food_item_id: foodItem.id,
             meal_type: analysis.meal_type || 'snack',
-            calories_consumed: analysis.calories,
+            calories_consumed: Number(analysis.calories || 0),
             image_url: analysis.image_url || analysis.mealImage,
-            notes: analysis.analysis || analysis.advice
+            notes: String(analysis.political_warning || analysis.description || analysis.advice || '').substring(0, 1000)
         })
-        .select()
-        .limit(1)
+        .select();
 
     if (historyError) throw historyError
     const history = historyRows && historyRows.length > 0 ? historyRows[0] : null;
 
-    // 3. Update daily progress
-    await updateDailyProgress(userId, analysis.calories)
+    // 3. Daily progress is handled by DB TRIGGERS on food_analysis_history
+    // No manual update needed to avoid double-counting or drift.
 
     return history
 }
@@ -144,7 +164,7 @@ export const getFoodHistory = async (userId: string, limit = 50) => {
       food_items (*)
     `)
         .eq('user_id', userId)
-        .order('created_at', { ascending: false })
+        .order('analyzed_at', { ascending: false })
         .limit(limit)
 
     if (error) throw error
@@ -159,7 +179,7 @@ export const getRecentMeals = async (userId: string, limit = 10) => {
             food_items (*)
         `)
         .eq('user_id', userId)
-        .order('created_at', { ascending: false })
+        .order('analyzed_at', { ascending: false })
         .limit(limit);
 
     if (error) throw error;

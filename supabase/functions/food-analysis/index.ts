@@ -4,95 +4,133 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
-serve(async (req) => {
-    // Handle CORS
+serve(async (req: Request) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
 
     try {
         const body = await req.json();
-        const { imageUrl, apiKey: clientApiKey, userId } = body;
+        const { imageUrl, imageBase64, apiKey: clientApiKey, userId } = body;
 
-        console.log("Analyzing image for user:", userId);
-
-        if (!imageUrl) {
-            throw new Error("Image URL is missing from request body");
+        if (!imageUrl && !imageBase64) {
+            throw new Error("Image URL or base64 data is required");
         }
 
-        // Initialize Supabase Client
         const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
         const supabase = createClient(supabaseUrl, supabaseKey);
 
-        let userGoal = "maintain a healthy lifestyle";
-        let restrictions = "none";
-        let dailyCalorieGoal = 2000;
+        let profileContext = "USER PROFILE: General healthy adult. No specific dietary restrictions on file.";
+        let userGoalSummary = "maintain a healthy lifestyle";
+        let userRestrictions = "none known";
 
         if (userId) {
             const { data: onboarding } = await supabase
                 .from('onboarding_responses')
                 .select('*')
                 .eq('user_id', userId)
-                .single();
+                .maybeSingle();
 
             if (onboarding) {
-                userGoal = onboarding.goal || userGoal;
-                restrictions = onboarding.dietary_restrictions || restrictions;
-                dailyCalorieGoal = onboarding.daily_calorie_goal || dailyCalorieGoal;
+                const goal = onboarding.goal || 'maintain a healthy lifestyle';
+                const restrictions = (onboarding.dietary_lifestyle || []).join(', ') || 'none';
+                const medical = onboarding.medical_conditions || 'None reported';
+                const health = onboarding.health_conditions || 'None reported';
+                const calorieTarget = onboarding.daily_calorie_goal || 2000;
+                userGoalSummary = goal;
+                userRestrictions = restrictions;
+
+                profileContext = `USER PROFILE & CONSTRAINTS:
+- PRIMARY GOAL: ${goal}
+- DIETARY LIFESTYLE / RESTRICTIONS: ${restrictions}
+- MEDICAL CONDITIONS: ${medical}
+- HEALTH CONCERNS: ${health}
+- DAILY CALORIE TARGET: ${calorieTarget} kcal/day
+- ASSESSMENT RULE: Based on the above profile, explicitly state whether this meal is GOOD, MODERATE, or POOR for this user and why.`;
             }
         }
 
-        const apiKey = clientApiKey || Deno.env.get('OPENAI_API_KEY');
-        const spoonacularKey = Deno.env.get('SPOONACULAR_API_KEY');
+        const aiPrompt = `You are a world-class Clinical Nutritional AI and Certified Food Scientist with deep expertise in food composition databases (USDA, NCCDB, Atwater).
 
-        const prompt = `You are an expert clinical nutritional AI for the VicCalary app.
-Analyze the provided image with extreme precision using GPT-4o multimodal vision.
+Analyze the provided food image with extreme precision.
 
-USER CONTEXT:
-- Goal: ${userGoal}
-- Restrictions: ${restrictions}
-- Daily Calorie Goal: ${dailyCalorieGoal} kcal
+${profileContext}
 
-TASKS:
-1. IDENTIFY: Detect the exact meal or packaged product.
-2. PORTION ESTIMATION: Analyze visual cues (plates, hands, background) to estimate portion size. Explicitly state assumptions.
-3. NUTRITION: provide estimated Calories, Protein, Carbs, Fat, Fiber, and Sugar.
-4. CLINICAL EVALUATION: Provide a deep analysis of macronutrient distribution, glycemic load implications, lipid density, sodium concerns, protein quality, and fiber adequacy.
-5. METABOLIC IMPACT: Explain how this meal affects the user's specific goal (${userGoal}).
-6. CONFIDENCE: State your confidence level (0-100%) in this visual estimation.
+LOCATION CONTEXT: ${JSON.stringify(body.locationContext || {})}
 
-STRICT JSON OUTPUT:
+━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1 — NARRATIVE REPORT (mandatory style)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Write a detailed nutritional report in professional paragraph form — NOT bullet points or lists.
+
+NARRATIVE SECTIONS:
+• description: EXACTLY 3 full paragraphs (minimum 80 words each):
+   - Para 1: Identify the dish, its main visible ingredients, and overall character/presentation.
+   - Para 2: How the ingredients synergize nutritionally, how they support energy, satiety, and health.
+   - Para 3: Overall assessment — who benefits from this meal, when to eat it, and its lifestyle fit.
+
+• vitamins_and_nutrition: EXACTLY 3-4 full paragraphs (minimum 60 words each), one paragraph per main ingredient, covering specific vitamins (A, B-complex, C, D, E, K), minerals (iron, zinc, magnesium, potassium, calcium), and their systemic health benefits (immune support, heart health, muscle function, etc.).
+
+• recommended_pairings: EXACTLY 2-3 full paragraphs suggesting specific nutritional enhancements (lemon juice, seeds, herbs, fermented foods, beverages) and explaining WHY each one improves the dish nutritionally and in flavor.
+
+• recommendation: ONE sentence tailored to the user's goal (${userGoalSummary}) and restrictions (${userRestrictions}).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2 — CALORIE & MACRO CALCULATION (mission-critical accuracy required)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Using USDA food composition data and visual portion estimation:
+1. Identify each visible ingredient and estimate its portion weight (grams).
+2. Look up its nutritional values per 100g.
+3. Calculate total calories (kcal), protein (g), carbohydrates (g), fat (g), sugar (g), fiber (g) for the FULL MEAL.
+
+CRITICAL RULES:
+- DO NOT use generic round numbers like 500 or 520 kcal.
+- DO NOT copy example values from the prompt. All numbers MUST be calculated from the actual food visible.
+- Calorie estimates must vary based on actual food: a salad ≈ 150-350 kcal, rice bowl ≈ 500-750 kcal, burger ≈ 700-1200 kcal, smoothie ≈ 200-450 kcal.
+- All macros must be nutritionally consistent (e.g., fat calories + protein calories + carb calories ≈ total calories).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3 — PROFILE ALIGNMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Based on the user's profile above:
+- verdict: "GOOD" if the meal strongly supports their goals, "MODERATE" if neutral/mixed, "POOR" if it conflicts with their restrictions or health conditions.
+- user_alignment_boolean: true only if the meal genuinely aligns with the user's stated goal and restrictions.
+- is_compliant: true if meal respects all stated dietary restrictions.
+
+ACCURACY RULES (universal):
+- Only identify ingredients CLEARLY VISIBLE in the image — do NOT hallucinate.
+- All narrative sections must be full paragraphs with NO bullet points.
+- Separate all paragraphs within each field using \\n\\n.
+- DO NOT output pricing, political warnings, or brand data (these are for the product scanner only).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+JSON OUTPUT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━
 {
-  "name": "Exact Name",
-  "calories": number,
-  "protein": number,
-  "carbs": number,
-  "fat": number,
-  "fiber": number,
-  "sugar": number,
-  "portion_size_estimate": "string",
-  "portion_assumptions": "string",
-  "clinical_evaluation": {
-    "macronutrient_distribution": "string",
-    "glycemic_load": "string",
-    "lipid_density": "string",
-    "sodium_concerns": "string",
-    "protein_quality": "string",
-    "fiber_adequacy": "string"
-  },
-  "metabolic_impact": "string",
-  "clinical_synopsis": "A deep, medically-structured paragraph (4-6 sentences) explaining the product's overall impact, nutritional quality, and clinical relevance to the user's goal.",
-  "health_impact_score": number (1-10),
-  "confidence_level": number,
-  "healthRating": number (1-10),
-  "searchQuery": "string"
+  "name": "Exact meal name based on what you see",
+  "description": "paragraph1\\n\\nparagraph2\\n\\nparagraph3",
+  "vitamins_and_nutrition": "ingredient1 paragraph\\n\\ningredient2 paragraph\\n\\ningredient3 paragraph\\n\\nsummary paragraph",
+  "recommended_pairings": "first enhancement paragraph\\n\\nsecond enhancement paragraph\\n\\nthird enhancement paragraph",
+  "recommendation": "Single sentence personalized to the user's profile",
+  "verdict": "GOOD or MODERATE or POOR",
+  "user_alignment_boolean": true,
+  "calories": 487,
+  "protein": 31,
+  "carbs": 52,
+  "fat": 18,
+  "sugar": 6,
+  "fiber": 7,
+  "is_compliant": true
 }
-`;
 
-        console.log("Calling OpenAI GPT-4o...");
+REMINDER: Calculate real values from the actual food in the image. Every meal has a different caloric density. Portion size matters — a large plate has more calories than a small bowl. Adjust accordingly.`;
+
+        const apiKey = clientApiKey || Deno.env.get('OPENAI_API_KEY');
+
         const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -105,67 +143,71 @@ STRICT JSON OUTPUT:
                     {
                         role: "user",
                         content: [
-                            { type: "text", text: prompt },
-                            { type: "image_url", image_url: { url: imageUrl } },
+                            { type: "text", text: aiPrompt },
+                            {
+                                type: "image_url",
+                                image_url: {
+                                    url: imageBase64
+                                        ? `data:image/jpeg;base64,${imageBase64}`
+                                        : imageUrl,
+                                    detail: "high"
+                                }
+                            },
                         ],
                     },
                 ],
-                response_format: { type: "json_object" },
+                response_format: {
+                    type: "json_schema",
+                    json_schema: {
+                        name: "food_analysis",
+                        strict: true,
+                        schema: {
+                            type: "object",
+                            properties: {
+                                name: { type: "string" },
+                                description: { type: "string" },
+                                vitamins_and_nutrition: { type: "string" },
+                                recommended_pairings: { type: "string" },
+                                recommendation: { type: "string" },
+                                verdict: { type: "string", enum: ["GOOD", "MODERATE", "POOR"] },
+                                user_alignment_boolean: { type: "boolean" },
+                                calories: { type: "number" },
+                                protein: { type: "number" },
+                                carbs: { type: "number" },
+                                fat: { type: "number" },
+                                sugar: { type: "number" },
+                                fiber: { type: "number" },
+                                is_compliant: { type: "boolean" }
+                            },
+                            required: [
+                                "name", "description", "vitamins_and_nutrition", "recommended_pairings",
+                                "recommendation", "verdict", "user_alignment_boolean", "calories", "protein",
+                                "carbs", "fat", "sugar", "fiber", "is_compliant"
+                            ],
+                            additionalProperties: false
+                        }
+                    }
+                }
             }),
         });
 
-        if (!aiResponse.ok) throw new Error(`OpenAI error: ${await aiResponse.text()}`);
+        if (!aiResponse.ok) {
+            const errText = await aiResponse.text();
+            throw new Error(`OpenAI error: ${errText}`);
+        }
+
         const aiResult = await aiResponse.json();
         const parsed = JSON.parse(aiResult.choices[0].message.content);
 
-        // --- SPOONACULAR INTEGRATION FOR VERIFIED DATA & HERO IMAGE ---
-        let verifiedData = {};
-        if (spoonacularKey) {
-            try {
-                const searchRes = await fetch(`https://api.spoonacular.com/recipes/complexSearch?query=${encodeURIComponent(parsed.searchQuery)}&number=1&apiKey=${spoonacularKey}`);
-                const searchData = await searchRes.json();
-
-                if (searchData.results && searchData.results.length > 0) {
-                    const recipeId = searchData.results[0].id;
-                    const infoRes = await fetch(`https://api.spoonacular.com/recipes/${recipeId}/information?includeNutrition=true&apiKey=${spoonacularKey}`);
-                    const info = await infoRes.json();
-
-                    if (info.nutrition && info.nutrition.nutrients) {
-                        const getNutrient = (name: string) => info.nutrition.nutrients.find((n: any) => n.name === name)?.amount;
-                        verifiedData = {
-                            calories: getNutrient('Calories') || parsed.calories,
-                            protein: getNutrient('Protein') || parsed.protein,
-                            carbs: getNutrient('Carbohydrates') || parsed.carbs,
-                            fat: getNutrient('Fat') || parsed.fat,
-                            heroImage: info.image
-                        };
-                    }
-                }
-            } catch (err) {
-                console.warn("Spoonacular verification failed, using AI estimates:", err);
-            }
-        }
-
-        const finalData = {
-            ...parsed,
-            ...verifiedData,
-            healthRating: 8, // Simplified for this logic, will be refined by coach
-            personalizedAdvice: `Based on your goal of ${userGoal}, this ${parsed.name} looks like a solid choice.`
-        };
-
-        // Map healthRating to visual status
-        const healthStatus = finalData.calories > (dailyCalorieGoal * 0.4) ? 'POOR' : finalData.calories > (dailyCalorieGoal * 0.2) ? 'MODERATE' : 'GOOD';
-
-        return new Response(JSON.stringify({
-            ...finalData,
-            healthStatus
-        }), {
+        return new Response(JSON.stringify({ ...parsed, healthStatus: parsed.verdict }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
 
-    } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-            status: 200,
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error("Error in food-analysis:", message);
+        return new Response(JSON.stringify({ error: message }), {
+            status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
     }

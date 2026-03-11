@@ -1,188 +1,284 @@
-import { useState } from "react";
-import { useTranslation } from "@/lib/api/translation";
+import { useNavigate } from "react-router-dom";
+import { AlertCircle, ShoppingCart, Scale, MessageSquare, Check, Globe } from "lucide-react";
+import { useCurrency } from "../lib/CurrencyContext";
 
 interface ProductDetailsProps {
     productImage: string;
     productName: string;
-    servingSize: string;
-    healthStatus: "GOOD" | "MODERATE" | "POOR";
-    country?: string;
-    expiry?: string;
-    calories: number;
-    ai_insight?: string;
-    ingredient_quality?: string;
-    macro_balance_evaluation?: string;
-    health_impact_rationale?: string;
-    financialImpact?: "LOW" | "MODERATE" | "HIGH";
-    currentBalance?: number;
-    alternatives?: string[]; // Better UI for suggestions
+    servingSize?: string;
+    description?: string;
+    vitamins_and_nutrition?: string;
+    recommendation?: string;
+    recommended_pairings?: string;
+    healthStatus?: string;
+    calories?: number;
+    protein?: number;
+    carbs?: number;
+    fat?: number;
+    sugar?: number;
+    fiber?: number;
+    origin_country?: string;
+    brand?: string;
+    manufacturer?: string;
+    estimated_price?: string | number;
+    is_compliant?: boolean;
+    user_alignment_boolean?: boolean;
+    political_warning?: string;
+    cheaper_alternatives?: Array<{ name: string; price: string | number; reason: string }>;
     onClose: () => void;
     onAddToDiary: () => void;
 }
+
+const ChevronLeft = ({ className }: { className?: string }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+    </svg>
+);
 
 export function ProductDetails({
     productImage,
     productName,
     servingSize,
+    description,
+    vitamins_and_nutrition,
+    recommendation,
+    recommended_pairings,
     healthStatus,
-    country = "N/A",
-    expiry = "N/A",
-    calories,
-    ai_insight,
-    ingredient_quality,
-    macro_balance_evaluation,
-    health_impact_rationale,
-    financialImpact,
-    currentBalance,
-    alternatives = [],
+    calories = 0,
+    protein = 0,
+    carbs = 0,
+    fat = 0,
+    sugar,
+    fiber,
+    origin_country,
+    brand,
+    manufacturer,
+    estimated_price,
+    is_compliant,
+    user_alignment_boolean,
+    political_warning,
+    cheaper_alternatives,
     onClose,
     onAddToDiary,
 }: ProductDetailsProps) {
-    const { t } = useTranslation();
-    const healthColors = {
-        GOOD: { bg: "#E5F5E4", text: "#4CAF50" },
-        MODERATE: { bg: "#FFF3E0", text: "#FF9800" },
-        POOR: { bg: "#FFEBEE", text: "#F44336" },
+    const navigate = useNavigate();
+    const { formatCurrency } = useCurrency();
+    const isEthical = !political_warning;
+
+    const handleConsultCoach = () => {
+        navigate('/chat', {
+            state: {
+                initialMessage: `I just scanned ${productName}. Tell me more about this product and whether it fits my health goals.`
+            }
+        });
     };
 
-    const getImpactColor = (impact?: string) => {
-        if (impact === 'LOW') return "text-emerald-400";
-        if (impact === 'HIGH') return "text-rose-400";
-        return "text-amber-400";
+    const renderParagraphs = (text: string | undefined) => {
+        if (!text) return null;
+        return text.split('\n\n').filter(p => p.trim()).map((para, i) => (
+            <p key={i} className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
+                {para}
+            </p>
+        ));
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="relative mx-auto flex w-full max-w-md h-[90vh] flex-col overflow-hidden bg-gradient-to-b from-[#3A4B6B] to-[#2C3D5D] rounded-3xl shadow-2xl">
-                <div className="relative z-10 flex h-full w-full flex-col p-6 pb-8 pt-8 text-white overflow-y-auto custom-scrollbar">
-                    {/* Header */}
-                    <header className="flex items-center justify-between mb-4">
-                        <button
-                            onClick={onClose}
-                            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-                        >
-                            <span className="material-symbols-outlined text-xl">
-                                arrow_back_ios_new
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xl p-0 sm:p-4">
+            <div className="w-full max-w-md sm:rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col bg-white dark:bg-[#0a0f14] max-h-screen sm:max-h-[92vh] rounded-t-[2.5rem]">
+
+                {/* POLITICAL ALERT — Red Banner (Highest Priority) */}
+                {political_warning && (
+                    <div className="bg-rose-600 py-4 px-6 flex items-start gap-3 shrink-0">
+                        <AlertCircle className="w-5 h-5 text-white shrink-0 mt-0.5" />
+                        <div>
+                            <p className="text-white text-[12px] font-black uppercase tracking-wider mb-1">
+                                ⚠️ Ethical Responsibility Alert
+                            </p>
+                            <p className="text-white/90 text-[12px] leading-relaxed">
+                                {political_warning}
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* ETHICAL CLEAR Banner */}
+                {isEthical && user_alignment_boolean && (
+                    <div className="bg-[#0a2e52] py-3 px-6 flex items-center justify-center gap-2 shrink-0">
+                        <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                        <span className="text-white text-[11px] font-black uppercase tracking-[0.2em]">
+                            Ethically Clear · Personalized Match
+                        </span>
+                    </div>
+                )}
+
+                {/* Header Image */}
+                <div className="relative h-52 shrink-0">
+                    <img src={productImage} className="w-full h-full object-cover" alt={productName} />
+                    <div className="absolute inset-0 bg-gradient-to-t from-white dark:from-[#0a0f14] via-black/20 to-transparent" />
+                    <button
+                        onClick={onClose}
+                        className="absolute top-5 left-5 p-2.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 hover:bg-black/60 transition-all"
+                    >
+                        <ChevronLeft className="w-5 h-5 text-white" />
+                    </button>
+
+                    {/* Country & Brand Badges */}
+                    <div className="absolute bottom-4 left-4 flex flex-wrap gap-2">
+                        {origin_country && (
+                            <span className="px-3 py-1 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold rounded-full border border-white/10 flex items-center gap-1">
+                                <Globe className="w-3 h-3" /> {origin_country}
                             </span>
-                        </button>
-                        <h1 className="text-lg font-semibold">{t('product_details')}</h1>
-                        <div className="w-10"></div>
-                    </header>
-
-                    {/* Main Content */}
-                    <main className="flex flex-col gap-6">
-                        {/* Product Image */}
-                        <div className="relative aspect-video w-full rounded-2xl bg-white shadow-xl overflow-hidden">
-                            <img
-                                alt={productName}
-                                className="h-full w-full object-cover"
-                                src={productImage}
-                            />
-                            {/* Health Status Badge */}
-                            <div
-                                className="absolute top-4 left-4 flex h-8 items-center justify-center rounded-full px-4 shadow-sm backdrop-blur-md"
-                                style={{ backgroundColor: `${healthColors[healthStatus].bg}CC` }}
-                            >
-                                <span
-                                    className="font-bold text-xs uppercase"
-                                    style={{ color: healthColors[healthStatus].text }}
-                                >
-                                    {healthStatus} CHOICE
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Product Info Card */}
-                        <div className="bg-white/10 rounded-2xl p-4 border border-white/10 flex justify-between items-center">
-                            <div className="flex-1 border-r border-white/10 p-2 text-center">
-                                <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{t('calories')}</p>
-                                <p className="text-lg font-bold">{calories}</p>
-                            </div>
-                            <div className="flex-1 border-r border-white/10 p-2 text-center">
-                                <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{t('balance')}</p>
-                                <p className="text-lg font-bold">${currentBalance?.toFixed(2)}</p>
-                            </div>
-                            <div className="flex-1 p-2 text-center">
-                                <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Impact</p>
-                                <p className={`text-lg font-bold ${getImpactColor(financialImpact)}`}>{financialImpact}</p>
-                            </div>
-                        </div>
-
-                        {/* Title & Insight */}
-                        <div className="flex flex-col gap-2">
-                            <h2 className="text-2xl font-bold">{productName}</h2>
-                            <span className="text-white/60 text-sm font-medium">{servingSize}</span>
-
-                            {ai_insight && (
-                                <div className="mt-2 bg-[#2ECC71]/10 border border-[#2ECC71]/20 rounded-xl p-4 flex gap-3">
-                                    <span className="material-symbols-outlined text-[#2ECC71]">verified_user</span>
-                                    <p className="text-sm italic text-white/90 leading-relaxed font-medium">
-                                        "{ai_insight}"
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Clinical Evaluation Layer */}
-                            {(ingredient_quality || macro_balance_evaluation || health_impact_rationale) && (
-                                <div className="mt-4 space-y-3 bg-black/20 rounded-2xl p-4 border border-white/5">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="material-symbols-outlined text-[16px] text-blue-400">clinical_notes</span>
-                                        <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">Clinical Analysis</span>
-                                    </div>
-
-                                    {ingredient_quality && (
-                                        <div>
-                                            <span className="block text-[8px] font-bold text-white/30 uppercase mb-0.5">Ingredient Quality</span>
-                                            <p className="text-xs text-white/80 leading-snug">{ingredient_quality}</p>
-                                        </div>
-                                    )}
-
-                                    {macro_balance_evaluation && (
-                                        <div>
-                                            <span className="block text-[8px] font-bold text-white/30 uppercase mb-0.5">Macro Balance</span>
-                                            <p className="text-xs text-white/80 leading-snug">{macro_balance_evaluation}</p>
-                                        </div>
-                                    )}
-
-                                    {health_impact_rationale && (
-                                        <div className="pt-2 border-t border-white/5">
-                                            <p className="text-[10px] italic text-white/60 leading-tight">{health_impact_rationale}</p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* AI Alternatives */}
-                        {alternatives && alternatives.length > 0 && (
-                            <div className="flex flex-col gap-3">
-                                <h3 className="text-sm font-bold uppercase tracking-widest text-white/40">{t('healthier_alternatives')}</h3>
-                                <div className="flex flex-col gap-2">
-                                    {alternatives.map((alt, idx) => (
-                                        <div key={idx} className="bg-white/5 rounded-xl p-3 border border-white/5 flex items-center gap-3">
-                                            <div className="size-8 rounded-full bg-vic-green/20 flex items-center justify-center">
-                                                <span className="material-symbols-outlined text-vic-green text-sm">restaurant</span>
-                                            </div>
-                                            <span className="text-sm text-white/90">{alt}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
                         )}
-                    </main>
-
-                    {/* Footer */}
-                    <footer className="mt-8 pb-4">
-                        <button
-                            onClick={onAddToDiary}
-                            className="flex h-14 w-full items-center justify-center rounded-2xl bg-[#2ECC71] shadow-[0_8px_20px_rgba(46,204,113,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all"
-                        >
-                            <span className="text-lg font-black text-white">
-                                {t('log_product')}
+                        {brand && (
+                            <span className="px-3 py-1 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold rounded-full border border-white/10">
+                                {brand}
                             </span>
-                        </button>
-                    </footer>
+                        )}
+                    </div>
                 </div>
+
+                {/* Scrollable Content */}
+                <main className="flex-1 overflow-y-auto px-7 pb-4 space-y-8 -mt-8 relative z-10 custom-scrollbar">
+
+                    {/* 1. Product Name & Manufacturer */}
+                    <div>
+                        <h2 className="text-[26px] font-black text-slate-900 dark:text-white leading-tight tracking-tight">
+                            {productName}
+                        </h2>
+                        {manufacturer && (
+                            <p className="text-slate-400 text-sm mt-0.5 flex items-center gap-1.5">
+                                <ShoppingCart className="w-3.5 h-3.5" />
+                                {manufacturer}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* 2. Description Paragraphs */}
+                    {description && (
+                        <div className="space-y-4">
+                            {renderParagraphs(description)}
+                        </div>
+                    )}
+
+                    {/* 3. Vitamins and Nutrition */}
+                    {vitamins_and_nutrition && (
+                        <div className="space-y-4">
+                            <h3 className="text-[17px] font-black text-slate-900 dark:text-white tracking-tight border-b border-slate-100 dark:border-white/8 pb-2">
+                                Vitamins and Nutrition
+                            </h3>
+                            <div className="space-y-4">
+                                {renderParagraphs(vitamins_and_nutrition)}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 4. Recommended Enhancements */}
+                    {recommended_pairings && (
+                        <div className="space-y-4">
+                            <h3 className="text-[17px] font-black text-slate-900 dark:text-white tracking-tight border-b border-slate-100 dark:border-white/8 pb-2">
+                                Recommended
+                            </h3>
+                            <div className="space-y-4">
+                                {renderParagraphs(recommended_pairings)}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 5. Calorie & Macro Summary — Bottom */}
+                    <div className="bg-slate-900 dark:bg-white/5 rounded-3xl p-6 text-center border border-slate-800 dark:border-white/10">
+                        <div className="text-4xl font-black text-white mb-1">
+                            ~{calories} kcal
+                        </div>
+                        <div className="text-sm font-bold text-slate-400 tracking-wider mb-4">
+                            P: {protein}g &nbsp;•&nbsp; F: {fat}g &nbsp;•&nbsp; C: {carbs}g
+                        </div>
+                        <div className="flex justify-center flex-wrap gap-2">
+                            {sugar != null && (
+                                <span className="px-3 py-1 bg-rose-500/10 text-rose-400 text-xs font-bold rounded-full">
+                                    Sugar {sugar}g
+                                </span>
+                            )}
+                            {fiber != null && (
+                                <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">
+                                    Fiber {fiber}g
+                                </span>
+                            )}
+                            {estimated_price && (
+                                <span className="px-3 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full flex items-center gap-1">
+                                    <ShoppingCart className="w-3 h-3" />
+                                    {formatCurrency(estimated_price)} (market est.)
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Personalized Recommendation */}
+                    {recommendation && (
+                        <div className="p-5 bg-[#0a2e52]/10 dark:bg-[#0a2e52]/20 border border-[#0a2e52]/20 rounded-2xl">
+                            <p className="text-[14px] leading-relaxed text-slate-600 dark:text-slate-300 italic">
+                                {recommendation}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Smart Alternatives (when political warning) */}
+                    {cheaper_alternatives && cheaper_alternatives.length > 0 && (
+                        <div className="space-y-3">
+                            <h3 className="text-[13px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                                {political_warning ? '🔄 Ethical Alternatives' : 'Smart Alternatives'}
+                            </h3>
+                            <div className="space-y-2">
+                                {cheaper_alternatives.map((alt, i) => (
+                                    <div key={i} className="flex items-center justify-between p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10">
+                                        <div>
+                                            <p className="text-[14px] font-black text-slate-900 dark:text-white">{alt.name}</p>
+                                            <p className="text-[11px] text-slate-500">{alt.reason}</p>
+                                        </div>
+                                        <span className="text-[13px] font-black text-emerald-500">{formatCurrency(alt.price)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </main>
+
+                {/* Footer Actions */}
+                <div className="px-7 py-6 shrink-0 bg-white dark:bg-[#0a0f14] border-t border-slate-100 dark:border-white/5 space-y-3">
+                    <div className="flex gap-3">
+                        {!political_warning && (
+                            <button
+                                onClick={onAddToDiary}
+                                className="flex-1 py-4 bg-[#0a2e52] text-white rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all shadow-xl flex items-center justify-center gap-2"
+                            >
+                                <Scale className="w-5 h-5" />
+                                Log Product
+                            </button>
+                        )}
+                        {political_warning && (
+                            <button
+                                onClick={onClose}
+                                className="flex-1 py-4 bg-rose-600 text-white rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            >
+                                <AlertCircle className="w-5 h-5" />
+                                Avoid Product
+                            </button>
+                        )}
+                        <button
+                            onClick={handleConsultCoach}
+                            className="flex-1 py-4 bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-white rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                        >
+                            <MessageSquare className="w-5 h-5" />
+                            Ask Coach
+                        </button>
+                    </div>
+                </div>
+
+                <style>{`
+                    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+                    .dark\\:border-white\\/8 { border-color: rgba(255,255,255,0.08); }
+                `}</style>
             </div>
         </div>
     );

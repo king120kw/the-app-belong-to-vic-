@@ -7,130 +7,71 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
-    }
+    if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
     try {
         const { userId } = await req.json();
-
-        if (!userId) {
-            throw new Error("User ID is required");
-        }
-
         const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
         const supabase = createClient(supabaseUrl, supabaseKey);
 
         const today = new Date().toISOString().split('T')[0];
 
-        // 1. Fetch daily progress
-        const { data: progress } = await supabase
-            .from('daily_progress')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('progress_date', today)
-            .single();
+        // 1. Fetch Today's Data
+        const [{ data: progress }, { data: mealHistory }, { data: onboarding }] = await Promise.all([
+            supabase.from('daily_progress').select('*').eq('user_id', userId).eq('progress_date', today).maybeSingle(),
+            supabase.from('food_analysis_history').select('*, food_items(*)').eq('user_id', userId).gte('analyzed_at', today),
+            supabase.from('onboarding_responses').select('*').eq('user_id', userId).maybeSingle()
+        ]);
 
-        // 2. Fetch food history for today
-        const { data: history } = await supabase
-            .from('food_analysis_history')
-            .select(`
-                *,
-                food_items (*)
-            `)
-            .eq('user_id', userId)
-            .gte('created_at', `${today}T00:00:00`)
-            .lte('created_at', `${today}T23:59:59`);
+        if (!progress) return new Response(JSON.stringify({ message: "No progress found for today" }), { headers: corsHeaders });
 
-        // 3. Fetch budget
-        const { data: budget } = await supabase
-            .from('user_budgets')
-            .select('*')
-            .eq('user_id', userId)
-            .single();
+        // 2. AI Summary Generation
+        const prompt = `You are a helpful and professional Health Coach. 
+Generate a concise, encouraging end-of-day summary for the user.
+Today's Stats: ${progress.calories_consumed}/${progress.calories_goal} kcal.
+Meals: ${mealHistory?.map(m => m.food_items?.name).join(', ')}.
+User Goal: ${onboarding?.goal}.
 
-        // 4. Fetch onboarding context
-        const { data: onboarding } = await supabase
-            .from('onboarding_responses')
-            .select('*')
-            .eq('user_id', userId)
-            .single();
+Instructions:
+1. Praise their progress.
+2. If they were over/under budget or calories, offer a supportive tip.
+3. Keep it to 3-4 sentences.
+4. Tone: Friendly, scientific, and encouraging.`;
 
-        // 5. Generate AI Summary
-        const apiKey = Deno.env.get('OPENAI_API_KEY');
-        const COACH_ID = '00000000-0000-0000-0000-000000000001';
-        let conversationId = null;
-        let summary = "I haven't seen any logs from you today yet. Keep tracking your meals and budget!";
+        const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${Deno.env.get('OPENAI_API_KEY')}`
+            },
+            body: JSON.stringify({
+                model: "gpt-4o",
+                messages: [{ role: "user", content: prompt }]
+            }),
+        });
 
-        if (apiKey && (progress || history?.length > 0)) {
-            const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${apiKey}`,
-                },
-                body: JSON.stringify({
-                    model: "gpt-4o",
-                    messages: [
-                        {
-                            role: "system",
-                            content: "You are Health Coach, a high-performance health and financial coach. Your tone is professional, encouraging, but direct. You help users stay on track with their calories and their grocery budget."
-                        },
-                        {
-                            role: "user",
-                            content: `Analyze my performance for today (${today}).
-                            
-                            GOALS:
-                            Daily Calorie Goal: ${onboarding?.daily_calorie_goal || 2000} kcal
-                            Current Consumed: ${progress?.calories_consumed || 0} kcal
-                            Meals Logged: ${progress?.meals_logged || 0}
-                            
-                            FINANCIALS:
-                            Monthly Budget: $${budget?.monthly_limit || 0}
-                            Current Balance: $${budget?.current_balance || 0}
-                            
-                            MEALS LOGGED:
-                            ${history?.map(h => `- ${h.food_items.name} (${h.calories_consumed} kcal)`).join('\n') || 'No meals logged yet.'}
-                            
-                            TASK:
-                            Provide a concise 2-3 sentence summary of my day. If I'm over calories, give a specific tip. If my budget is low, warn me. End with a motivational one-liner.`
-                        }
-                    ],
-                    max_tokens: 300,
-                }),
+        const aiData = await aiRes.json();
+        const summary = aiData.choices[0].message.content;
+
+        // 3. Send to Chat (AI/System Message)
+        const { data: convs } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('conversation_type', 'ai')
+            .limit(1);
+
+        if (convs && convs.length > 0) {
+            await supabase.from('messages').insert({
+                conversation_id: convs[0].id,
+                sender_id: '00000000-0000-0000-0000-000000000000',
+                message_type: 'system',
+                content: `🌙 DAILY SUMMARY: ${summary}`,
+                metadata: { type: 'daily_summary', date: today, stats: progress }
             });
-
-            if (aiResponse.ok) {
-                const aiData = await aiResponse.json();
-                summary = aiData.choices[0]?.message?.content || summary;
-
-                // 6. Post to Chat - Use RPC to ensure we target the CORRECT 'ai' conversation
-                const { data: systemConvs, error: rpcError } = await supabase.rpc('provision_user_system_chats', { p_user_id: userId });
-
-                if (rpcError) {
-                    console.error("RPC Error provisioning chats:", rpcError);
-                    throw rpcError;
-                }
-
-                conversationId = systemConvs.coach_conversation_id;
-
-                // Insert the summary message
-                if (conversationId) {
-                    await supabase.from('messages').insert({
-                        conversation_id: conversationId,
-                        sender_id: COACH_ID,
-                        content: `📊 **Daily Briefing** (${today})\n\n${summary}`,
-                        message_type: 'text'
-                    });
-                }
-            }
         }
 
-        return new Response(JSON.stringify({
-            status: "ok",
-            message: "Daily briefing sent to chat"
-        }), {
+        return new Response(JSON.stringify({ summary }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
 

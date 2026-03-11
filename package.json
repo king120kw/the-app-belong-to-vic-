@@ -24,6 +24,8 @@
     "@daily-co/daily-js": "^0.87.0",
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.86.0",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "dotenv": "^17.2.1",
     "emoji-picker-react": "^4.17.1",
     "express": "^5.1.0",

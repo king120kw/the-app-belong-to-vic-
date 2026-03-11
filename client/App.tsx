@@ -293,6 +293,8 @@ const MainLayout = () => {
   );
 };
 
+import { CurrencyProvider } from "./lib/CurrencyContext";
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -301,9 +303,11 @@ export default function App() {
         <Sonner position="top-center" />
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <ErrorBoundary>
-            <AuthProvider>
-              <MainLayout />
-            </AuthProvider>
+            <CurrencyProvider>
+              <AuthProvider>
+                <MainLayout />
+              </AuthProvider>
+            </CurrencyProvider>
           </ErrorBoundary>
         </BrowserRouter>
       </TooltipProvider>

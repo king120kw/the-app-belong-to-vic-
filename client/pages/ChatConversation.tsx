@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 import { useTranslation } from '../lib/api/translation';
 import CameraCapture from '../components/CameraCapture';
+import { saveFoodAnalysis } from '../lib/api/food';
 
 // --- Sub-components ---
 
@@ -1128,9 +1129,67 @@ export default function ChatConversation() {
         const metadata = msg.metadata;
         const mediaUrl = (typeof metadata === 'object' && metadata !== null) ? metadata.url : metadata;
 
+        const handleLogFood = async (foodData: any) => {
+            if (!user?.id) return;
+            const tid = toast.loading("Adding to your daily log...");
+            try {
+                await saveFoodAnalysis(user.id, {
+                    ...foodData,
+                    image_url: mediaUrl || foodData.image_url
+                });
+                toast.success(`${foodData.name} logged successfully!`, { id: tid });
+                queryClient.invalidateQueries({ queryKey: ['daily-progress'] });
+            } catch (err) {
+                console.error("Log failed:", err);
+                toast.error("Failed to log food", { id: tid });
+            }
+        };
+
         switch (msg.message_type) {
             case 'image':
-                return <img src={mediaUrl} alt="Shared" className="max-w-full rounded-lg cursor-pointer" onClick={() => window.open(mediaUrl)} />;
+                return (
+                    <div className="flex flex-col gap-2">
+                        <img src={mediaUrl} alt="Shared" className="max-w-full rounded-lg cursor-pointer" onClick={() => window.open(mediaUrl)} />
+                        {/* Check for food analysis results in metadata */}
+                        {metadata?.foodAnalysis && (
+                            <div className="mt-3 p-4 bg-white/5 dark:bg-black/40 rounded-3xl border border-vic-green/30 backdrop-blur-md shadow-lg">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <h4 className="font-black text-vic-green text-sm uppercase tracking-tight">{metadata.foodAnalysis.name}</h4>
+                                            <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest border ${metadata.foodAnalysis.healthStatus === 'GOOD' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                                    metadata.foodAnalysis.healthStatus === 'POOR' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                                        'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                                }`}>
+                                                {metadata.foodAnalysis.healthStatus || 'Neutral'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-[10px] text-slate-500 font-bold uppercase overflow-x-auto no-scrollbar">
+                                            <span className="shrink-0">{metadata.foodAnalysis.calories} kcal</span>
+                                            <span className="shrink-0 text-white/20">|</span>
+                                            <span className="shrink-0 text-vic-blue">{metadata.foodAnalysis.protein}g P</span>
+                                            <span className="shrink-0 text-amber-400">{metadata.foodAnalysis.carbs}g C</span>
+                                            <span className="shrink-0 text-rose-400">{metadata.foodAnalysis.fat}g F</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleLogFood(metadata.foodAnalysis)}
+                                        className="shrink-0 w-10 h-10 bg-vic-green text-white rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-vic-green/20"
+                                    >
+                                        <span className="material-symbols-outlined text-lg">add</span>
+                                    </button>
+                                </div>
+                                {metadata.foodAnalysis.clinical_synopsis && (
+                                    <div className="mt-3 pt-3 border-t border-black/5 dark:border-white/5">
+                                        <p className="text-[11px] leading-relaxed italic text-slate-600 dark:text-slate-400 font-medium">
+                                            "{metadata.foodAnalysis.clinical_synopsis}"
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                );
             case 'video':
                 return <video src={mediaUrl} controls className="max-w-full rounded-lg" />;
             case 'voice':
@@ -1161,6 +1220,60 @@ export default function ChatConversation() {
                     </div>
                 );
             default:
+                // Handle JSON-formatted AI responses that might contain analysis
+                if (isAI && msg.content?.startsWith('{')) {
+                    try {
+                        const parsed = JSON.parse(msg.content);
+                        if (parsed.foodAnalysis) {
+                            return (
+                                <div className="p-4 bg-white/5 dark:bg-black/40 rounded-3xl border border-vic-green/30 backdrop-blur-md shadow-lg my-2 max-w-[280px]">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h3 className="font-black text-vic-green text-sm uppercase tracking-tight mb-1">{parsed.foodAnalysis.name}</h3>
+                                            <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest border ${parsed.foodAnalysis.healthStatus === 'GOOD' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                                    parsed.foodAnalysis.healthStatus === 'POOR' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                                        'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                                }`}>
+                                                {parsed.foodAnalysis.healthStatus || 'Neutral'}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => handleLogFood(parsed.foodAnalysis)}
+                                            className="w-10 h-10 bg-vic-green text-white rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-vic-green/20"
+                                        >
+                                            <span className="material-symbols-outlined text-lg">add</span>
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-black uppercase mb-4">
+                                        <div className="bg-white/5 p-2 rounded-xl border border-white/5">
+                                            <div className="text-white">{parsed.foodAnalysis.calories}</div>
+                                            <div className="text-slate-500 text-[6px]">KCAL</div>
+                                        </div>
+                                        <div className="bg-white/5 p-2 rounded-xl border border-white/5">
+                                            <div className="text-vic-blue">{parsed.foodAnalysis.protein}g</div>
+                                            <div className="text-slate-500 text-[6px]">PRO</div>
+                                        </div>
+                                        <div className="bg-white/5 p-2 rounded-xl border border-white/5">
+                                            <div className="text-amber-400">{parsed.foodAnalysis.carbs}g</div>
+                                            <div className="text-slate-500 text-[6px]">CARB</div>
+                                        </div>
+                                        <div className="bg-white/5 p-2 rounded-xl border border-white/5">
+                                            <div className="text-rose-400">{parsed.foodAnalysis.fat}g</div>
+                                            <div className="text-slate-500 text-[6px]">FAT</div>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-[11px] leading-relaxed italic text-slate-300 border-t border-white/5 pt-3">
+                                        "{parsed.foodAnalysis.clinical_synopsis || parsed.reply}"
+                                    </p>
+                                </div>
+                            );
+                        }
+                    } catch (e) {
+                        // Not valid JSON, fall through to text
+                    }
+                }
                 return <p className="text-[14.2px] leading-[19px] whitespace-pre-wrap">{msg.content}</p>;
         }
     };

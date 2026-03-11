@@ -16,10 +16,13 @@ import { uploadAvatar } from "@/lib/api/auth";
 import { CustomAnimatedIcon } from "@/components/CustomAnimatedIcon";
 import { CheckpointCalendar } from "@/components/CheckpointCalendar";
 import { useTranslation } from "@/lib/api/translation";
+import { useCurrency } from "@/lib/CurrencyContext";
 import { BottomNavbar } from "@/components/BottomNavbar";
 import { supabase } from "@/lib/supabase";
 import { SpiritualReminder } from "@/components/SpiritualReminder";
 import { ManualProgressInput } from "@/components/ManualProgressInput";
+import QRScanner from "@/components/QRScanner";
+import { scanProduct } from "@/lib/api/food";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -48,7 +51,14 @@ export default function Dashboard() {
   const [showProductDetails, setShowProductDetails] = useState(false);
   const [productData, setProductData] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const { countryCode, currencySymbol: globalCurrencySymbol } = useCurrency();
   const [showProgressInput, setShowProgressInput] = useState(false);
+
+  // Derive locationContext from the global currency provider
+  const locationContext = {
+    country: countryCode,
+    currency_symbol: globalCurrencySymbol
+  };
   const [selectedProgressDate, setSelectedProgressDate] = useState<Date>(new Date());
 
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
@@ -75,8 +85,8 @@ export default function Dashboard() {
   const { data: onboarding } = useQuery({
     queryKey: ['onboarding', user?.id],
     queryFn: async () => {
-      const { data: rows, error } = await supabase
-        .from('onboarding_responses')
+      const { data: rows, error } = await (supabase
+        .from('onboarding_responses') as any)
         .select('*')
         .eq('user_id', user!.id)
         .limit(1);
@@ -114,16 +124,6 @@ export default function Dashboard() {
       document.documentElement.classList.add("dark");
     }
   }, [user, profile, authLoading]);
-
-  // Auto-scan timer for Barcode Scanner
-  useEffect(() => {
-    if (showScannerModal && !isAnalyzing) {
-      const timer = window.setTimeout(() => {
-        captureScannerPhoto();
-      }, 5000); // 5 seconds auto-trigger
-      return () => clearTimeout(timer);
-    }
-  }, [showScannerModal, isAnalyzing]);
 
   const toggleTheme = () => {
     const newMode = !darkMode;
@@ -211,16 +211,37 @@ export default function Dashboard() {
       setIsAnalyzing(true);
       const video = cameraVideoRef.current;
       const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      ctx?.drawImage(video, 0, 0);
 
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+      // Limit size to 800px max dimension to prevent timeouts
+      const maxDim = 800;
+      let width = video.videoWidth;
+      let height = video.videoHeight;
+
+      if (width > height) {
+        if (width > maxDim) {
+          height = (height * maxDim) / width;
+          width = maxDim;
+        }
+      } else {
+        if (height > maxDim) {
+          width = (width * maxDim) / height;
+          height = maxDim;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(video, 0, 0, width, height);
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.7));
       if (!blob) throw new Error("Failed to capture image");
 
       const file = new File([blob], "meal.jpg", { type: "image/jpeg" });
-      const analysis = await apiAnalyzeFoodImage(user!.id, file);
+      const analysis = await apiAnalyzeFoodImage(user!.id, file, {
+        currentTime: new Date().toISOString(),
+        locationContext
+      });
 
       const imageData = canvas.toDataURL("image/jpeg");
       const formattedAnalysis = {
@@ -230,22 +251,26 @@ export default function Dashboard() {
           {
             name: analysis.name,
             calories: analysis.calories,
-            image: imageData,
+            description: analysis.description,
+            vitamins_and_nutrition: analysis.vitamins_and_nutrition,
+            recommended_pairings: analysis.recommended_pairings,
+            recommendation: analysis.recommendation,
             protein: analysis.protein,
             carbs: analysis.carbs,
             fat: analysis.fat,
-            fiber: analysis.fiber,
             sugar: analysis.sugar,
-            portion_size_estimate: analysis.portion_size_estimate,
-            portion_assumptions: analysis.portion_assumptions,
-            clinical_evaluation: analysis.clinical_evaluation,
-            metabolic_impact: analysis.metabolic_impact,
-            clinical_synopsis: analysis.clinical_synopsis,
-            health_impact_score: analysis.health_impact_score,
-            healthRating: analysis.healthRating,
-            confidence_level: analysis.confidence_level,
-            healthStatus: analysis.healthStatus,
-            personalizedAdvice: analysis.personalizedAdvice
+            fiber: analysis.fiber,
+            healthStatus: (analysis as any).verdict || analysis.healthStatus,
+            is_compliant: analysis.is_compliant,
+            user_alignment_boolean: analysis.user_alignment_boolean,
+            political_warning: analysis.political_warning,
+            estimated_price: analysis.estimated_price,
+            cheaper_alternatives: analysis.cheaper_alternatives,
+            type: 'FOOD' as const,
+            brand: (analysis as any).brand,
+            manufacturer: (analysis as any).manufacturer,
+            country_of_origin: (analysis as any).country_of_origin,
+            ingredients: (analysis as any).ingredients,
           }
         ],
         ...analysis
@@ -269,10 +294,35 @@ export default function Dashboard() {
 
     try {
       setIsAnalyzing(true);
-      const analysis = await apiAnalyzeFoodImage(user.id, file);
 
-      // Create object URL for preview
+      // Resize image before upload to prevent AI timeouts
+      const img = new Image();
       const imageUrl = URL.createObjectURL(file);
+      await new Promise((resolve) => { img.onload = resolve; img.src = imageUrl; });
+
+      const canvas = document.createElement("canvas");
+      const maxDim = 800;
+      let width = img.width;
+      let height = img.height;
+      if (width > height) {
+        if (width > maxDim) { height = (height * maxDim) / width; width = maxDim; }
+      } else {
+        if (height > maxDim) { width = (width * maxDim) / height; height = maxDim; }
+      }
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(img, 0, 0, width, height);
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.7));
+      if (!blob) throw new Error("Failed to process image");
+      const resizedFile = new File([blob], file.name, { type: "image/jpeg" });
+
+      const analysis = await apiAnalyzeFoodImage(user.id, resizedFile, {
+        currentTime: new Date().toISOString(),
+        locationContext
+      });
+
+      const imageData = canvas.toDataURL("image/jpeg");
 
       const formattedAnalysis = {
         mealImage: imageUrl,
@@ -281,22 +331,26 @@ export default function Dashboard() {
           {
             name: analysis.name,
             calories: analysis.calories,
-            image: imageUrl,
+            description: analysis.description,
+            vitamins_and_nutrition: analysis.vitamins_and_nutrition,
+            recommended_pairings: analysis.recommended_pairings,
+            recommendation: analysis.recommendation,
             protein: analysis.protein,
             carbs: analysis.carbs,
             fat: analysis.fat,
-            fiber: analysis.fiber,
             sugar: analysis.sugar,
-            portion_size_estimate: analysis.portion_size_estimate,
-            portion_assumptions: analysis.portion_assumptions,
-            clinical_evaluation: analysis.clinical_evaluation,
-            metabolic_impact: analysis.metabolic_impact,
-            clinical_synopsis: analysis.clinical_synopsis,
-            health_impact_score: analysis.health_impact_score,
-            healthRating: analysis.healthRating,
-            confidence_level: analysis.confidence_level,
-            healthStatus: analysis.healthStatus,
-            personalizedAdvice: analysis.personalizedAdvice
+            fiber: analysis.fiber,
+            healthStatus: (analysis as any).verdict || analysis.healthStatus,
+            is_compliant: analysis.is_compliant,
+            user_alignment_boolean: analysis.user_alignment_boolean,
+            political_warning: analysis.political_warning,
+            estimated_price: analysis.estimated_price,
+            cheaper_alternatives: analysis.cheaper_alternatives,
+            type: 'FOOD' as const,
+            brand: (analysis as any).brand,
+            manufacturer: (analysis as any).manufacturer,
+            country_of_origin: (analysis as any).country_of_origin,
+            ingredients: (analysis as any).ingredients,
           }
         ],
         ...analysis
@@ -328,71 +382,107 @@ export default function Dashboard() {
     }
   };
 
-  const openScanner = async () => {
+  const openScanner = () => {
+    setShowScannerModal(true);
+  };
+
+  const handleQRManualCapture = async (blob: Blob) => {
+    if (!user) return;
+    setIsAnalyzing(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+      const file = new File([blob], "product_scan.jpg", { type: "image/jpeg" });
+      const analysis = await apiAnalyzeFoodImage(user.id, file, {
+        currentTime: new Date().toISOString(),
+        locationContext
       });
-      if (scannerVideoRef.current) {
-        scannerVideoRef.current.srcObject = stream;
-        scannerStreamRef.current = stream;
-      }
-      setShowScannerModal(true);
-    } catch (err) {
-      toast.error("Camera access denied.");
+
+      const imageData = URL.createObjectURL(blob);
+      const formattedAnalysis = {
+        mealImage: imageData,
+        totalCalories: analysis.calories,
+        foodItems: [
+          {
+            name: analysis.name,
+            calories: analysis.calories,
+            description: analysis.description,
+            vitamins_and_nutrition: analysis.vitamins_and_nutrition,
+            recommended_pairings: analysis.recommended_pairings,
+            recommendation: analysis.recommendation,
+            protein: analysis.protein,
+            carbs: analysis.carbs,
+            fat: analysis.fat,
+            sugar: analysis.sugar,
+            fiber: analysis.fiber,
+            healthStatus: (analysis as any).verdict || analysis.healthStatus,
+            is_compliant: analysis.is_compliant,
+            user_alignment_boolean: analysis.user_alignment_boolean,
+            political_warning: analysis.political_warning,
+            estimated_price: analysis.estimated_price,
+            cheaper_alternatives: analysis.cheaper_alternatives,
+            type: 'FOOD' as const,
+            brand: (analysis as any).brand,
+            manufacturer: (analysis as any).manufacturer,
+            country_of_origin: (analysis as any).country_of_origin,
+            ingredients: (analysis as any).ingredients,
+          }
+        ],
+        ...analysis
+      };
+
+      setAnalysisData(formattedAnalysis);
+      setShowScannerModal(false);
+      setShowMealAnalysis(true);
+      toast.success("Product analyzed visually!");
+    } catch (err: any) {
+      console.error("Manual QR Capture Error:", err);
+      toast.error(`Visual analysis failed: ${err.message}`);
+    } finally {
+      setIsAnalyzing(false);
+      setShowScannerModal(false); // Close modal after analysis is done
     }
   };
 
-  const captureScannerPhoto = async () => {
-    if (!scannerVideoRef.current) return;
-
+  const handleBarcodeScan = async (barcode: string) => {
+    if (!user) return;
     try {
       setIsAnalyzing(true);
-      const video = scannerVideoRef.current;
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      ctx?.drawImage(video, 0, 0);
-
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
-      if (!blob) throw new Error("Failed to capture scan");
-
-      const file = new File([blob], "scan.jpg", { type: "image/jpeg" });
-
-      // For now, using vision-based analysis for the scanner photo
-      // but we could also detect barcode here and call scanProduct
-      const analysis = await apiAnalyzeFoodImage(user!.id, file);
-
-      const imageData = canvas.toDataURL("image/jpeg");
+      const data = await scanProduct(user.id, barcode, {
+        currentTime: new Date().toISOString(),
+        locationContext
+      });
 
       const formattedProduct = {
-        productImage: imageData,
-        productName: analysis.name,
-        servingSize: analysis.serving_size || "Per serving",
-        healthStatus: analysis.healthStatus || (analysis.healthRating >= 7 ? 'GOOD' : analysis.healthRating >= 4 ? 'MODERATE' : 'POOR'),
-        country: analysis.country_of_origin || country || "Global",
-        expiry: "Fresh Info",
-        calories: analysis.calories,
-        ai_insight: analysis.clinical_synopsis || analysis.insight || analysis.personalizedAdvice || analysis.ai_insight,
-        clinical_synopsis: analysis.clinical_synopsis,
-        health_impact_score: analysis.health_impact_score,
-        healthRating: analysis.healthRating,
-        ingredient_quality: analysis.ingredient_quality,
-        macro_balance_evaluation: analysis.macro_balance_evaluation,
-        health_impact_rationale: analysis.health_impact_rationale,
-        financialImpact: analysis.financialImpact || "MODERATE",
-        currentBalance: analysis.currentBalance || 0,
-        alternatives: analysis.alternatives || analysis.suggestions || []
+        productImage: data.image_url || data.image || data.productImage || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=300",
+        productName: data.name || data.productName,
+        servingSize: data.serving_size || "1 serving",
+        description: data.description,
+        vitamins_and_nutrition: data.vitamins_and_nutrition,
+        recommendation: data.recommendation,
+        recommended_pairings: data.recommended_pairings,
+        healthStatus: data.healthStatus || data.verdict || 'GOOD',
+        calories: data.calories,
+        protein: data.protein,
+        carbs: data.carbs,
+        fat: data.fat,
+        sugar: data.sugar,
+        fiber: data.fiber,
+        origin_country: data.country_of_origin || data.origin_country,
+        brand: data.brand,
+        manufacturer: data.manufacturer,
+        estimated_price: data.estimated_price,
+        cheaper_alternatives: data.cheaper_alternatives,
+        is_compliant: data.is_compliant,
+        user_alignment_boolean: data.user_alignment_boolean,
+        political_warning: data.political_warning,
       };
 
       setProductData(formattedProduct);
-      closeScanner();
+      setShowScannerModal(false);
       setShowProductDetails(true);
-      toast.success("Product identified!");
+      toast.success("Product identified via Barcode!");
     } catch (err: any) {
-      console.error("Scanner Photo Error:", err);
-      toast.error(`Scan failed: ${err.message}`);
+      console.error("Barcode Scan Error:", err);
+      toast.error(`Barcode scan failed: ${err.message}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -407,7 +497,10 @@ export default function Dashboard() {
         foodItems: [{
           name: productData.productName,
           calories: productData.calories,
-          image: productData.productImage
+          image: productData.productImage,
+          protein: productData.protein,
+          carbs: productData.carbs,
+          fat: productData.fat
         }]
       };
       await logMeal(user.id, mealToLog);
@@ -420,10 +513,6 @@ export default function Dashboard() {
   };
 
   const closeScanner = () => {
-    if (scannerStreamRef.current) {
-      scannerStreamRef.current.getTracks().forEach(track => track.stop());
-      scannerStreamRef.current = null;
-    }
     setShowScannerModal(false);
   };
 
@@ -536,37 +625,14 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className={`modal-overlay ${showScannerModal ? "active" : ""}`}>
-        <div className="modal-content bg-white dark:bg-[#1f2c34] dark:border dark:border-slate-800">
-          <div className="relative bg-black rounded-t-lg">
-            <video ref={scannerVideoRef} className="w-full h-80 object-cover" autoPlay playsInline />
-            <div className="absolute inset-4 border-2 border-vic-green rounded-lg animate-pulse"></div>
-            <button onClick={closeScanner} className="absolute top-4 right-4 bg-black/60 text-white rounded-full p-2 backdrop-blur-sm">
-              <span className="material-symbols-outlined">close</span>
-            </button>
-            <button
-              onClick={captureScannerPhoto}
-              disabled={isAnalyzing}
-              className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-vic-green text-slate-900 rounded-full p-4 shadow-lg disabled:opacity-50"
-            >
-              {isAnalyzing ? (
-                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-slate-900"></div>
-              ) : (
-                <span className="material-symbols-outlined text-4xl">barcode_scanner</span>
-              )}
-            </button>
-            <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/20">
-              <p className="text-white text-xs font-bold whitespace-nowrap">
-                {isAnalyzing ? t('analyzing') : t('auto_scanning')}
-              </p>
-            </div>
-          </div>
-          <div className="p-6">
-            <h3 className="font-bold text-slate-800 dark:text-white text-lg mb-2">{t('scanner')}</h3>
-            <p className="text-sm text-slate-600 dark:text-slate-400">{t('scanner_desc')}</p>
-          </div>
-        </div>
-      </div>
+      {showScannerModal && (
+        <QRScanner
+          isAnalyzing={isAnalyzing}
+          onScan={handleBarcodeScan}
+          onManualCapture={handleQRManualCapture}
+          onClose={closeScanner}
+        />
+      )}
 
       {showMealAnalysis && analysisData && (
         <MealAnalysis

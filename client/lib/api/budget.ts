@@ -16,7 +16,7 @@ export const createBudget = async (userId: string, totalBudget: number, startDat
         .insert({
             user_id: userId,
             total_budget: totalBudget,
-            current_balance: totalBudget,
+            remaining_budget: totalBudget,
             period_start: startDate,
             period_end: endDate,
             is_active: true,

@@ -4,12 +4,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { getActiveBudget, createBudget, getBudgetHistory, deleteBudget } from "../lib/api/budget";
 import { useTranslation } from "../lib/api/translation";
+import { useCurrency } from "../lib/CurrencyContext";
 import { toast } from "sonner";
 
 export default function Budget() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
-    const { t, currencySymbol, formatCurrency } = useTranslation();
+    const { t } = useTranslation();
+    const { currencySymbol, formatCurrency } = useCurrency();
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newBudget, setNewBudget] = useState({
         amount: 500,
@@ -44,6 +46,14 @@ export default function Budget() {
             toast.error(`${t('auth_error')}: ${error.message}`);
         }
     });
+
+    // Adjust default amount based on currency
+    useEffect(() => {
+        if (!activeBudget) {
+            const defaultAmt = currencySymbol === 'Rp' ? 5000000 : 500;
+            setNewBudget(prev => ({ ...prev, amount: defaultAmt }));
+        }
+    }, [currencySymbol, activeBudget]);
 
     const handleCreateBudget = (e: React.FormEvent) => {
         e.preventDefault();
@@ -167,7 +177,7 @@ export default function Budget() {
                                     type="number"
                                     value={newBudget.amount}
                                     onChange={(e) => setNewBudget({ ...newBudget, amount: Number(e.target.value) })}
-                                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0d1418] text-slate-900 dark:text-white"
+                                    className="w-full p-4 rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0d1418] text-slate-900 dark:text-white text-lg font-bold focus:border-vic-green outline-none transition-all"
                                     required
                                 />
                             </div>

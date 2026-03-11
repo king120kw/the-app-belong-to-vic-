@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../lib/AuthContext";
 import { getUserSettings, updateSettings } from "../lib/api/settings";
 import { useTranslation } from "../lib/api/translation";
+import { useCurrency } from "../lib/CurrencyContext";
 import { toast } from "sonner";
 
 export default function Settings() {
@@ -11,8 +12,25 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const { user, loading: authLoading, signOut } = useAuth();
   const { t, lang, country, refreshLocation } = useTranslation();
+  const { currencyCode, setManualOverride, clearOverride } = useCurrency();
   const [darkMode, setDarkMode] = useState(false);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+
+  const currenciesList = [
+    { code: 'USD', name: 'US Dollar', symbol: '$', country: 'US' },
+    { code: 'EUR', name: 'Euro', symbol: '€', country: 'EU' },
+    { code: 'GBP', name: 'British Pound', symbol: '£', country: 'GB' },
+    { code: 'IDR', name: 'Indonesian Rupiah', symbol: 'Rp', country: 'ID' },
+    { code: 'INR', name: 'Indian Rupee', symbol: '₹', country: 'IN' },
+    { code: 'JPY', name: 'Japanese Yen', symbol: '¥', country: 'JP' },
+    { code: 'CNY', name: 'Chinese Yuan', symbol: '¥', country: 'CN' },
+    { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', country: 'AE' },
+    { code: 'SAR', name: 'Saudi Riyal', symbol: 'ر.س', country: 'SA' },
+    { code: 'MYR', name: 'Malaysian Ringgit', symbol: 'RM', country: 'MY' },
+    { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', country: 'AU' },
+    { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$', country: 'CA' },
+  ];
 
   // Fetch user settings
   const { data: settings, isLoading } = useQuery<any>({
@@ -122,6 +140,12 @@ export default function Settings() {
             value={((settings as any)?.is_language_auto !== false) ? `Auto (${currentLangObj?.native || lang.toUpperCase()})` : (currentLangObj?.native || lang.toUpperCase())}
             onClick={() => setShowLanguageModal(true)}
           />
+          <SettingItem
+            label="Currency & Region"
+            icon="payments"
+            value={currencyCode}
+            onClick={() => setShowCurrencyModal(true)}
+          />
         </SettingGroup>
 
         {showLanguageModal && (
@@ -162,6 +186,52 @@ export default function Settings() {
                       </div>
                     </div>
                     {((settings as any)?.is_language_auto === false && lang === l.code) && <span className="material-symbols-outlined">check</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showCurrencyModal && (
+          <div className="fixed inset-0 z-[110] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+            <div className="bg-white dark:bg-[#1f2c34] w-full max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-[#0d1418]">
+                <h2 className="text-lg font-bold">Currency & Region</h2>
+                <button onClick={() => setShowCurrencyModal(false)} className="material-symbols-outlined">close</button>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto">
+                <button
+                  onClick={() => {
+                    clearOverride();
+                    setShowCurrencyModal(false);
+                    toast.success("Set to Auto Detect IP Location");
+                  }}
+                  className={`w-full p-4 text-left flex items-center justify-between border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors bg-vic-green/10 text-vic-green font-bold`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🌍</span>
+                    <span>Auto Detect (IP Location)</span>
+                  </div>
+                </button>
+                {currenciesList.map((c) => (
+                  <button
+                    key={c.code}
+                    onClick={() => {
+                      setManualOverride(c.country, c.code, c.symbol);
+                      setShowCurrencyModal(false);
+                      toast.success(`Currency set to ${c.code}`);
+                    }}
+                    className={`w-full p-4 text-left flex items-center justify-between border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${currencyCode === c.code ? 'bg-vic-green/10 text-vic-green font-bold' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold w-12 text-center text-slate-400">{c.code}</span>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{c.name}</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">({c.symbol})</span>
+                      </div>
+                    </div>
+                    {currencyCode === c.code && <span className="material-symbols-outlined">check</span>}
                   </button>
                 ))}
               </div>

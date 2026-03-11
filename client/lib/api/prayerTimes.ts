@@ -20,9 +20,15 @@ export const getPrayerTimes = async (location?: LocationData): Promise<PrayerTim
         const date = new Date().toISOString().split('T')[0];
 
         // Aladhan API for prayer times
-        const url = `https://api.aladhan.com/v1/timingsByAddress/${date}?address=${encodeURIComponent(loc.country)}&timezone=${encodeURIComponent(loc.timezone)}`;
+        // Sanitize the address to remove any "(Fallback)" or other non-location text that might break the API
+        const sanitizedAddress = loc.country.replace(/\s*\(.*?\)/g, '').trim();
+        const url = `https://api.aladhan.com/v1/timingsByAddress/${date}?address=${encodeURIComponent(sanitizedAddress)}&timezone=${encodeURIComponent(loc.timezone)}`;
 
         const response = await fetch(url);
+        if (!response.ok) {
+            console.warn(`Aladhan API failed with status ${response.status} for address: ${sanitizedAddress}`);
+            return null;
+        }
         const data = await response.json();
 
         if (data.code === 200) {
@@ -35,11 +41,14 @@ export const getPrayerTimes = async (location?: LocationData): Promise<PrayerTim
     }
 };
 
-export const getPersonalizedSpiritualReminder = async (userId: string): Promise<{ type: 'quran' | 'hadith', content: string, reference: string } | null> => {
+export const getPersonalizedSpiritualReminder = async (userId: string): Promise<{ type: 'quran' | 'hadith', content: string, reference: string, verifyUrl?: string } | null> => {
     try {
-        // 1. Get user onboarding goal
-        const { data: onboardingRows } = await supabase
-            .from('onboarding_responses')
+        const prayerTimes = await getPrayerTimes();
+        const isInPrayerWindow = prayerTimes ? isPrayerTime(prayerTimes) : false;
+
+        // 1. Try Database First
+        const { data: onboardingRows } = await (supabase
+            .from('onboarding_responses') as any)
             .select('goal')
             .eq('user_id', userId)
             .limit(1);
@@ -47,46 +56,55 @@ export const getPersonalizedSpiritualReminder = async (userId: string): Promise<
         const onboarding = onboardingRows && onboardingRows.length > 0 ? onboardingRows[0] : null;
         const goal = onboarding?.goal || 'General';
 
-        // 2. Find content that matches category or is general, which hasn't been viewed
-        // First, get history
-        const { data: history } = await supabase
-            .from('user_spiritual_history')
-            .select('content_id')
-            .eq('user_id', userId);
+        // Filter by type based on prayer window
+        const typeFilter = isInPrayerWindow ? 'quran' : 'hadith';
 
-        const viewedIds = history?.map(h => h.content_id) || [];
-
-        // 3. Query content
-        let query = supabase
-            .from('spiritual_content')
+        const { data: candidates } = await (supabase
+            .from('spiritual_content') as any)
             .select('*')
-            .or(`category.eq."${goal}",category.eq.General`);
+            .eq('type', typeFilter)
+            .or(`category.eq."${goal}",category.eq.General`)
+            .limit(5);
 
-        if (viewedIds.length > 0) {
-            query = query.not('id', 'in', `(${viewedIds.join(',')})`);
+        if (candidates && candidates.length > 0) {
+            const selected = candidates[Math.floor(Math.random() * candidates.length)] as any;
+            return {
+                type: selected.type as 'quran' | 'hadith',
+                content: selected.content,
+                reference: selected.reference,
+                verifyUrl: selected.verify_url
+            };
         }
 
-        const { data: candidates } = await query.limit(10);
-
-        if (!candidates || candidates.length === 0) return null;
-
-        // Pick a random one from candidates
-        const selected = candidates[Math.floor(Math.random() * candidates.length)];
-
-        // 4. Log to history
-        await supabase.from('user_spiritual_history').insert({
-            user_id: userId,
-            content_id: selected.id
-        });
-
-        return {
-            type: selected.type as 'quran' | 'hadith',
-            content: selected.content,
-            reference: selected.reference
-        };
+        // 2. Fallback to Public APIs if DB is empty
+        if (isInPrayerWindow) {
+            const randomAyah = Math.floor(Math.random() * 6236) + 1;
+            const res = await fetch(`https://api.alquran.cloud/v1/ayah/${randomAyah}/en.asad`);
+            const data = await res.json();
+            return {
+                type: 'quran',
+                content: data.data.text,
+                reference: `Quran ${data.data.surah.numberOfSurah}:${data.data.numberInSurah}`
+            };
+        } else {
+            const res = await fetch('https://random-hadith-generator.vercel.app/bukhari');
+            const data = await res.json();
+            return {
+                type: 'hadith',
+                content: data.data.hadith_english,
+                reference: `Sahih Bukhari, Hadith ${data.data.hadith_number}`,
+                verifyUrl: `https://sunnah.com/bukhari:${data.data.hadith_number}`
+            };
+        }
     } catch (error) {
         console.error("Spiritual reminder error:", error);
-        return null;
+        // Ultimate fallback
+        return {
+            type: 'hadith',
+            content: "The best among you are those who have the best manners and character.",
+            reference: "Sahih Bukhari",
+            verifyUrl: "https://sunnah.com/bukhari"
+        };
     }
 };
 
@@ -104,9 +122,9 @@ export const isPrayerTime = (prayerTimes: PrayerTimes): boolean => {
         minutes: timeToMinutes(time)
     }));
 
-    // Check if within 30 minutes window for any prayer
+    // Check if within 45 minutes window for any prayer (extended for better coverage)
     return timings.some(t => {
         const diff = Math.abs(t.minutes - currentTime);
-        return diff <= 15; // 15 mins before or after
+        return diff <= 22; // ~22 mins before or after
     });
 };

@@ -163,11 +163,10 @@ export const logMeal = async (userId: string, mealData: any) => {
         .insert({
             user_id: userId,
             image_url: mealData.mealImage,
-            calories_consumed: mealData.totalCalories,
+            calories_consumed: Number(mealData.totalCalories || 0),
             notes: typeof mealData.analysis === 'string' ? mealData.analysis : JSON.stringify(mealData.analysis || mealData)
         })
-        .select()
-        .limit(1);
+        .select();
 
     if (analysisError) throw analysisError;
 
@@ -175,11 +174,27 @@ export const logMeal = async (userId: string, mealData: any) => {
 
     // 2. Add detailed food items
     if (mealData.foodItems && mealData.foodItems.length > 0) {
-        const itemsToInsert = mealData.foodItems.map((item: any) => ({
-            name: item.name,
-            calories: item.calories,
-            image_url: item.image
-        }));
+        const itemsToInsert = mealData.foodItems.map((item: any) => {
+            // Map healthStatus string to health_rating number (1-10)
+            let healthRating = 5;
+            if (item.healthStatus === 'GOOD' || item.verdict === 'GOOD') healthRating = 9;
+            if (item.healthStatus === 'POOR' || item.verdict === 'POOR') healthRating = 2;
+
+            return {
+                name: item.name,
+                calories: Number(item.calories || 0),
+                protein: Number(item.protein || 0),
+                carbs: Number(item.carbs || 0),
+                fat: Number(item.fat || 0),
+                fiber: Number(item.fiber || 0),
+                sugar: Number(item.sugar || 0),
+                health_rating: healthRating,
+                description: item.description,
+                image_url: item.image || item.image_url || mealData.mealImage,
+                barcode: item.barcode || mealData.barcode,
+                serving_size: item.serving_size || '1 serving'
+            };
+        });
 
         const { error: itemsError } = await supabase
             .from('food_items')
@@ -202,7 +217,7 @@ export const logMeal = async (userId: string, mealData: any) => {
         await supabase
             .from('daily_progress')
             .update({
-                calories_consumed: (currentProgress.calories_consumed || 0) + mealData.totalCalories,
+                calories_consumed: (currentProgress.calories_consumed || 0) + Number(mealData.totalCalories || 0),
             })
             .eq('id', currentProgress.id);
     } else {

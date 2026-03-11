@@ -7,12 +7,12 @@ export interface LocationData {
     timezone: string;
 }
 
-const fetchIpapi = async () => {
+const fetchGetLocation = async () => {
     try {
-        const response = await fetch('https://ipapi.co/json/');
-        if (!response.ok) return null;
-        const data = await response.json();
-        if (data.error) return null;
+        const { supabase } = await import('../supabase');
+        const { data, error } = await supabase.functions.invoke('get-location');
+        
+        if (error || !data) return null;
 
         const languages = data.languages ? data.languages.split(',') : ['en'];
         const firstLangCode = languages[0].split('-')[0].toLowerCase();
@@ -20,30 +20,13 @@ const fetchIpapi = async () => {
         return {
             country: data.country_name,
             countryCode: data.country_code,
-            currency: data.currency,
+            currency: data.currency_code,
+            currencySymbol: data.currency_symbol,
             timezone: data.timezone,
             language: firstLangCode
         };
     } catch (e) {
-        return null;
-    }
-};
-
-const fetchIpWhois = async () => {
-    try {
-        const response = await fetch('https://ipwhois.app/json/');
-        if (!response.ok) return null;
-        const data = await response.json();
-        if (!data.success) return null;
-
-        return {
-            country: data.country,
-            countryCode: data.country_code,
-            currency: data.currency,
-            timezone: data.timezone,
-            language: 'en'
-        };
-    } catch (e) {
+        console.error("fetchGetLocation error:", e);
         return null;
     }
 };
@@ -59,11 +42,8 @@ export const detectLocation = async (): Promise<LocationData> => {
 
     // 2. Try browser geolocation as a secondary source if needed (optional, but for now let's stick to IP)
 
-    // 3. Try IP services
-    let rawData = await fetchIpapi();
-    if (!rawData) {
-        rawData = await fetchIpWhois();
-    }
+    // 3. Try IP services via our server proxy
+    const rawData = await fetchGetLocation();
 
     const supported = ['en', 'fr', 'de', 'id', 'hi', 'ms', 'nl', 'es', 'it', 'ja', 'ko', 'zh'];
 
@@ -73,7 +53,7 @@ export const detectLocation = async (): Promise<LocationData> => {
             country: rawData.country,
             countryCode: rawData.countryCode,
             currency: rawData.currency || 'USD',
-            currencySymbol: '$',
+            currencySymbol: rawData.currencySymbol || '$',
             language: finalLang,
             timezone: rawData.timezone || 'UTC'
         };

@@ -1,37 +1,38 @@
 import { useState } from "react";
 import { useTranslation } from "@/lib/api/translation";
+import { AlertCircle, ShoppingCart, Scale, MessageSquare, Check, ChevronLeft, Heart } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useCurrency } from "../lib/CurrencyContext";
 
 interface FoodItem {
     name: string;
     calories: number;
-    image: string;
+    description?: string;
+    vitamins_and_nutrition?: string;
+    recommendation?: string;
+    recommended_pairings?: string;
     protein?: number;
     carbs?: number;
     fat?: number;
-    fiber?: number;
     sugar?: number;
-    portion_size_estimate?: string;
-    portion_assumptions?: string;
-    clinical_evaluation?: {
-        macronutrient_distribution: string;
-        glycemic_load: string;
-        lipid_density: string;
-        sodium_concerns: string;
-        protein_quality: string;
-        fiber_adequacy: string;
-    };
-    metabolic_impact?: string;
-    clinical_synopsis?: string;
-    health_impact_score?: number;
-    healthRating?: number;
-    confidence_level?: number;
+    fiber?: number;
     healthStatus?: 'GOOD' | 'MODERATE' | 'POOR';
-    personalizedAdvice?: string;
+    verdict?: 'GOOD' | 'MODERATE' | 'POOR';
+    is_compliant?: boolean;
+    user_alignment_boolean?: boolean;
+    political_warning?: string;
+    estimated_price?: string;
+    cheaper_alternatives?: Array<{ name: string; price: string; reason: string }>;
+    // Barcode-specific
+    brand?: string;
+    manufacturer?: string;
+    country_of_origin?: string;
+    ingredients?: string;
+    type?: 'FOOD' | 'BARCODE';
 }
 
 interface MealAnalysisProps {
     mealImage: string;
-    heroImage?: string;
     totalCalories: number;
     dailyCalorieGoal?: number;
     foodItems: FoodItem[];
@@ -39,174 +40,259 @@ interface MealAnalysisProps {
     onLog: () => void;
 }
 
-export function MealAnalysis({ mealImage, heroImage, totalCalories, dailyCalorieGoal = 2000, foodItems, onClose, onLog }: MealAnalysisProps) {
+export function MealAnalysis({ mealImage, foodItems, totalCalories, dailyCalorieGoal, onClose, onLog }: MealAnalysisProps) {
     const { t } = useTranslation();
+    const navigate = useNavigate();
+    const [isSaved, setIsSaved] = useState(false);
 
-    // Color logic for calories based on daily goal
-    const getCalorieColor = (cals: number) => {
-        const percentage = (cals / dailyCalorieGoal) * 100;
-        if (percentage < 30) return "text-[#2ECC71]"; // Green: < 30% of daily goal
-        if (percentage < 50) return "text-[#F1C40F]"; // Yellow: 30-50% of daily goal
-        return "text-[#E74C3C]"; // Red: > 50% of daily goal
+    const item: FoodItem = foodItems[0] || {
+        name: 'Meal Analysis',
+        calories: 0,
+        description: '',
+        vitamins_and_nutrition: '',
+        recommendation: '',
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        healthStatus: 'MODERATE'
     };
 
-    const getStatusBg = (status?: string) => {
-        if (status === 'GOOD') return "bg-[#EAF9EE] border-[#2ECC71]/20";
-        if (status === 'POOR') return "bg-[#FDF2F2] border-[#E74C3C]/20";
-        return "bg-[#FFF9EA] border-[#F1C40F]/20";
+    const verdict = (item.healthStatus || item.verdict || 'MODERATE').toUpperCase();
+    const isBarcode = item.type === 'BARCODE';
+
+    const { formatCurrency } = useCurrency();
+
+    const handleLog = () => {
+        setIsSaved(true);
+        onLog();
     };
 
-    const getStatusBadge = (status?: string) => {
-        if (status === 'GOOD') return "bg-[#2ECC71] text-white";
-        if (status === 'POOR') return "bg-[#E74C3C] text-white";
-        return "bg-[#F1C40F] text-white";
+    const handleConsultCoach = () => {
+        // Build a detailed context for the coach
+        const mealSummary = `I just analyzed ${item.name}. 
+Nutritional Breakdown: ${totalCalories || item.calories} kcal, P: ${item.protein}g, F: ${item.fat}g, C: ${item.carbs}g.
+Health Verdict: ${verdict}.
+Ingredients: ${item.ingredients || 'Visual analysis'}.
+Political Warning: ${item.political_warning || 'None'}.`;
+
+        navigate('/chat', {
+            state: {
+                initialMessage: `I've scanned ${item.name} with VicCalary. ${item.political_warning ? 'I see an ethical concern.' : ''} Can you give me more personalized advice based on my goals?\n\n[Meal Context: ${mealSummary}]`,
+                attachment: mealImage
+            }
+        });
+    };
+
+    // Split narrative text into paragraphs
+    const renderParagraphs = (text: string | undefined, fallback: string = "") => {
+        if (!text) return <p className="text-slate-400 italic text-sm">{fallback}</p>;
+        return (text.split('\n\n').filter(p => p.trim())).map((para, i) => (
+            <p key={i} className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
+                {para}
+            </p>
+        ));
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="w-[375px] h-[812px] bg-[#2C3D5D] rounded-[18px] shadow-2xl overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xl p-0 sm:p-4 h-[100dvh]">
+            <div className="w-full max-w-md sm:rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col bg-white dark:bg-[#0a0f14] h-full sm:h-auto sm:max-h-[92vh] rounded-t-[2.5rem] relative">
 
-                {/* Status Bar Space */}
-                <div className="h-[48px]"></div>
-
-                {/* Header */}
-                <header className="h-[56px] flex items-center justify-between px-4">
-                    <button
-                        onClick={onClose}
-                        className="text-white/70 hover:text-white transition-colors"
-                    >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                        </svg>
-                    </button>
-                    <h1 className="text-white text-lg font-semibold">{t('meal_analysis')}</h1>
-                    <div className="w-6"></div>
-                </header>
-
-                {/* Main Content */}
-                <main className="flex-1 flex flex-col px-4 pb-6 overflow-y-auto custom-scrollbar">
-
-                    {/* Main Food Image (The actual photo) */}
-                    <div className="flex justify-center mb-4 px-2">
-                        <div className="w-full aspect-square rounded-2xl overflow-hidden bg-black/20 relative shadow-xl border border-white/10">
-                            <img
-                                src={mealImage}
-                                alt="Captured Meal"
-                                className="w-full h-full object-cover"
-                            />
-                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4 flex justify-between items-end">
-                                <span className="text-white text-[10px] font-bold uppercase tracking-widest opacity-80">Device Capture</span>
-                                {totalCalories > 0 && (
-                                    <div className="flex flex-col items-end">
-                                        <span className="text-white/60 text-[8px] font-bold uppercase tracking-widest">Goal Progress</span>
-                                        <span className="text-white text-xs font-black">{Math.round((totalCalories / dailyCalorieGoal) * 100)}%</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Enhanced Stats Row (Image 2 Style) */}
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                        <div className="bg-[#EAF9EE] rounded-[32px] p-6 flex flex-col items-center justify-center shadow-sm border border-[#2ECC71]/10">
-                            <span className="text-[#0D1B1E]/40 text-[10px] font-black uppercase tracking-widest mb-2">Calories</span>
-                            <div className="text-[36px] font-black text-[#0D1B1E] leading-none">
-                                {totalCalories || 0}
-                            </div>
-                        </div>
-                        <div className="bg-[#FFF9EA] rounded-[32px] p-6 flex flex-col items-center justify-center shadow-sm border border-[#F1C40F]/10">
-                            <span className="text-[#E67E22]/60 text-[10px] font-black uppercase tracking-widest mb-2 text-center leading-tight">Health Impact</span>
-                            <div className="text-[36px] font-black text-[#E67E22] leading-none">
-                                {foodItems[0]?.healthRating || 5}/10
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Quick Macro Row */}
-                    <div className="bg-white/5 rounded-[24px] p-4 flex justify-around mb-6 border border-white/5">
-                        <div className="flex flex-col items-center">
-                            <span className="text-[9px] font-black text-white/40 uppercase mb-1">Carbs</span>
-                            <span className="text-sm font-bold text-white">{foodItems[0]?.carbs || 0}g</span>
-                        </div>
-                        <div className="flex flex-col items-center">
-                            <span className="text-[9px] font-black text-white/40 uppercase mb-1">Fat</span>
-                            <span className="text-sm font-bold text-white">{foodItems[0]?.fat || 0}g</span>
-                        </div>
-                        <div className="flex flex-col items-center">
-                            <span className="text-[9px] font-black text-white/40 uppercase mb-1">Fiber</span>
-                            <span className="text-sm font-bold text-white">{foodItems[0]?.fiber || 0}g</span>
-                        </div>
-                    </div>
-
-                    {/* Clinical Synopsis (The "Meat" of the analysis) */}
-                    <div className="bg-white rounded-[32px] p-6 mb-6 shadow-xl border border-white flex flex-col gap-3">
-                        <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black text-[#8696A0] uppercase tracking-widest">Clinical Synopsis</span>
-                        </div>
-                        <p className="text-[#0D1B1E] text-[15px] leading-[1.6] font-medium">
-                            {foodItems[0]?.personalizedAdvice || "Analyzing nutritional components and metabolic pathways..."}
+                {/* Political Alert (Barcode Only) */}
+                {item.political_warning && (
+                    <div className={`${item.political_warning.includes('🔴') || item.political_warning.includes('concern') ? 'bg-rose-600' : 'bg-emerald-600'} py-3 px-6 flex items-center gap-3 shrink-0`}>
+                        <AlertCircle className="w-4 h-4 text-white shrink-0" />
+                        <p className="text-white text-[11px] font-bold leading-tight uppercase tracking-tight">
+                            {item.political_warning}
                         </p>
                     </div>
+                )}
 
-                    {/* Advanced Clinical Details Grid */}
-                    {foodItems[0]?.clinical_evaluation && (
-                        <div className="bg-white/5 rounded-3xl p-5 border border-white/5 mb-6">
-                            <div className="flex items-center gap-2 mb-4">
-                                <span className="material-symbols-outlined text-[16px] text-blue-400">clinical_notes</span>
-                                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Deep Analysis Breakdown</span>
+                {/* User Alignment Banner */}
+                {item.user_alignment_boolean && !item.political_warning && (
+                    <div className="bg-[#0a2e52] py-3 px-6 flex items-center justify-center gap-2 shrink-0">
+                        <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                        <span className="text-white text-[11px] font-black uppercase tracking-[0.2em]">
+                            Personalized Health Match
+                        </span>
+                    </div>
+                )}
+
+                {/* Header Image */}
+                <div className="relative h-52 shrink-0">
+                    <img src={mealImage} className="w-full h-full object-cover" alt="Meal" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-white dark:from-[#0a0f14] via-black/20 to-transparent" />
+                    <button
+                        onClick={onClose}
+                        className="absolute top-5 left-5 p-2.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 hover:bg-black/60 transition-all"
+                    >
+                        <ChevronLeft className="w-5 h-5 text-white" />
+                    </button>
+
+                    {/* Barcode Badges */}
+                    {isBarcode && (
+                        <div className="absolute bottom-4 left-4 flex flex-wrap gap-2">
+                            {item.country_of_origin && (
+                                <span className="px-3 py-1 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold rounded-full border border-white/10">
+                                    🌍 {item.country_of_origin}
+                                </span>
+                            )}
+                            {item.brand && (
+                                <span className="px-3 py-1 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold rounded-full border border-white/10">
+                                    {item.brand}
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Scrollable Content */}
+                <main className="flex-1 overflow-y-auto px-7 pb-4 space-y-8 -mt-8 relative z-10 custom-scrollbar">
+
+                    {/* 1. Meal Name */}
+                    <div>
+                        <h2 className="text-[26px] font-black text-slate-900 dark:text-white leading-tight tracking-tight">
+                            {item.name || 'Meal Analysis'}
+                        </h2>
+                        {isBarcode && item.manufacturer && (
+                            <p className="text-slate-400 text-sm mt-0.5 flex items-center gap-1.5">
+                                <ShoppingCart className="w-3.5 h-3.5" />
+                                {item.manufacturer}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* 2. Description – Narrative Paragraphs */}
+                    <div className="space-y-4">
+                        {renderParagraphs(
+                            item.description,
+                            "A detailed nutritional analysis of this meal is being prepared…"
+                        )}
+                    </div>
+
+                    {/* 3. Vitamins and Nutrition */}
+                    <div className="space-y-4">
+                        <h3 className="text-[17px] font-black text-slate-900 dark:text-white tracking-tight border-b border-slate-100 dark:border-white/8 pb-2">
+                            Vitamins and Nutrition
+                        </h3>
+                        <div className="space-y-4">
+                            {renderParagraphs(
+                                item.vitamins_and_nutrition,
+                                "Micronutrient and vitamin profile analysis in progress…"
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 4. Recommended */}
+                    {item.recommended_pairings && (
+                        <div className="space-y-4">
+                            <h3 className="text-[17px] font-black text-slate-900 dark:text-white tracking-tight border-b border-slate-100 dark:border-white/8 pb-2">
+                                Recommended
+                            </h3>
+                            <div className="space-y-4">
+                                {renderParagraphs(item.recommended_pairings)}
                             </div>
-                            <div className="grid grid-cols-1 gap-4">
-                                <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                                    <span className="text-[10px] font-bold text-white/30 uppercase">Glycemic Load</span>
-                                    <span className="text-xs text-white/80 font-medium">{foodItems[0].clinical_evaluation.glycemic_load}</span>
-                                </div>
-                                <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                                    <span className="text-[10px] font-bold text-white/30 uppercase">Macronutrient</span>
-                                    <span className="text-xs text-white/80 font-medium text-right max-w-[180px]">{foodItems[0].clinical_evaluation.macronutrient_distribution}</span>
-                                </div>
-                                <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                                    <span className="text-[10px] font-bold text-white/30 uppercase">Lipid Density</span>
-                                    <span className="text-xs text-white/80 font-medium">{foodItems[0].clinical_evaluation.lipid_density}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-bold text-white/30 uppercase">Protein Quality</span>
-                                    <span className="text-xs text-white/80 font-medium">{foodItems[0].clinical_evaluation.protein_quality}</span>
-                                </div>
+                        </div>
+                    )}
+
+                    {/* Barcode: Ingredients */}
+                    {isBarcode && item.ingredients && (
+                        <div className="space-y-3">
+                            <h3 className="text-[13px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                                Ingredients
+                            </h3>
+                            <p className="text-[13px] leading-relaxed text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-white/3 p-4 rounded-2xl border border-slate-100 dark:border-white/5">
+                                {item.ingredients}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* 5. Calorie & Macro Summary – Always Last */}
+                    <div className="bg-slate-900 dark:bg-white/5 rounded-3xl p-6 text-center border border-slate-800 dark:border-white/10">
+                        <div className="text-4xl font-black text-white mb-1">
+                            ~{totalCalories || item.calories} kcal
+                        </div>
+                        <div className="text-sm font-bold text-slate-400 tracking-wider mb-4">
+                            P: {item.protein || 0}g &nbsp;•&nbsp; F: {item.fat || 0}g &nbsp;•&nbsp; C: {item.carbs || 0}g
+                        </div>
+
+                        <div className="flex justify-center gap-3">
+                            {item.sugar != null && (
+                                <span className="px-3 py-1 bg-rose-500/10 text-rose-400 text-xs font-bold rounded-full">
+                                    Sugar {item.sugar}g
+                                </span>
+                            )}
+                            {item.fiber != null && (
+                                <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">
+                                    Fiber {item.fiber}g
+                                </span>
+                            )}
+                            {item.estimated_price && (
+                                <span className="px-3 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full flex items-center gap-1">
+                                    <ShoppingCart className="w-3 h-3" />
+                                    {formatCurrency(item.estimated_price)}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Personalized Recommendation */}
+                    {item.recommendation && (
+                        <div className="p-5 bg-[#0a2e52]/10 dark:bg-[#0a2e52]/20 border border-[#0a2e52]/20 rounded-2xl">
+                            <p className="text-[14px] leading-relaxed text-slate-600 dark:text-slate-300 italic">
+                                {item.recommendation}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Smart Alternatives (Barcode) */}
+                    {item.cheaper_alternatives && item.cheaper_alternatives.length > 0 && (
+                        <div className="space-y-3">
+                            <h3 className="text-[13px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                                Smart Alternatives
+                            </h3>
+                            <div className="space-y-2">
+                                {item.cheaper_alternatives.map((alt, i) => (
+                                    <div key={i} className="flex items-center justify-between p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10">
+                                        <div>
+                                            <p className="text-[14px] font-black text-slate-900 dark:text-white">{alt.name}</p>
+                                            <p className="text-[11px] text-slate-500">{alt.reason}</p>
+                                        </div>
+                                        <span className="text-[13px] font-black text-emerald-500">{formatCurrency(alt.price)}</span>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     )}
                 </main>
 
-                {/* Action Button */}
-                <div className="px-4 py-4 mb-2 bg-[#2C3D5D]/80 backdrop-blur-xl border-t border-white/5">
-                    <button
-                        onClick={onLog}
-                        className="w-full h-14 bg-[#2ECC71] hover:bg-[#27ae60] text-white rounded-[20px] font-black text-lg shadow-[0_8px_20px_rgba(46,204,113,0.4)] active:scale-95 transition-all flex items-center justify-center gap-2"
-                    >
-                        <span className="material-symbols-outlined">add_task</span>
-                        {t('log_this_meal')}
-                    </button>
+                {/* Footer Actions */}
+                <div className="px-7 py-6 shrink-0 bg-white dark:bg-[#0a0f14] border-t border-slate-100 dark:border-white/5 space-y-3">
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleLog}
+                            className="flex-1 py-4 bg-[#0a2e52] text-white rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all shadow-xl flex items-center justify-center gap-2"
+                        >
+                            <Scale className="w-5 h-5" />
+                            {isSaved ? 'Logged ✓' : 'Log Meal'}
+                        </button>
+                        <button
+                            onClick={handleConsultCoach}
+                            className="flex-1 py-4 bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-white rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                        >
+                            <MessageSquare className="w-5 h-5" />
+                            Consult Coach
+                        </button>
+                    </div>
                 </div>
 
-                {/* Bottom Home Indicator */}
-                <footer className="h-[34px] flex items-center justify-center">
-                    <div className="w-32 h-[5px] bg-white/20 rounded-full"></div>
-                </footer>
-
+                <style>{`
+                    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+                    .dark\\:border-white\\/8 { border-color: rgba(255,255,255,0.08); }
+                    .bg-white\\/3 { background-color: rgba(255,255,255,0.03); }
+                `}</style>
             </div>
-
-            <style>{`
-                .custom-scrollbar::-webkit-scrollbar {
-                    width: 4px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: rgba(255, 255, 255, 0.1);
-                    border-radius: 10px;
-                }
-            `}</style>
         </div>
     );
 }

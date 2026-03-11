@@ -49,23 +49,23 @@ export const ProgressCard: React.FC<ProgressCardProps> = ({ profile, dailyProgre
 
                 <div className="relative z-10 flex justify-between items-center mb-6 gap-4">
                     <div className="flex-1">
-                        <p className="text-slate-600 dark:text-slate-400 text-xs uppercase tracking-widest mb-1 font-bold">{t('todays_progress')}</p>
-                        <p className="text-5xl font-black text-slate-900 dark:text-white leading-tight">
+                        <p className="text-slate-700 dark:text-slate-300 text-xs uppercase tracking-widest mb-1 font-black drop-shadow-sm">{t('todays_progress')}</p>
+                        <p className="text-6xl font-black text-slate-900 dark:text-white leading-tight drop-shadow-md">
                             {percentage}%
                         </p>
                     </div>
 
                     {/* Circular Progress with Profile Image */}
-                    <div className="relative size-[120px] shrink-0">
+                    <div className="relative size-[130px] shrink-0">
                         <svg className="size-full transform -rotate-90" viewBox={`0 0 ${size} ${size}`}>
                             {/* Background Circle */}
                             <circle
-                                className="stroke-slate-100 dark:stroke-slate-800"
+                                className="stroke-slate-200/50 dark:stroke-slate-800/50"
                                 cx={size / 2}
                                 cy={size / 2}
                                 r={radius}
                                 fill="none"
-                                strokeWidth={strokeWidth}
+                                strokeWidth={strokeWidth + 2}
                             />
                             {/* Progress Circle */}
                             <circle
@@ -73,12 +73,13 @@ export const ProgressCard: React.FC<ProgressCardProps> = ({ profile, dailyProgre
                                 cx={size / 2}
                                 cy={size / 2}
                                 r={radius}
-                                strokeWidth={strokeWidth}
+                                strokeWidth={strokeWidth + 2}
                                 strokeDasharray={circumference}
                                 strokeDashoffset={offset}
                                 strokeLinecap="round"
                                 style={{
-                                    stroke: percentage > 100 ? '#ef4444' : percentage > 85 ? '#eab308' : '#13ec37'
+                                    stroke: percentage > 100 ? '#ef4444' : percentage > 85 ? '#eab308' : '#13ec37',
+                                    filter: 'drop-shadow(0 0 8px rgba(19, 236, 55, 0.3))'
                                 }}
                             />
                         </svg>
@@ -86,16 +87,16 @@ export const ProgressCard: React.FC<ProgressCardProps> = ({ profile, dailyProgre
                         {/* Profile Image in Center - Clickable */}
                         <div
                             onClick={handleAvatarClick}
-                            className="absolute inset-2 flex items-center justify-center cursor-pointer group"
+                            className="absolute inset-3 flex items-center justify-center cursor-pointer group"
                         >
                             <div
-                                className="size-full rounded-full border-2 border-white dark:border-[#1f2c34] shadow-md overflow-hidden bg-cover bg-center transition-transform group-hover:scale-105"
+                                className="size-full rounded-full border-4 border-white dark:border-[#1f2c34] shadow-xl overflow-hidden bg-cover bg-center transition-transform group-hover:scale-110"
                                 style={{ backgroundImage: `url("${avatarUrl}")` }}
                             />
 
                             {/* Upload Badge */}
-                            <div className="absolute -bottom-1 -right-1 size-8 bg-vic-green rounded-full border-2 border-white dark:border-[#1f2c34] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                <span className="material-symbols-outlined text-slate-900 text-lg">add_a_photo</span>
+                            <div className="absolute -bottom-1 -right-1 size-9 bg-vic-green rounded-full border-2 border-white dark:border-[#1f2c34] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                <span className="material-symbols-outlined text-slate-900 text-xl">add_a_photo</span>
                             </div>
                         </div>
 
@@ -111,18 +112,18 @@ export const ProgressCard: React.FC<ProgressCardProps> = ({ profile, dailyProgre
                 </div>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-2 text-center pt-4 border-t border-[#D1F7C4]/30 dark:border-slate-800">
-                    <div>
-                        <p className="text-lg font-bold">{caloriesConsumed}</p>
-                        <p className="text-xs text-slate-500">{t('eaten')}</p>
+                <div className="grid grid-cols-3 gap-2 text-center pt-6 border-t border-black/5 dark:border-white/10">
+                    <div className="bg-white/40 dark:bg-black/20 p-2 rounded-xl backdrop-blur-sm border border-white/20 dark:border-white/5">
+                        <p className="text-xl font-black text-slate-900 dark:text-white leading-none mb-1">{caloriesConsumed}</p>
+                        <p className="text-[10px] text-slate-700 dark:text-slate-400 font-bold uppercase tracking-wider">{t('eaten')}</p>
                     </div>
-                    <div>
-                        <p className="text-lg font-bold">{caloriesLeft}</p>
-                        <p className="text-xs text-slate-500">{t('left')}</p>
+                    <div className="bg-white/40 dark:bg-black/20 p-2 rounded-xl backdrop-blur-sm border border-white/20 dark:border-white/5">
+                        <p className="text-xl font-black text-slate-900 dark:text-white leading-none mb-1">{caloriesLeft}</p>
+                        <p className="text-[10px] text-slate-700 dark:text-slate-400 font-bold uppercase tracking-wider">{t('left')}</p>
                     </div>
-                    <div>
-                        <p className="text-lg font-bold">{caloriesGoal}</p>
-                        <p className="text-xs text-slate-500">{t('goal_stat')}</p>
+                    <div className="bg-white/40 dark:bg-black/20 p-2 rounded-xl backdrop-blur-sm border border-white/20 dark:border-white/5">
+                        <p className="text-xl font-black text-slate-900 dark:text-white leading-none mb-1">{caloriesGoal}</p>
+                        <p className="text-[10px] text-slate-700 dark:text-slate-400 font-bold uppercase tracking-wider">{t('goal_stat')}</p>
                     </div>
                 </div>
             </div>

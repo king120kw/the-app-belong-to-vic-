@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { saveOnboardingResponses, getUserProfile } from "../lib/api/auth";
+import { useCurrency } from "../lib/CurrencyContext";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/api/translation";
 
@@ -33,6 +34,7 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { t } = useTranslation();
+  const { currencySymbol } = useCurrency();
   const [currentStep, setCurrentStep] = useState(0);
   const [responses, setResponses] = useState<any>({});
 
@@ -108,7 +110,7 @@ export default function Onboarding() {
         "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=1200&h=800&fit=crop",
       min: 50,
       max: 1000,
-      unit: "$",
+      unit: currencySymbol,
     },
     {
       id: 7,

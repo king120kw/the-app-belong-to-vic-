@@ -63,7 +63,10 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
                                 <h4 className="text-white font-bold text-sm tracking-tight uppercase">
                                     {reminder.type === 'quran' ? 'Quranic Verse' : 'Hadith Reminder'}
                                 </h4>
-                                <p className="text-vic-green text-[10px] font-bold uppercase tracking-widest">{t('prayer_time_window')}</p>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="size-1.5 rounded-full bg-vic-green animate-pulse shadow-[0_0_8px_rgba(19,236,55,0.8)]" />
+                                    <p className="text-vic-green text-[10px] font-bold uppercase tracking-widest">{t('prayer_time_window')}</p>
+                                </div>
                             </div>
                         </div>
                         <button onClick={() => setIsVisible(false)} className="text-white/20 hover:text-white transition-colors">
@@ -76,7 +79,20 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
                     </p>
 
                     <div className="flex items-center justify-between">
-                        <span className="text-vic-pink text-xs font-bold uppercase tracking-wider">— {reminder.reference}</span>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-vic-pink text-xs font-bold uppercase tracking-wider">— {reminder.reference}</span>
+                            {(reminder as any).verifyUrl && (
+                                <a
+                                    href={(reminder as any).verifyUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[10px] text-vic-green/60 hover:text-vic-green flex items-center gap-1 transition-colors font-bold uppercase"
+                                >
+                                    <span className="material-symbols-outlined text-xs">verified</span>
+                                    Verify Online
+                                </a>
+                            )}
+                        </div>
                         <div className="flex gap-1">
                             {[1, 2, 3].map(i => (
                                 <div key={i} className="size-1 rounded-full bg-vic-green/30" />

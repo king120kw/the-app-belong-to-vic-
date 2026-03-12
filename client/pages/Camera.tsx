@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera as CameraIcon, RotateCw, Check, X, Info, Zap, Scale, HeartPulse, Activity, AlertCircle, ShoppingCart, Globe, FlaskConical, MessageSquare } from "lucide-react";
+import { Camera as CameraIcon, RotateCw, Check, X, Info, Zap, Scale, HeartPulse, Activity, AlertCircle, ShoppingCart, Globe, FlaskConical, MessageSquare, Pill, TriangleAlert, Dna } from "lucide-react";
 import { analyzeFoodImage, scanProduct, saveFoodAnalysis } from "../lib/api/food";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 
-type ScanMode = "FOOD" | "BARCODE";
+type ScanMode = "FOOD" | "BARCODE" | "MEDICATION";
 
 export default function Camera() {
   const navigate = useNavigate();
@@ -203,22 +203,28 @@ export default function Camera() {
             <div className="absolute top-8 left-1/2 -translate-x-1/2 flex bg-black/50 backdrop-blur-xl p-1 rounded-full border border-white/10">
               <button
                 onClick={() => setScanMode("FOOD")}
-                className={`px-6 py-2 rounded-full text-xs font-bold transition-all ${scanMode === "FOOD" ? "bg-vic-blue text-white shadow-lg shadow-vic-blue/30" : "text-white/40 hover:text-white"}`}
+                className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${scanMode === "FOOD" ? "bg-vic-blue text-white shadow-lg shadow-vic-blue/30" : "text-white/40 hover:text-white"}`}
               >
                 MEAL SCAN
               </button>
               <button
                 onClick={() => setScanMode("BARCODE")}
-                className={`px-6 py-2 rounded-full text-xs font-bold transition-all ${scanMode === "BARCODE" ? "bg-vic-green text-black shadow-lg shadow-vic-green/30" : "text-white/40 hover:text-white"}`}
+                className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${scanMode === "BARCODE" ? "bg-vic-green text-black shadow-lg shadow-vic-green/30" : "text-white/40 hover:text-white"}`}
               >
                 BARCODE
               </button>
+              <button
+                onClick={() => setScanMode("MEDICATION")}
+                className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${scanMode === "MEDICATION" ? "bg-purple-500 text-white shadow-lg shadow-purple-500/30" : "text-white/40 hover:text-white"}`}
+              >
+                MEDIC
+              </button>
             </div>
 
-            <div className={`absolute top-24 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full border border-white/10 flex items-center gap-2 ${scanMode === 'BARCODE' ? 'border-vic-green/30' : 'border-vic-blue/30'}`}>
-              <Zap className={`w-4 h-4 animate-pulse ${scanMode === 'BARCODE' ? 'text-vic-green' : 'text-vic-blue'}`} />
-              <span className={`text-[10px] font-black uppercase tracking-widest ${scanMode === 'BARCODE' ? 'text-vic-green' : 'text-vic-blue'}`}>
-                {scanMode === 'BARCODE' ? 'Automatic Detection Active' : 'Live Meal Analysis'}
+            <div className={`absolute top-24 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full border border-white/10 flex items-center gap-2 ${scanMode === 'BARCODE' ? 'border-vic-green/30' : scanMode === 'MEDICATION' ? 'border-purple-500/30' : 'border-vic-blue/30'}`}>
+              {scanMode === 'MEDICATION' ? <Pill className="w-4 h-4 animate-pulse text-purple-400" /> : <Zap className={`w-4 h-4 animate-pulse ${scanMode === 'BARCODE' ? 'text-vic-green' : 'text-vic-blue'}`} />}
+              <span className={`text-[10px] font-black uppercase tracking-widest ${scanMode === 'BARCODE' ? 'text-vic-green' : scanMode === 'MEDICATION' ? 'text-purple-400' : 'text-vic-blue'}`}>
+                {scanMode === 'BARCODE' ? 'Barcode Auto-Scan Active' : scanMode === 'MEDICATION' ? 'Medication NDC Scanner' : 'Live Meal Analysis'}
               </span>
             </div>
 
@@ -318,113 +324,172 @@ export default function Camera() {
             </div>
 
             <div className="flex-1 p-8 md:p-12 max-h-[85vh] overflow-y-auto custom-scrollbar">
-              {/* Political Alert (Barcode Only) */}
-              {analysisResult.type === 'BARCODE' && analysisResult.political_warning && (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="mb-8 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-start gap-4"
-                >
-                  <AlertCircle className="w-6 h-6 text-rose-500 shrink-0" />
-                  <div>
-                    <h4 className="text-rose-400 font-bold text-sm uppercase tracking-wider">Ethical Responsibility Alert</h4>
-                    <p className="text-xs text-slate-300 mt-1">{analysisResult.political_warning}</p>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Meal Name */}
-              <div className="mb-8">
-                <h2 className="text-4xl font-bold mb-2">{analysisResult.name}</h2>
-                {analysisResult.type === 'BARCODE' && (
-                  <span className="text-slate-400 text-sm flex items-center gap-1 uppercase tracking-tighter">
-                    <Scale className="w-4 h-4" /> {analysisResult.manufacturer || 'Standard Portion'}
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-12">
-                {/* 1. Description Paragraphs */}
-                <section>
-                  <div className="text-base text-slate-300 leading-relaxed font-medium space-y-4">
-                    {analysisResult.description.split('\n\n').map((para: string, i: number) => (
-                      <p key={i}>{para}</p>
-                    ))}
-                  </div>
-                </section>
-
-                {/* 2. Vitamins and Nutrition Section */}
-                <section>
-                  <h3 className="text-2xl font-bold mb-4 text-white border-b border-white/10 pb-2">
-                    Vitamins and Nutrition
-                  </h3>
-                  <div className="text-sm text-slate-400 leading-relaxed space-y-4">
-                    {analysisResult.vitamins_and_nutrition.split('\n\n').map((para: string, i: number) => (
-                      <p key={i}>{para}</p>
-                    ))}
-                  </div>
-                </section>
-
-                {/* 3. Recommended Section */}
-                {analysisResult.recommended_pairings && (
-                  <section>
-                    <h3 className="text-2xl font-bold mb-4 text-white border-b border-white/10 pb-2">
-                      Recommended
-                    </h3>
-                    <div className="text-sm text-slate-400 leading-relaxed space-y-4">
-                      {analysisResult.recommended_pairings.split('\n\n').map((para: string, i: number) => (
-                        <p key={i}>{para}</p>
-                      ))}
+              {/* ─── MEDICATION RESULT ─── */}
+              {analysisResult.type === 'medication' ? (
+                <div className="space-y-6">
+                  {/* Header */}
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-purple-500/20 rounded-2xl border border-purple-500/30">
+                      <Pill className="w-7 h-7 text-purple-400" />
                     </div>
-                  </section>
-                )}
+                    <div>
+                      <div className="text-xs text-purple-400 font-bold uppercase tracking-widest mb-1">Verified Medication — FDA Database</div>
+                      <h2 className="text-3xl font-bold">{analysisResult.name}</h2>
+                      {analysisResult.generic_name && <p className="text-slate-400 text-sm mt-1">Generic: <span className="text-white font-semibold">{analysisResult.generic_name}</span></p>}
+                    </div>
+                  </div>
 
-                {/* 4. Final Calorie and Macronutrient Summary (Bottom) */}
-                <section className="pt-8 border-t border-white/10">
-                  <div className="flex flex-col items-center justify-center py-6 bg-white/5 rounded-3xl border border-white/10">
-                    <div className="text-3xl font-black text-white mb-2">
-                      ~ {analysisResult.calories} kcal
+                  {/* Purpose */}
+                  {analysisResult.purpose && (
+                    <div className="p-5 bg-purple-500/10 border border-purple-500/20 rounded-2xl">
+                      <h3 className="text-sm font-bold text-purple-300 uppercase tracking-wider mb-2 flex items-center gap-2"><Dna className="w-4 h-4" /> Purpose & Mechanism</h3>
+                      <p className="text-sm text-slate-300 leading-relaxed">{analysisResult.purpose}</p>
                     </div>
-                    <div className="text-sm font-bold text-slate-400 tracking-wider">
-                      P: {analysisResult.protein}g • F: {analysisResult.fat}g • C: {analysisResult.carbs}g
+                  )}
+
+                  {/* Description */}
+                  {analysisResult.description && (
+                    <div className="text-sm text-slate-300 leading-relaxed">
+                      {analysisResult.description.split('\n\n').map((para: string, i: number) => <p key={i}>{para}</p>)}
                     </div>
-                    {analysisResult.estimated_price && (
-                      <div className="mt-4 px-4 py-1.5 bg-emerald-500/20 rounded-full text-emerald-400 text-xs font-bold flex items-center gap-2">
-                        <ShoppingCart className="w-3.5 h-3.5" />
-                        {analysisResult.estimated_price}
+                  )}
+
+                  {/* Warnings */}
+                  {analysisResult.warnings && (
+                    <div className="p-5 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
+                      <h3 className="text-sm font-bold text-amber-300 uppercase tracking-wider mb-2 flex items-center gap-2"><TriangleAlert className="w-4 h-4" /> Warnings & Precautions</h3>
+                      <p className="text-sm text-amber-200/80 leading-relaxed">{analysisResult.warnings}</p>
+                    </div>
+                  )}
+
+                  {/* Side Effects */}
+                  {analysisResult.side_effects && (
+                    <div className="p-5 bg-rose-500/10 border border-rose-500/20 rounded-2xl">
+                      <h3 className="text-sm font-bold text-rose-300 uppercase tracking-wider mb-2 flex items-center gap-2"><AlertCircle className="w-4 h-4" /> Common Side Effects</h3>
+                      <p className="text-sm text-slate-300 leading-relaxed">{analysisResult.side_effects}</p>
+                    </div>
+                  )}
+
+                  {/* Interactions */}
+                  {analysisResult.interactions && (
+                    <div className="p-5 bg-slate-800/60 border border-white/10 rounded-2xl">
+                      <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-2"><HeartPulse className="w-4 h-4" /> Drug Interactions</h3>
+                      <p className="text-sm text-slate-400 leading-relaxed">{analysisResult.interactions}</p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                    <button
+                      onClick={() => navigate('/chat', { state: { initialMessage: `I just scanned ${analysisResult.name} (${analysisResult.generic_name}). Can you tell me more about it and if it's safe given my health profile?` } })}
+                      className="flex-1 py-4 bg-purple-600 text-white rounded-2xl font-bold hover:bg-purple-700 flex items-center justify-center gap-2 transition-all"
+                    >
+                      <MessageSquare className="w-5 h-5" /> Ask Health Coach
+                    </button>
+                    <button onClick={handleRetry} className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl font-bold hover:bg-white/10 transition-all text-slate-400">
+                      Retry
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* ─── FOOD / BARCODE RESULT ─── */
+                <div>
+                  {/* Political Alert (Barcode Only) */}
+                  {analysisResult.political_warning && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="mb-8 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-start gap-4"
+                    >
+                      <AlertCircle className="w-6 h-6 text-rose-500 shrink-0" />
+                      <div>
+                        <h4 className="text-rose-400 font-bold text-sm uppercase tracking-wider">Ethical Responsibility Alert</h4>
+                        <p className="text-xs text-slate-300 mt-1">{analysisResult.political_warning}</p>
                       </div>
+                    </motion.div>
+                  )}
+
+                  {/* Name */}
+                  <div className="mb-8">
+                    <h2 className="text-4xl font-bold mb-2">{analysisResult.name}</h2>
+                    {analysisResult.brand && (
+                      <span className="text-slate-400 text-sm flex items-center gap-1 uppercase tracking-tighter">
+                        <Scale className="w-4 h-4" /> {analysisResult.brand}
+                      </span>
                     )}
                   </div>
-                </section>
 
-                {/* AI Insight / Personalization */}
-                <section className="p-6 bg-vic-blue/10 border border-vic-blue/20 rounded-2xl italic">
-                  <p className="text-sm text-slate-300">
-                    {analysisResult.recommendation}
-                  </p>
-                </section>
-              </div>
+                  <div className="space-y-10">
+                    {/* Description */}
+                    {analysisResult.description && (
+                      <section>
+                        <div className="text-base text-slate-300 leading-relaxed font-medium space-y-4">
+                          {analysisResult.description.split('\n\n').map((para: string, i: number) => <p key={i}>{para}</p>)}
+                        </div>
+                      </section>
+                    )}
 
-              <div className="mt-12 flex flex-col sm:flex-row gap-4">
-                <button
-                  onClick={handleSave}
-                  className="flex-1 py-4 bg-vic-blue text-white rounded-2xl font-bold hover:bg-vic-blue/80 flex items-center justify-center gap-2 transition-all shadow-xl shadow-vic-blue/20"
-                >
-                  <Check className="w-5 h-5" /> Log Daily Intake
-                </button>
-                <button
-                  onClick={() => navigate('/chat', { state: { initialMessage: `Tell me more about this ${analysisResult.name}. How does it affect my goals?` } })}
-                  className="flex-1 py-4 bg-white/5 border border-white/10 rounded-2xl font-bold hover:bg-white/10 flex items-center justify-center gap-2 transition-all"
-                >
-                  <MessageSquare className="w-5 h-5" /> Consult Coach
-                </button>
-                <button
-                  onClick={handleRetry}
-                  className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl font-bold hover:bg-white/10 transition-all text-slate-400"
-                >
-                  Retry
-                </button>
-              </div>
+                    {/* Vitamins */}
+                    {analysisResult.vitamins_and_nutrition && (
+                      <section>
+                        <h3 className="text-2xl font-bold mb-4 text-white border-b border-white/10 pb-2">Vitamins & Nutrition</h3>
+                        <div className="text-sm text-slate-400 leading-relaxed space-y-4">
+                          {analysisResult.vitamins_and_nutrition.split('\n\n').map((para: string, i: number) => <p key={i}>{para}</p>)}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Recommended Pairings */}
+                    {analysisResult.recommended_pairings && (
+                      <section>
+                        <h3 className="text-2xl font-bold mb-4 text-white border-b border-white/10 pb-2">Recommended Pairings</h3>
+                        <div className="text-sm text-slate-400 leading-relaxed space-y-4">
+                          {analysisResult.recommended_pairings.split('\n\n').map((para: string, i: number) => <p key={i}>{para}</p>)}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Calorie Summary */}
+                    <section className="pt-8 border-t border-white/10">
+                      <div className="flex flex-col items-center justify-center py-6 bg-white/5 rounded-3xl border border-white/10">
+                        <div className="text-3xl font-black text-white mb-2">~ {analysisResult.calories} kcal</div>
+                        <div className="text-sm font-bold text-slate-400 tracking-wider">
+                          P: {analysisResult.protein}g • F: {analysisResult.fat}g • C: {analysisResult.carbs}g
+                        </div>
+                        {analysisResult.estimated_price && (
+                          <div className="mt-4 px-4 py-1.5 bg-emerald-500/20 rounded-full text-emerald-400 text-xs font-bold flex items-center gap-2">
+                            <ShoppingCart className="w-3.5 h-3.5" /> {analysisResult.estimated_price}
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
+                    {/* AI Recommendation */}
+                    {analysisResult.recommendation && (
+                      <section className="p-6 bg-vic-blue/10 border border-vic-blue/20 rounded-2xl italic">
+                        <p className="text-sm text-slate-300">{analysisResult.recommendation}</p>
+                      </section>
+                    )}
+                  </div>
+
+                  <div className="mt-10 flex flex-col sm:flex-row gap-4">
+                    <button
+                      onClick={handleSave}
+                      className="flex-1 py-4 bg-vic-blue text-white rounded-2xl font-bold hover:bg-vic-blue/80 flex items-center justify-center gap-2 transition-all shadow-xl shadow-vic-blue/20"
+                    >
+                      <Check className="w-5 h-5" /> Log Daily Intake
+                    </button>
+                    <button
+                      onClick={() => navigate('/chat', { state: { initialMessage: `Tell me more about ${analysisResult.name}. How does it fit my health goals?` } })}
+                      className="flex-1 py-4 bg-white/5 border border-white/10 rounded-2xl font-bold hover:bg-white/10 flex items-center justify-center gap-2 transition-all"
+                    >
+                      <MessageSquare className="w-5 h-5" /> Consult Coach
+                    </button>
+                    <button onClick={handleRetry} className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl font-bold hover:bg-white/10 transition-all text-slate-400">
+                      Retry
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

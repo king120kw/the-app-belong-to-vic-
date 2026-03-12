@@ -122,6 +122,7 @@ export const saveFoodAnalysis = async (userId: string, analysis: any) => {
             serving_size: analysis.serving_size || '1 serving',
             image_url: analysis.image_url || analysis.mealImage,
             barcode: analysis.barcode,
+            user_id: userId,
         })
         .select()
 
@@ -136,14 +137,33 @@ export const saveFoodAnalysis = async (userId: string, analysis: any) => {
         .insert({
             user_id: userId,
             food_item_id: foodItem.id,
+            food_name: analysis.name,
             meal_type: analysis.meal_type || 'snack',
             calories_consumed: Number(analysis.calories || 0),
+            calories: Number(analysis.calories || 0),
+            protein: Number(analysis.protein || 0),
+            carbs: Number(analysis.carbs || 0),
+            fat: Number(analysis.fat || 0),
             image_url: analysis.image_url || analysis.mealImage,
+            analysis_data: {
+                origin_story: analysis.country_of_origin,
+                vitamins_and_nutrition: analysis.ingredients ? [{ name: 'Ingredients', description: analysis.ingredients }] : [],
+                recommendations: analysis.recommended_pairings || analysis.advice,
+                user_alignment: analysis.is_compliant,
+                health_score: analysis.health_impact_score || analysis.healthRating,
+                allergen_warnings: analysis.restrictions || []
+            },
             notes: String(analysis.political_warning || analysis.description || analysis.advice || '').substring(0, 1000)
         })
         .select();
 
-    if (historyError) throw historyError
+    if (historyError) {
+        if (historyError.code === '404' || historyError.message?.includes('not found')) {
+            console.error("Critical: food_analysis_history table is missing. Please run migrations.");
+            throw new Error("Data storage service is temporarily unavailable. Our team has been notified.");
+        }
+        throw historyError;
+    }
     const history = historyRows && historyRows.length > 0 ? historyRows[0] : null;
 
     // 3. Daily progress is handled by DB TRIGGERS on food_analysis_history
@@ -157,18 +177,29 @@ export const saveFoodAnalysis = async (userId: string, analysis: any) => {
 // ============================================================================
 
 export const getFoodHistory = async (userId: string, limit = 50) => {
-    const { data, error } = await supabase
-        .from('food_analysis_history')
-        .select(`
+    try {
+        const { data, error } = await supabase
+            .from('food_analysis_history')
+            .select(`
       *,
       food_items (*)
     `)
-        .eq('user_id', userId)
-        .order('analyzed_at', { ascending: false })
-        .limit(limit)
+            .eq('user_id', userId)
+            .order('analyzed_at', { ascending: false })
+            .limit(limit)
 
-    if (error) throw error
-    return data
+        if (error) {
+            if (error.code === '404' || error.message?.includes('not found')) {
+                console.warn("food_analysis_history table not found, returning empty history.");
+                return [];
+            }
+            throw error;
+        }
+        return data;
+    } catch (e) {
+        console.error("Failed to fetch food history:", e);
+        return [];
+    }
 }
 
 export const getRecentMeals = async (userId: string, limit = 10) => {

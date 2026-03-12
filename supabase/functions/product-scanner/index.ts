@@ -7,323 +7,335 @@ const corsHeaders = {
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
-serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
+// ─── Ethical Brand Database ───────────────────────────────────────────────────
+// Hardcoded political affiliations - no DB dependency for accuracy
+const POLITICAL_BRANDS: Record<string, { invest_israel: boolean; invest_uae: boolean; reason: string }> = {
+    'nestle': { invest_israel: true, invest_uae: false, reason: 'Nestlé operates factories in illegal Israeli settlements (Beit El)' },
+    'coca-cola': { invest_israel: true, invest_uae: false, reason: 'Coca-Cola operates bottling plants in Israel' },
+    'pepsico': { invest_israel: true, invest_uae: false, reason: 'PepsiCo acquired SodaStream, an Israeli company operating in occupied territories' },
+    'pepsi': { invest_israel: true, invest_uae: false, reason: 'PepsiCo acquired SodaStream, an Israeli company' },
+    'sodastream': { invest_israel: true, invest_uae: false, reason: 'SodaStream manufactures in Israeli-occupied West Bank' },
+    'strauss': { invest_israel: true, invest_uae: false, reason: 'Strauss Group directly funds Israeli military units' },
+    'elite': { invest_israel: true, invest_uae: false, reason: 'Elite Café is a Strauss Group brand' },
+    'mcdonald': { invest_israel: true, invest_uae: false, reason: "McDonald's Israel provides free meals to Israeli army" },
+    'starbucks': { invest_israel: true, invest_uae: false, reason: 'Howard Schultz (former CEO) is a known pro-Israel donor' },
+    'hp': { invest_israel: true, invest_uae: false, reason: 'Hewlett-Packard provides technology used in Israeli military checkpoints' },
+    'intel': { invest_israel: true, invest_uae: false, reason: 'Intel has major manufacturing facilities in Israel' },
+    'siemens': { invest_israel: true, invest_uae: false, reason: 'Siemens has contracts with Israeli infrastructure projects' },
+    'volvo': { invest_israel: true, invest_uae: false, reason: 'Volvo equipment used in demolishing Palestinian homes' },
+    'caterpillar': { invest_israel: true, invest_uae: false, reason: 'Caterpillar bulldozers used in demolishing Palestinian homes' },
+    'disney': { invest_israel: true, invest_uae: false, reason: 'Disney supports pro-Israel lobbying organizations' },
+    'google': { invest_israel: true, invest_uae: false, reason: 'Project Nimbus: Google provides cloud services to Israeli military' },
+    'amazon': { invest_israel: true, invest_uae: false, reason: 'Project Nimbus: Amazon provides cloud services to Israeli military' },
+    'microsoft': { invest_israel: true, invest_uae: false, reason: 'Microsoft Azure provides services to Israeli defense ministry' },
+    'unilever': { invest_israel: false, invest_uae: false, reason: '' },
+    'halal': { invest_israel: false, invest_uae: false, reason: '' },
+};
+
+function checkPoliticalAffiliation(brand: string): { invest_israel: boolean; invest_uae: boolean; warning: string | null } {
+    if (!brand) return { invest_israel: false, invest_uae: false, warning: null };
+
+    const brandLower = brand.toLowerCase();
+    for (const [key, data] of Object.entries(POLITICAL_BRANDS)) {
+        if (brandLower.includes(key) && (data.invest_israel || data.invest_uae)) {
+            return {
+                invest_israel: data.invest_israel,
+                invest_uae: data.invest_uae,
+                warning: `🔴 ETHICAL ALERT: ${brand} — ${data.reason}`
+            };
+        }
+    }
+    return { invest_israel: false, invest_uae: false, warning: null };
+}
+
+// ─── Parse OpenFoodFacts nutriments to standard fields ────────────────────────
+function parseNutriments(nutriments: any): { calories: number; protein: number; carbs: number; fat: number; sugar: number; fiber: number } | null {
+    if (!nutriments) return null;
+    const cal = nutriments['energy-kcal_100g'] || nutriments['energy-kcal'] || nutriments['energy_100g'] / 4.184 || 0;
+    const protein = nutriments['proteins_100g'] || nutriments['proteins'] || 0;
+    const carbs = nutriments['carbohydrates_100g'] || nutriments['carbohydrates'] || 0;
+    const fat = nutriments['fat_100g'] || nutriments['fat'] || 0;
+    const sugar = nutriments['sugars_100g'] || nutriments['sugars'] || 0;
+    const fiber = nutriments['fiber_100g'] || nutriments['fiber'] || 0;
+
+    if (cal === 0 && protein === 0) return null; // Incomplete data
+    return {
+        calories: Math.round(cal),
+        protein: Math.round(protein * 10) / 10,
+        carbs: Math.round(carbs * 10) / 10,
+        fat: Math.round(fat * 10) / 10,
+        sugar: Math.round(sugar * 10) / 10,
+        fiber: Math.round(fiber * 10) / 10,
+    };
+}
+
+// ─── Geo Lookup ───────────────────────────────────────────────────────────────
+async function getGeoInfo(supabase: any, clientIp: string) {
+    // Try cache first (valid for 24h)
+    const { data: cached } = await supabase
+        .from('ip_location_cache')
+        .select('*')
+        .eq('ip_address', clientIp)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+    if (cached) return cached;
+
+    // Fallback: fetch fresh geo data
+    try {
+        const geoRes = await fetch(`https://ipapi.co/${clientIp}/json/`);
+        if (geoRes.ok) {
+            const g = await geoRes.json();
+            if (g.error) throw new Error(g.reason || 'Invalid IP');
+            const geoInfo = {
+                ip_address: clientIp,
+                country_code: g.country_code || 'US',
+                country_name: g.country_name || 'United States',
+                city: g.city || 'Unknown',
+                timezone: g.timezone || 'UTC',
+                currency_code: g.currency || 'USD',
+                currency_symbol: g.currency_symbol || '$',
+                expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString()
+            };
+            await supabase.from('ip_location_cache').upsert(geoInfo, { onConflict: 'ip_address' });
+            return geoInfo;
+        }
+    } catch (e) {
+        console.error('Geo lookup failed:', e);
     }
 
+    // Hard fallback
+    return { country_code: 'US', country_name: 'United States', city: 'Unknown', currency_code: 'USD', currency_symbol: '$', timezone: 'UTC' };
+}
+
+serve(async (req) => {
+    if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
     try {
-        const { barcode, apiKey: clientApiKey, userId, currentTime, locationContext } = await req.json();
+        const body = await req.json();
+        const { barcode, apiKey: clientApiKey, userId, locationContext } = body;
 
-        if (!barcode) {
-            throw new Error("Barcode is required");
-        }
-
-        console.log(`Scanning barcode: ${barcode} for user: ${userId} at ${currentTime}`);
-        console.log(`Location Context: ${JSON.stringify(locationContext)}`);
+        if (!barcode) throw new Error("Barcode is required");
 
         const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
         const supabase = createClient(supabaseUrl, supabaseKey);
 
-        let onboardingData = null;
-
-        if (userId) {
-            const { data: onboarding } = await supabase
-                .from('onboarding_responses')
-                .select('*')
-                .eq('user_id', userId)
-                .maybeSingle();
-            onboardingData = onboarding;
-        }
-
-        // 1. Dual API Lookup
-        const [offResponse, nxResponse] = await Promise.all([
-            fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`),
-            fetch(`https://trackapi.nutritionix.com/v2/search/item?upc=${barcode}`, {
-                headers: {
-                    'x-app-id': Deno.env.get('NUTRITIONIX_APP_ID') || '',
-                    'x-app-key': Deno.env.get('NUTRITIONIX_API_KEY') || ''
-                }
-            }).catch(() => null)
-        ]);
-
-        const offData = await offResponse.json();
-        const nxData = nxResponse?.ok ? await nxResponse.json() : null;
-
-        if (offData.status === 0 && !nxData) {
-            return new Response(JSON.stringify({ found: false, message: "Product not found" }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-        }
-
-        const product = offData.product || (nxData?.foods ? nxData.foods[0] : {});
-        const brandName = product.brands || product.brand_name || "";
-
-        // 2. Localization & IP Caching
-        const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || '8.8.8.8';
-        let geoInfo: any = null;
-
-        // Use passed context if valid, otherwise check cache/IP
-        if (locationContext && locationContext.country && locationContext.currency_symbol) {
-            console.log("Using provided location context:", locationContext);
+        // ── 1. GEO DETECTION (client-provided country takes priority, then IP) ──
+        // We prefer locationContext from client as it's the most accurate
+        let geoInfo: any;
+        if (locationContext?.country) {
             geoInfo = {
                 country_code: locationContext.country,
-                currency_symbol: locationContext.currency_symbol,
-                currency_code: locationContext.currency_code || "USD" // Fallback code
+                country_name: locationContext.country_name || locationContext.country,
+                city: locationContext.city || 'Unknown',
+                currency_code: locationContext.currency_code || 'USD',
+                currency_symbol: locationContext.currency_symbol || '$',
+                timezone: locationContext.timezone || 'UTC'
             };
         } else {
-            const { data: cachedGeo } = await supabase
-                .from('ip_location_cache')
-                .select('*')
-                .eq('ip_address', clientIp)
-                .gt('expires_at', new Date().toISOString())
-                .maybeSingle();
+            const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('cf-connecting-ip') || '8.8.8.8';
+            geoInfo = await getGeoInfo(supabase, clientIp);
+        }
 
-            if (cachedGeo) {
-                geoInfo = cachedGeo;
+        const currencySymbol = geoInfo.currency_symbol || '$';
+        const countryCode = geoInfo.country_code || 'US';
+
+        // ── 2. PRODUCT / MEDICATION LOOKUP ──
+        let productData: any = null;
+        let medicationData: any = null;
+        let verifiedNutrition: any = null;
+        let isFromCache = false;
+
+        // A. Is it a medication NDC? (10-11 digits, no dashes)
+        const isPotentialNDC = /^\d{10,11}$/.test(barcode.replace(/-/g, ''));
+        if (isPotentialNDC) {
+            // Check local cache
+            const { data: cachedMed } = await supabase.from('medications').select('*').eq('ndc_code', barcode).maybeSingle();
+            if (cachedMed) {
+                medicationData = cachedMed;
+                isFromCache = true;
             } else {
                 try {
-                    const geoRes = await fetch(`https://ipapi.co/${clientIp}/json/`);
-                    if (geoRes.ok) {
-                        const geoData = await geoRes.json();
-                        geoInfo = {
-                            ip_address: clientIp,
-                            country_code: geoData.country_code || "US",
-                            country_name: geoData.country_name,
-                            city: geoData.city,
-                            currency_code: geoData.currency || "USD",
-                            currency_symbol: geoData.currency_symbol || "$",
-                            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-                        };
-                        await supabase.from('ip_location_cache').upsert(geoInfo);
+                    const fdaRes = await fetch(`https://api.fda.gov/drug/ndc.json?search=product_ndc:"${barcode}"`);
+                    if (fdaRes.ok) {
+                        const fdaData = await fdaRes.json();
+                        if (fdaData.results?.length > 0) {
+                            const drug = fdaData.results[0];
+                            medicationData = {
+                                ndc_code: barcode,
+                                proprietary_name: drug.brand_name,
+                                generic_name: drug.generic_name,
+                                active_ingredients: drug.active_ingredients,
+                                dosage_form: drug.dosage_form,
+                                route: (drug.route || []).join(', '),
+                                manufacturer: drug.labeler_name,
+                                marketing_status: drug.marketing_status,
+                                is_verified: true
+                            };
+                            supabase.from('medications').insert(medicationData).then(() => console.log('✓ Med cached'));
+                        }
                     }
-                } catch (e) {
-                    console.error("Geo lookup failed:", e);
-                    geoInfo = { country_code: "US", currency_code: "USD", currency_symbol: "$" };
-                }
+                } catch (e) { console.error('OpenFDA error:', e); }
             }
         }
 
-        const countryCode = geoInfo.country_code;
-        const currencySymbol = geoInfo.currency_symbol || "$";
-
-        // 3. Database Product & Political Check
-        let politicalAffiliation = null;
-        let regionalPrice = null;
-
-        // Try to find product in our DB first
-        const { data: dbProduct } = await supabase
-            .from('products')
-            .select('*, companies(*)')
-            .eq('barcode', barcode)
-            .maybeSingle();
-
-        if (dbProduct) {
-            politicalAffiliation = dbProduct.companies;
-
-            // Get regional price
-            const { data: priceData } = await supabase
-                .from('regional_pricing')
-                .select('*')
-                .eq('barcode', barcode)
-                .eq('country_code', countryCode)
-                .maybeSingle();
-            regionalPrice = priceData;
+        if (medicationData) {
+            productData = { type: 'medication', name: medicationData.proprietary_name || medicationData.generic_name, brand: medicationData.manufacturer };
         } else {
-            // Search by brand name if product not found
-            if (brandName) {
-                const { data: companyData } = await supabase
-                    .from('companies')
-                    .select('*')
-                    .ilike('name', `%${brandName}%`)
-                    .maybeSingle();
-                politicalAffiliation = companyData;
-            }
-        }
-
-        // 4. Budget Status Check
-        let budgetStatus = "Active";
-        if (userId) {
-            const { data: activeBudget } = await supabase
-                .from('user_budgets')
-                .select('*')
-                .eq('user_id', userId)
-                .eq('is_active', true)
-                .maybeSingle();
-
-            if (activeBudget && regionalPrice && activeBudget.current_balance < regionalPrice.price) {
-                budgetStatus = "Insufficient";
-                // Proactive Health Coach Warning
-                await supabase.from('notifications').insert({
-                    user_id: userId,
-                    title: "Budget Alert",
-                    message: `Scanning "${dbProduct?.name || product.product_name || 'this item'}" (${currencySymbol}${regionalPrice.price}) will exceed your remaining budget of ${currencySymbol}${activeBudget.current_balance}.`,
-                    type: 'budget_alert'
-                });
-
-                // 4.1 Automatically notify Health Coach Chat
-                const { data: convs } = await supabase
-                    .from('conversations')
-                    .select('id')
-                    .eq('conversation_type', 'ai')
-                    .or('name.ilike.%Health Coach%,name.ilike.%Coach%')
-                    .limit(1);
-
-                if (convs && convs.length > 0) {
-                    await supabase.from('messages').insert({
-                        conversation_id: convs[0].id,
-                        sender_id: '00000000-0000-0000-0000-000000000000', // AI/System Sender
-                        message_type: 'system',
-                        content: `⚠️ BUDGET ALERT: The scanned product "${dbProduct?.name || product.product_name}" costs ${currencySymbol}${regionalPrice.price}, which exceeds your remaining budget of ${currencySymbol}${activeBudget.current_balance}. I suggest looking for a more cost-effective alternative.`,
-                        metadata: { product_id: dbProduct?.id, price: regionalPrice.price, budget_balance: activeBudget.current_balance }
-                    });
+            // B. Food: local cache → OpenFoodFacts
+            const { data: cachedProd } = await supabase.from('products').select('*, companies(*)').eq('barcode', barcode).maybeSingle();
+            if (cachedProd) {
+                isFromCache = true;
+                productData = { type: 'food', name: cachedProd.name, brand: cachedProd.companies?.name || cachedProd.manufacturer, nutritional_data: cachedProd.nutritional_data, country_of_origin: cachedProd.country_of_origin };
+                verifiedNutrition = parseNutriments(cachedProd.nutritional_data);
+            } else {
+                const offRes = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+                if (offRes.ok) {
+                    const offData = await offRes.json();
+                    if (offData.status === 1 && offData.product) {
+                        const p = offData.product;
+                        productData = { type: 'food', name: p.product_name || p.product_name_en || 'Unknown Product', brand: p.brands, manufacturer: p.manufacturer, nutritional_data: p.nutriments, image_url: p.image_url, country_of_origin: p.countries_en || p.countries };
+                        verifiedNutrition = parseNutriments(p.nutriments);
+                        // Background cache
+                        const { data: brandRow } = await supabase.from('companies').select('id').ilike('name', `%${p.brands?.split(',')[0].trim()}%`).maybeSingle();
+                        supabase.from('products').upsert({ barcode, name: productData.name, brand_id: brandRow?.id, manufacturer: p.brands, nutritional_data: p.nutriments, country_of_origin: productData.country_of_origin }, { onConflict: 'barcode' }).then(() => console.log('✓ Product cached'));
+                    }
                 }
             }
         }
 
-        // 5. AI Analysis with Structured Output (JSON Schema)
+        // ── 3. POLITICAL AFFILIATION CHECK ──
+        const brandForCheck = productData?.brand || '';
+        const political = checkPoliticalAffiliation(brandForCheck);
+
+        // Also check against DB companies table for any additional flags
+        if (!political.invest_israel && brandForCheck) {
+            const { data: companyRow } = await supabase.from('companies').select('invest_israel, invest_uae, political_reason').ilike('name', `%${brandForCheck.split(',')[0].trim()}%`).maybeSingle();
+            if (companyRow?.invest_israel) {
+                political.invest_israel = true;
+                political.warning = `🔴 ETHICAL ALERT: ${brandForCheck} — ${companyRow.political_reason || 'Known political affiliation detected'}`;
+            }
+        }
+
+        // ── 4. AI ENRICHMENT ──
         const apiKey = clientApiKey || Deno.env.get('OPENAI_API_KEY');
-        const userProfileStr = onboardingData ? `GOAL: ${onboardingData.goal}, MEDICAL: ${onboardingData.medical_conditions}, RESTRICTIONS: ${onboardingData.dietary_lifestyle?.join(', ')}` : "None";
 
-        const prompt = `You are a world-class Consumer Health AI and Food Scientist.
-Analyze the following product data precisely.
+        let prompt: string;
 
-PRODUCT DATA: ${JSON.stringify(product)}
-USER PROFILE: ${userProfileStr}
-LOCATION: ${geoInfo.city}, ${geoInfo.country_name} (${countryCode})
-BUDGET STATUS: ${budgetStatus}
+        if (productData?.type === 'medication') {
+            prompt = `You are a clinical pharmacist AI. Analyze this verified FDA-registered medication.
 
-STRICT ANALYTICAL MANDATE:
-1. Cross-reference against USER PROFILE (Allergies, Diabetes, Weight Loss, Diet Focus, etc.).
-2. Evaluate ethical compliance (Israel/UAE investments):
-   - MANDATORY BRAND CHECK: If the brand is ${politicalAffiliation?.name || 'found in data'} AND (invest_israel=${politicalAffiliation?.invest_israel || false} OR invest_uae=${politicalAffiliation?.invest_uae || false}), you MUST set 'is_compliant' to false AND output a red-themed string in 'political_warning' (e.g., "🔴 ETHICAL CONCERN: Linked to [Company Name]...").
-   - IF NO AFFILIATION FOUND: Set 'political_warning' to "🟢 ETHICAL STATUS: No known affiliation with restricted investments."
-3. LOCALIZATION:
-   - Identify ingredients and nutritional facts precisely.
-   - Output 'estimated_price' in the local currency (${currencySymbol}) based on the user's location.
-   - Suggest localized smart alternatives available in ${geoInfo.country_name}.
-4. BRANDING: Distinctly identify and state the product's BRAND name in the response.
+FDA DATA: ${JSON.stringify(medicationData)}
 
-JSON OUTPUT:
+Provide a JSON response. All fields required:
 {
-  "name": "Product Name",
-  "brand": "Brand Name",
-  "manufacturer": "Manufacturer",
-  "country_of_origin": "Country Name",
-  "ingredients": "Ingredient list...",
-  "description": "Professional 3-sentence bio...",
-  "vitamins_and_nutrition": "Micronutrient audit...",
-  "recommendation": "Contextual advice based on health + budget...",
-  "estimated_price": "${currencySymbol}${regionalPrice?.price || '...'}",
-  "is_compliant": boolean,
-  "political_warning": "Warning string",
-  "cheaper_alternatives": [
-    { "name": "Name", "price": "${currencySymbol}...", "reason": "Better value/health" }
-  ],
-  "calories": number,
-  "protein": number,
-  "carbs": number,
-  "fat": number,
-  "sugar": number,
-  "fiber": number,
-  "healthStatus": "GOOD" | "MODERATE" | "POOR",
-  "user_alignment_boolean": boolean
+  "name": "${medicationData?.proprietary_name || medicationData?.generic_name}",
+  "brand": "${medicationData?.manufacturer}",
+  "generic_name": "${medicationData?.generic_name || ''}",
+  "description": "2-3 paragraph clinical overview of the drug",
+  "purpose": "What this medication treats and how it works",
+  "side_effects": "List common and serious side effects clearly",
+  "interactions": "Key drug interactions the patient should know",
+  "warnings": "FDA black box warnings and contraindications",
+  "storage": "Storage requirements",
+  "healthStatus": "SAFE",
+  "is_compliant": true
 }`;
+        } else {
+            const hasVerifiedNutrition = verifiedNutrition !== null;
+            prompt = `You are a Consumer Health AI. Analyze this food product for a user in ${geoInfo.city || 'Unknown'}, ${geoInfo.country_name || 'Unknown'}.
+
+PRODUCT DETAILS: ${JSON.stringify(productData || { barcode })}
+${hasVerifiedNutrition ? `
+⚠️ VERIFIED NUTRITIONAL DATA (PER 100g) — MANDATORY: USE THESE EXACT NUMBERS. DO NOT HALLUCINATE:
+- Calories: ${verifiedNutrition.calories} kcal
+- Protein: ${verifiedNutrition.protein}g
+- Carbs: ${verifiedNutrition.carbs}g
+- Fat: ${verifiedNutrition.fat}g
+- Sugar: ${verifiedNutrition.sugar}g
+- Fiber: ${verifiedNutrition.fiber}g
+` : '(No verified nutritional database entry found — estimate based on product type)'}
+
+POLITICAL STATUS: invest_israel=${political.invest_israel}, invest_uae=${political.invest_uae}
+USER LOCATION: ${geoInfo.city}, ${geoInfo.country_name} | CURRENCY: ${currencySymbol} (${geoInfo.currency_code})
+
+MANDATORY RULES:
+1. ${hasVerifiedNutrition ? 'USE THE VERIFIED NUMBERS ABOVE EXACTLY. Never change them.' : 'Provide your best scientific estimate for macros.'}
+2. ${political.invest_israel ? `SET is_compliant=false. SET political_warning="${political.warning}"` : 'is_compliant=true unless you identify a known ethical issue.'}
+3. Provide realistic estimated_price in ${currencySymbol} for ${geoInfo.country_name} market. Research typical local prices.
+4. Provide 2-3 cheaper_alternatives specific to ${geoInfo.country_name}.
+5. vitamins_and_nutrition must be 2-3 detailed paragraphs.
+6. description must be 2-3 detailed paragraphs.
+
+Respond with ONLY this JSON (no markdown):
+{
+  "name": "exact product name",
+  "brand": "brand name",
+  "description": "2-3 paragraph description",
+  "vitamins_and_nutrition": "2-3 paragraph vitamin analysis",
+  "recommendation": "one personalized sentence",
+  "recommended_pairings": "2 paragraphs",
+  "estimated_price": "${currencySymbol}X.XX",
+  "cheaper_alternatives": [{"name": "...", "price": "${currencySymbol}X.XX", "reason": "..."}],
+  "is_compliant": true,
+  "political_warning": ${political.invest_israel ? `"${political.warning}"` : 'null'},
+  "calories": ${hasVerifiedNutrition ? verifiedNutrition.calories : 'number'},
+  "protein": ${hasVerifiedNutrition ? verifiedNutrition.protein : 'number'},
+  "carbs": ${hasVerifiedNutrition ? verifiedNutrition.carbs : 'number'},
+  "fat": ${hasVerifiedNutrition ? verifiedNutrition.fat : 'number'},
+  "sugar": ${hasVerifiedNutrition ? verifiedNutrition.sugar : 'number'},
+  "fiber": ${hasVerifiedNutrition ? verifiedNutrition.fiber : 'number'},
+  "healthStatus": "GOOD|MODERATE|POOR",
+  "user_alignment_boolean": true
+}`;
+        }
 
         const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${apiKey}`
-            },
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
             body: JSON.stringify({
                 model: "gpt-4o",
                 messages: [{ role: "user", content: prompt }],
-                response_format: {
-                    type: "json_schema",
-                    json_schema: {
-                        name: "product_audit",
-                        strict: true,
-                        schema: {
-                            type: "object",
-                            properties: {
-                                name: { type: "string" },
-                                brand: { type: "string" },
-                                manufacturer: { type: "string" },
-                                country_of_origin: { type: "string" },
-                                ingredients: { type: "string" },
-                                description: { type: "string" },
-                                vitamins_and_nutrition: { type: "string" },
-                                recommendation: { type: "string" },
-                                estimated_price: { type: "string" },
-                                is_compliant: { type: "boolean" },
-                                political_warning: { type: "string" },
-                                cheaper_alternatives: {
-                                    type: "array",
-                                    items: {
-                                        type: "object",
-                                        properties: {
-                                            name: { type: "string" },
-                                            price: { type: "string" },
-                                            reason: { type: "string" }
-                                        },
-                                        required: ["name", "price", "reason"],
-                                        additionalProperties: false
-                                    }
-                                },
-                                calories: { type: "number" },
-                                protein: { type: "number" },
-                                carbs: { type: "number" },
-                                fat: { type: "number" },
-                                sugar: { type: "number" },
-                                fiber: { type: "number" },
-                                healthStatus: { type: "string", enum: ["GOOD", "MODERATE", "POOR"] },
-                                user_alignment_boolean: { type: "boolean" }
-                            },
-                            required: [
-                                "name", "brand", "manufacturer", "country_of_origin", "ingredients",
-                                "description", "vitamins_and_nutrition", "recommendation",
-                                "estimated_price", "is_compliant", "political_warning",
-                                "cheaper_alternatives", "calories", "protein", "carbs",
-                                "fat", "sugar", "fiber", "healthStatus", "user_alignment_boolean"
-                            ],
-                            additionalProperties: false
-                        }
-                    }
-                }
-            }),
+                response_format: { type: "json_object" }
+            })
         });
 
         if (!aiRes.ok) throw new Error(`OpenAI error: ${await aiRes.text()}`);
         const aiData = await aiRes.json();
-        const aiAnalysis = JSON.parse(aiData.choices[0].message.content);
+        const result = JSON.parse(aiData.choices[0].message.content);
 
-        // 6. Final political check override from DB
-        if (politicalAffiliation && (politicalAffiliation.invest_israel || politicalAffiliation.invest_uae) && userId) {
-            aiAnalysis.is_compliant = false;
-            aiAnalysis.political_warning = `🔴 ETHICAL CONCERN: Linked to ${politicalAffiliation.name}, which has investments in restricted regions.`;
-
-            await supabase.from('notifications').insert({
-                user_id: userId,
-                title: "Ethical Concern Detected",
-                message: `The product "${brandName}" is associated with ${politicalAffiliation.name}, which has investments in restricted regions.`,
-                type: 'political_alert'
-            });
+        // Force political warning to always come through even if AI forgets
+        if (political.invest_israel && !result.political_warning) {
+            result.political_warning = political.warning;
+            result.is_compliant = false;
         }
 
-        const result = {
-            found: true,
-            barcode,
-            image: product.image_url || product.photo?.thumb || "",
-            ...aiAnalysis
-        };
+        // Force verified nutrition numbers if we have them (prevent AI override)
+        if (verifiedNutrition) {
+            result.calories = verifiedNutrition.calories;
+            result.protein = verifiedNutrition.protein;
+            result.carbs = verifiedNutrition.carbs;
+            result.fat = verifiedNutrition.fat;
+            result.sugar = verifiedNutrition.sugar;
+            result.fiber = verifiedNutrition.fiber;
+        }
 
-        return new Response(JSON.stringify(result), {
+        return new Response(JSON.stringify({
+            found: !!productData,
+            barcode,
+            type: productData?.type || 'unknown',
+            is_verified: !!(medicationData?.is_verified || verifiedNutrition),
+            is_from_cache: isFromCache,
+            image_url: productData?.image_url,
+            country_of_origin: productData?.country_of_origin,
+            ...result,
+        }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
 
-    } catch (error) {
+    } catch (error: any) {
+        console.error('product-scanner error:', error.message);
         return new Response(JSON.stringify({ error: error.message }), {
             status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },

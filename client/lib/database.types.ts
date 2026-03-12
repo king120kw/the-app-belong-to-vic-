@@ -284,40 +284,61 @@ export type Database = {
       }
       food_analysis_history: {
         Row: {
+          analysis_data: Json | null
           analysis_type: string | null
           analyzed_at: string | null
+          calories: number | null
           calories_consumed: number | null
+          carbs: number | null
+          fat: number | null
           food_item_id: string | null
+          food_name: string | null
           id: string
           image_url: string | null
           meal_type: string | null
           notes: string | null
-          price_paid: number | null
+          protein: number | null
           user_id: string
+          created_at: string | null
+          updated_at: string | null
         }
         Insert: {
+          analysis_data?: Json | null
           analysis_type?: string | null
           analyzed_at?: string | null
+          calories?: number | null
           calories_consumed?: number | null
+          carbs?: number | null
+          fat?: number | null
           food_item_id?: string | null
+          food_name?: string | null
           id?: string
           image_url?: string | null
           meal_type?: string | null
           notes?: string | null
-          price_paid?: number | null
+          protein?: number | null
           user_id: string
+          created_at?: string | null
+          updated_at?: string | null
         }
         Update: {
+          analysis_data?: Json | null
           analysis_type?: string | null
           analyzed_at?: string | null
+          calories?: number | null
           calories_consumed?: number | null
+          carbs?: number | null
+          fat?: number | null
           food_item_id?: string | null
+          food_name?: string | null
           id?: string
           image_url?: string | null
           meal_type?: string | null
           notes?: string | null
-          price_paid?: number | null
+          protein?: number | null
           user_id?: string
+          created_at?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {

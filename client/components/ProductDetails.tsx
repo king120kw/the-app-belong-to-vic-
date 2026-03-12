@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, ShoppingCart, Scale, MessageSquare, Check, Globe } from "lucide-react";
+import { AlertCircle, ShoppingCart, Scale, MessageSquare, Check, Globe, Pill, TriangleAlert, Dna, HeartPulse } from "lucide-react";
 import { useCurrency } from "../lib/CurrencyContext";
 
 interface ProductDetailsProps {
@@ -25,6 +25,13 @@ interface ProductDetailsProps {
     user_alignment_boolean?: boolean;
     political_warning?: string;
     cheaper_alternatives?: Array<{ name: string; price: string | number; reason: string }>;
+    // Medication-specific fields
+    type?: string;
+    generic_name?: string;
+    purpose?: string;
+    side_effects?: string;
+    warnings?: string;
+    interactions?: string;
     onClose: () => void;
     onAddToDiary: () => void;
 }
@@ -58,17 +65,26 @@ export function ProductDetails({
     user_alignment_boolean,
     political_warning,
     cheaper_alternatives,
+    type,
+    generic_name,
+    purpose,
+    side_effects,
+    warnings,
+    interactions,
     onClose,
     onAddToDiary,
 }: ProductDetailsProps) {
     const navigate = useNavigate();
     const { formatCurrency } = useCurrency();
     const isEthical = !political_warning;
+    const isMedication = type === 'medication';
 
     const handleConsultCoach = () => {
         navigate('/chat', {
             state: {
-                initialMessage: `I just scanned ${productName}. Tell me more about this product and whether it fits my health goals.`
+                initialMessage: isMedication
+                    ? `I just scanned ${productName} (${generic_name}). Can you tell me more and whether it's safe given my health profile?`
+                    : `I just scanned ${productName}. Tell me more about this product and whether it fits my health goals.`
             }
         });
     };
@@ -184,24 +200,53 @@ export function ProductDetails({
                         </div>
                     )}
 
-                    {/* 5. Calorie & Macro Summary — Bottom */}
-                    <div className="bg-slate-900 dark:bg-white/5 rounded-3xl p-6 text-center border border-slate-800 dark:border-white/10">
-                        <div className="text-4xl font-black text-white mb-1">
-                            ~{calories} kcal
+                    {/* MEDICATION ANALYSIS SECTION */}
+                    {isMedication ? (
+                        <div className="space-y-5">
+                            {generic_name && (
+                                <div className="flex items-center gap-3 p-4 bg-purple-500/10 border border-purple-500/20 rounded-2xl">
+                                    <Pill className="w-5 h-5 text-purple-400 shrink-0" />
+                                    <p className="text-sm text-slate-300">Generic Name: <span className="font-bold text-white">{generic_name}</span></p>
+                                </div>
+                            )}
+                            {purpose && (
+                                <div className="space-y-2">
+                                    <h3 className="text-[14px] font-black text-purple-400 uppercase tracking-wider flex items-center gap-2"><Dna className="w-4 h-4" /> Purpose</h3>
+                                    <p className="text-sm text-slate-300 leading-relaxed">{purpose}</p>
+                                </div>
+                            )}
+                            {warnings && (
+                                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
+                                    <h3 className="text-[13px] font-bold text-amber-300 uppercase tracking-wider mb-1 flex items-center gap-2"><TriangleAlert className="w-4 h-4" /> Warnings</h3>
+                                    <p className="text-sm text-amber-200/80 leading-relaxed">{warnings}</p>
+                                </div>
+                            )}
+                            {side_effects && (
+                                <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl">
+                                    <h3 className="text-[13px] font-bold text-rose-300 uppercase tracking-wider mb-1 flex items-center gap-2"><AlertCircle className="w-4 h-4" /> Side Effects</h3>
+                                    <p className="text-sm text-slate-300 leading-relaxed">{side_effects}</p>
+                                </div>
+                            )}
+                            {interactions && (
+                                <div className="p-4 bg-slate-800/60 border border-white/10 rounded-2xl">
+                                    <h3 className="text-[13px] font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-2"><HeartPulse className="w-4 h-4" /> Drug Interactions</h3>
+                                    <p className="text-sm text-slate-400 leading-relaxed">{interactions}</p>
+                                </div>
+                            )}
                         </div>
+                    ) : (
+                    /* 5. Calorie & Macro Summary — Food Products */
+                    <div className="bg-slate-900 dark:bg-white/5 rounded-3xl p-6 text-center border border-slate-800 dark:border-white/10">
+                        <div className="text-4xl font-black text-white mb-1">~{calories} kcal</div>
                         <div className="text-sm font-bold text-slate-400 tracking-wider mb-4">
                             P: {protein}g &nbsp;•&nbsp; F: {fat}g &nbsp;•&nbsp; C: {carbs}g
                         </div>
                         <div className="flex justify-center flex-wrap gap-2">
                             {sugar != null && (
-                                <span className="px-3 py-1 bg-rose-500/10 text-rose-400 text-xs font-bold rounded-full">
-                                    Sugar {sugar}g
-                                </span>
+                                <span className="px-3 py-1 bg-rose-500/10 text-rose-400 text-xs font-bold rounded-full">Sugar {sugar}g</span>
                             )}
                             {fiber != null && (
-                                <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">
-                                    Fiber {fiber}g
-                                </span>
+                                <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">Fiber {fiber}g</span>
                             )}
                             {estimated_price && (
                                 <span className="px-3 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full flex items-center gap-1">
@@ -211,6 +256,7 @@ export function ProductDetails({
                             )}
                         </div>
                     </div>
+                    )}
 
                     {/* Personalized Recommendation */}
                     {recommendation && (
@@ -242,10 +288,10 @@ export function ProductDetails({
                     )}
                 </main>
 
-                {/* Footer Actions */}
+                    {/* Footer Actions */}
                 <div className="px-7 py-6 shrink-0 bg-white dark:bg-[#0a0f14] border-t border-slate-100 dark:border-white/5 space-y-3">
                     <div className="flex gap-3">
-                        {!political_warning && (
+                        {!political_warning && !isMedication && (
                             <button
                                 onClick={onAddToDiary}
                                 className="flex-1 py-4 bg-[#0a2e52] text-white rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all shadow-xl flex items-center justify-center gap-2"
@@ -254,7 +300,7 @@ export function ProductDetails({
                                 Log Product
                             </button>
                         )}
-                        {political_warning && (
+                        {political_warning && !isMedication && (
                             <button
                                 onClick={onClose}
                                 className="flex-1 py-4 bg-rose-600 text-white rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
@@ -265,10 +311,10 @@ export function ProductDetails({
                         )}
                         <button
                             onClick={handleConsultCoach}
-                            className="flex-1 py-4 bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-white rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            className={`flex-1 py-4 rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${isMedication ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-white'}`}
                         >
                             <MessageSquare className="w-5 h-5" />
-                            Ask Coach
+                            {isMedication ? 'Ask Health Coach' : 'Ask Coach'}
                         </button>
                     </div>
                 </div>

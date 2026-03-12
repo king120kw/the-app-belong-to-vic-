@@ -54,77 +54,121 @@ serve(async (req: Request) => {
             }
         }
 
-        const aiPrompt = `You are a world-class Clinical Nutritional AI and Certified Food Scientist with deep expertise in food composition databases (USDA, NCCDB, Atwater).
+        // 1. Identify food item name first (Pre-analysis to enable DB lookup)
+        const identificationPrompt = `Identify the food in this image. Return ONLY a JSON object with a "name" field. Example: {"name": "Apple"}`;
+        const idApiKey = clientApiKey || Deno.env.get('OPENAI_API_KEY');
+        const idResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${idApiKey}`,
+            },
+            body: JSON.stringify({
+                model: "gpt-4o-mini", // Use mini for fast identification
+                messages: [
+                    {
+                        role: "user",
+                        content: [
+                            { type: "text", text: identificationPrompt },
+                            {
+                                type: "image_url",
+                                image_url: {
+                                    url: imageBase64 ? `data:image/jpeg;base64,${imageBase64}` : imageUrl,
+                                    detail: "low"
+                                }
+                            },
+                        ],
+                    },
+                ],
+                response_format: { type: "json_object" }
+            }),
+        });
 
+        const idData = await idResponse.json();
+        const identifiedName = JSON.parse(idData.choices[0].message.content).name;
+        console.log(`Identified food: ${identifiedName}`);
+
+        // 2. Query Database for Verified Nutritional Data
+        const { data: verifiedFood } = await supabase
+            .from('food_items')
+            .select('*')
+            .ilike('name', `%${identifiedName}%`)
+            .order('calories', { ascending: false }) // Get the most substantial entry if multiple
+            .limit(1)
+            .maybeSingle();
+
+        let dbVerifiedContext = "";
+        let isHallucinated = true;
+
+        if (verifiedFood) {
+            console.log("✓ Found verified data in database.");
+            isHallucinated = false;
+            dbVerifiedContext = `
+VERIFIED NUTRITIONAL DATA FOUND IN DATABASE:
+- Calories: ${verifiedFood.calories} kcal
+- Protein: ${verifiedFood.protein}g
+- Carbs: ${verifiedFood.carbs}g
+- Fat: ${verifiedFood.fat}g
+- Fiber: ${verifiedFood.fiber}g
+- Sugar: ${verifiedFood.sugar}g
+- Serving Size: ${verifiedFood.serving_size} ${verifiedFood.serving_size_unit}
+
+MANDATORY: You MUST use these exact verified numbers in your output. Do NOT estimate or hallucinate numbers when verified data is provided above.`;
+        } else {
+            console.log("! No verified data found. AI will estimate (flagged).");
+        }
+
+        const aiPrompt = `You are a world-class Clinical Nutritional AI and Certified Food Scientist.
 Analyze the provided food image with extreme precision.
 
 ${profileContext}
+
+${dbVerifiedContext}
 
 LOCATION CONTEXT: ${JSON.stringify(body.locationContext || {})}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 PART 1 — NARRATIVE REPORT (mandatory style)
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-Write a detailed nutritional report in professional paragraph form — NOT bullet points or lists.
+Write a detailed nutritional report in professional paragraph form.
 
-NARRATIVE SECTIONS:
-• description: EXACTLY 3 full paragraphs (minimum 80 words each):
-   - Para 1: Identify the dish, its main visible ingredients, and overall character/presentation.
-   - Para 2: How the ingredients synergize nutritionally, how they support energy, satiety, and health.
-   - Para 3: Overall assessment — who benefits from this meal, when to eat it, and its lifestyle fit.
-
-• vitamins_and_nutrition: EXACTLY 3-4 full paragraphs (minimum 60 words each), one paragraph per main ingredient, covering specific vitamins (A, B-complex, C, D, E, K), minerals (iron, zinc, magnesium, potassium, calcium), and their systemic health benefits (immune support, heart health, muscle function, etc.).
-
-• recommended_pairings: EXACTLY 2-3 full paragraphs suggesting specific nutritional enhancements (lemon juice, seeds, herbs, fermented foods, beverages) and explaining WHY each one improves the dish nutritionally and in flavor.
-
-• recommendation: ONE sentence tailored to the user's goal (${userGoalSummary}) and restrictions (${userRestrictions}).
+• description: EXACTLY 3 full paragraphs (minimum 80 words each).
+• vitamins_and_nutrition: EXACTLY 3-4 full paragraphs covering vitamins and minerals.
+• recommended_pairings: EXACTLY 2-3 full paragraphs suggesting enhancements.
+• recommendation: ONE sentence tailored to the user's goal (${userGoalSummary}).
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-PART 2 — CALORIE & MACRO CALCULATION (mission-critical accuracy required)
+PART 2 — CALORIE & MACRO CALCULATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-Using USDA food composition data and visual portion estimation:
-1. Identify each visible ingredient and estimate its portion weight (grams).
-2. Look up its nutritional values per 100g.
-3. Calculate total calories (kcal), protein (g), carbohydrates (g), fat (g), sugar (g), fiber (g) for the FULL MEAL.
-
-CRITICAL RULES:
-- DO NOT use generic round numbers like 500 or 520 kcal.
-- DO NOT copy example values from the prompt. All numbers MUST be calculated from the actual food visible.
-- Calorie estimates must vary based on actual food: a salad ≈ 150-350 kcal, rice bowl ≈ 500-750 kcal, burger ≈ 700-1200 kcal, smoothie ≈ 200-450 kcal.
-- All macros must be nutritionally consistent (e.g., fat calories + protein calories + carb calories ≈ total calories).
+${verifiedFood ? "MANDATORY: Use the VERIFIED NUTRITIONAL DATA provided above." : "ESTIMATION RULE: As no DB record was found, provide your best clinical estimate based on portion size."}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 PART 3 — PROFILE ALIGNMENT
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-Based on the user's profile above:
-- verdict: "GOOD" if the meal strongly supports their goals, "MODERATE" if neutral/mixed, "POOR" if it conflicts with their restrictions or health conditions.
-- user_alignment_boolean: true only if the meal genuinely aligns with the user's stated goal and restrictions.
-- is_compliant: true if meal respects all stated dietary restrictions.
-
-ACCURACY RULES (universal):
-- Only identify ingredients CLEARLY VISIBLE in the image — do NOT hallucinate.
-- All narrative sections must be full paragraphs with NO bullet points.
-- Separate all paragraphs within each field using \\n\\n.
-- DO NOT output pricing, political warnings, or brand data (these are for the product scanner only).
+- verdict: "GOOD" | "MODERATE" | "POOR"
+- user_alignment_boolean: true/false
+- is_compliant: true/false
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 JSON OUTPUT FORMAT
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 {
-  "name": "Exact meal name based on what you see",
-  "description": "paragraph1\\n\\nparagraph2\\n\\nparagraph3",
-  "vitamins_and_nutrition": "ingredient1 paragraph\\n\\ningredient2 paragraph\\n\\ningredient3 paragraph\\n\\nsummary paragraph",
-  "recommended_pairings": "first enhancement paragraph\\n\\nsecond enhancement paragraph\\n\\nthird enhancement paragraph",
-  "recommendation": "Single sentence personalized to the user's profile",
-  "verdict": "GOOD or MODERATE or POOR",
+  "name": "${identifiedName}",
+  "description": "...",
+  "vitamins_and_nutrition": "...",
+  "recommended_pairings": "...",
+  "recommendation": "...",
+  "verdict": "GOOD" | "MODERATE" | "POOR",
   "user_alignment_boolean": true,
-  "calories": 487,
-  "protein": 31,
-  "carbs": 52,
-  "fat": 18,
-  "sugar": 6,
-  "fiber": 7,
-  "is_compliant": true
+  "calories": ${verifiedFood?.calories || 'number'},
+  "protein": ${verifiedFood?.protein || 'number'},
+  "carbs": ${verifiedFood?.carbs || 'number'},
+  "fat": ${verifiedFood?.fat || 'number'},
+  "sugar": ${verifiedFood?.sugar || 'number'},
+  "fiber": ${verifiedFood?.fiber || 'number'},
+  "is_compliant": true,
+  "confidence_interval": ${verifiedFood ? 1.0 : 0.8},
+  "is_verified": ${!isHallucinated}
 }
 
 REMINDER: Calculate real values from the actual food in the image. Every meal has a different caloric density. Portion size matters — a large plate has more calories than a small bowl. Adjust accordingly.`;
@@ -199,9 +243,25 @@ REMINDER: Calculate real values from the actual food in the image. Every meal ha
         const aiResult = await aiResponse.json();
         const parsed = JSON.parse(aiResult.choices[0].message.content);
 
-        return new Response(JSON.stringify({ ...parsed, healthStatus: parsed.verdict }), {
+        // ⚡ POST-AI ENFORCEMENT: Force verified numbers — AI cannot override these
+        if (verifiedFood) {
+            parsed.calories = verifiedFood.calories;
+            parsed.protein = verifiedFood.protein;
+            parsed.carbs = verifiedFood.carbs;
+            parsed.fat = verifiedFood.fat;
+            parsed.sugar = verifiedFood.sugar ?? parsed.sugar;
+            parsed.fiber = verifiedFood.fiber ?? parsed.fiber;
+        }
+
+        return new Response(JSON.stringify({
+            ...parsed,
+            healthStatus: parsed.verdict,
+            confidence_interval: verifiedFood ? 1.0 : 0.8,
+            is_verified: !isHallucinated
+        }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+
 
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';

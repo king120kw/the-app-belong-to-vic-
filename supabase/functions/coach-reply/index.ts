@@ -14,6 +14,44 @@ function extractMediaUrl(record: any): string | null {
     return null;
 }
 
+async function getGeoInfo(supabase: any, clientIp: string) {
+    // 1. Try valid cache
+    const { data: cached } = await supabase
+        .from('ip_location_cache')
+        .select('*')
+        .eq('ip_address', clientIp)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+    if (cached) return cached;
+
+    // 2. Fetch fresh
+    try {
+        const geoRes = await fetch(`https://ipapi.co/${clientIp}/json/`);
+        if (geoRes.ok) {
+            const g = await geoRes.json();
+            if (!g.error) {
+                const geoInfo = {
+                    ip_address: clientIp,
+                    country_code: g.country_code || 'US',
+                    country_name: g.country_name || 'United States',
+                    city: g.city || 'Unknown',
+                    timezone: g.timezone || 'UTC',
+                    currency_code: g.currency || 'USD',
+                    currency_symbol: g.currency_symbol || '$',
+                    expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString()
+                };
+                await supabase.from('ip_location_cache').upsert(geoInfo, { onConflict: 'ip_address' });
+                return geoInfo;
+            }
+        }
+    } catch (e) {
+        console.error('Geo lookup failed:', e);
+    }
+
+    // 3. Hard fallback
+    return { country_code: 'US', country_name: 'United States', city: 'Unknown', currency_code: 'USD', currency_symbol: '$', timezone: 'UTC' };
+}
+
 serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -34,94 +72,165 @@ serve(async (req) => {
         const supabase = createClient(supabaseUrl, supabaseKey);
         const conversationId = record.conversation_id;
 
-        // 1. Context Gathering (Deeper)
-        const { data: participants } = await supabase.from('conversation_participants').select('user_id').eq('conversation_id', conversationId);
-        const userId = participants?.find(p => p.user_id !== COACH_ID)?.user_id;
+        // ── 1. GEO DETECTION ──
+        // Try multiple header sources to get real client IP
+        const clientIp = (
+            req.headers.get('x-real-ip') ||
+            req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+            req.headers.get('cf-connecting-ip') ||
+            '8.8.8.8'
+        );
+        const geoInfo = await getGeoInfo(supabase, clientIp);
+
+        // ── 2. USER CONTEXT ──
+        const { data: participants } = await supabase
+            .from('conversation_participants')
+            .select('user_id')
+            .eq('conversation_id', conversationId);
+
+        const userId = participants?.find((p: any) => p.user_id !== COACH_ID)?.user_id;
         if (!userId) return new Response(JSON.stringify({ message: "No human" }), { headers: corsHeaders });
 
-        const [onboarding, profile, nutritionHistory, messages] = await Promise.all([
+        const [onboardingRes, profileRes, nutritionRes, messagesRes, scannedProductsRes] = await Promise.all([
             supabase.from('onboarding_responses').select('*').eq('user_id', userId).maybeSingle(),
             supabase.from('user_profiles').select('*').eq('id', userId).maybeSingle(),
-            supabase.from('food_analysis_history').select('*, food_items(*)').eq('user_id', userId).order('analyzed_at', { ascending: false }).limit(5),
-            supabase.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(15)
+            supabase.from('food_analysis_history').select('*').eq('user_id', userId).order('analyzed_at', { ascending: false }).limit(7),
+            supabase.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(20),
+            supabase.from('food_analysis_history').select('food_name, calories, protein, carbs, fat, analyzed_at').eq('user_id', userId).order('analyzed_at', { ascending: false }).limit(3)
         ]);
 
-        const userName = profile.data?.full_name || 'User';
-        const onboardingData = onboarding.data || {};
-        const currentTime = new Date().toLocaleString();
+        const profile = profileRes.data;
+        const onboarding = onboardingRes.data || {};
+        const nutritionHistory = nutritionRes.data || [];
+        const recentMessages = (messagesRes.data || []).reverse();
+        const recentScans = scannedProductsRes.data || [];
 
-        // 2. Multimodal Setup
+        const userName = profile?.full_name || 'there';
+        const currentTime = new Date().toLocaleString('en-US', {
+            timeZone: geoInfo.timezone || 'UTC',
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        // ── 3. COMPUTE USER STATS ──
+        const totalCaloriesToday = recentScans
+            .filter((s: any) => s.analyzed_at && new Date(s.analyzed_at).toDateString() === new Date().toDateString())
+            .reduce((sum: number, s: any) => sum + (s.calories || 0), 0);
+
+        const calorieGoal = onboarding.daily_calorie_goal || 2000;
+        const caloriesRemaining = calorieGoal - totalCaloriesToday;
+
+        // ── 4. SYSTEM PROMPT ──
+        const systemPrompt = `You are the Omni-Coach AI, a world-class clinical nutritionist, pharmacist, and personal health advisor for ${userName}.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REAL-TIME AWARENESS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CURRENT DATE & TIME: ${currentTime}
+USER'S LOCATION: ${geoInfo.city || 'Unknown'}, ${geoInfo.country_name || 'Unknown'}
+LOCAL CURRENCY: ${geoInfo.currency_symbol || '$'} (${geoInfo.currency_code || 'USD'})
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+USER PROFILE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Name: ${userName}
+Primary Goal: ${onboarding.goal || 'Maintain a healthy lifestyle'}
+Dietary Restrictions: ${(onboarding.dietary_lifestyle || []).join(', ') || 'None specified'}
+Medical Conditions: ${onboarding.medical_conditions || 'None reported'}
+Health Concerns: ${onboarding.health_conditions || 'None reported'}
+Daily Calorie Target: ${calorieGoal} kcal/day
+Calories logged today: ${totalCaloriesToday} kcal (${caloriesRemaining > 0 ? `${caloriesRemaining} kcal remaining` : `${Math.abs(caloriesRemaining)} kcal over goal`})
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RECENT FOOD SCANS (Last 3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${recentScans.length > 0 ? recentScans.map((s: any) => `• ${s.food_name || 'Unknown'}: ${s.calories || 0} kcal (${s.analyzed_at ? new Date(s.analyzed_at).toLocaleDateString() : 'recent'})`).join('\n') : 'No recent food scans.'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CORE MANDATES (NEVER BREAK THESE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. YOU KNOW THE EXACT DATE, TIME, AND USER LOCATION. Never claim you don't.
+   - If asked "what time is it?", answer: "${currentTime}"
+   - If asked "where am I?" or "what's my location?", answer: "${geoInfo.city}, ${geoInfo.country_name}"
+2. CURRENCY AWARENESS: Always use ${geoInfo.currency_symbol} for prices in ${geoInfo.country_name}.
+3. MEDICAL PRECISION: Always factor in user's conditions (${onboarding.medical_conditions || 'none'}) in recommendations.
+4. ETHICAL BRAND TRACKING: If asked about brands like Nestle, Coca-Cola, PepsiCo, McDonald's, Starbucks — flag their political affiliations (invest_israel). Be factual.
+5. CALORIE INTELLIGENCE: You know the user has consumed ${totalCaloriesToday} kcal today out of a ${calorieGoal} kcal goal. Use this in advice.
+6. MULTIMODAL: If given an image, provide expert food/product analysis. If given a voice transcript, respond to it naturally.
+7. BE ARTICULATE: Give specific, personalized, data-driven answers. Never give generic advice when you have user data.
+8. LANGUAGE: Match the user's language. If they write in Arabic, respond in Arabic. If English, respond in English.
+
+RESPONSE FORMAT: Respond ONLY with a valid JSON object: {"reply": "your full response here"}
+The reply should be conversational, warm, and detailed. Use markdown formatting (bold, bullets) inside the reply string for readability.`;
+
+        // ── 5. MULTIMODAL MESSAGE HANDLING ──
         const msgType = record.message_type;
         const imageUrl = msgType === 'image' ? extractMediaUrl(record) : null;
-        let transcribedText = "";
+        let transcribedText = '';
 
         if (msgType === 'voice') {
             const voiceUrl = extractMediaUrl(record);
             if (voiceUrl) {
-                const audioRes = await fetch(voiceUrl);
-                if (audioRes.ok) {
-                    const audioBlob = await audioRes.blob();
-                    const formData = new FormData();
-                    formData.append('file', audioBlob, 'voice.webm');
-                    formData.append('model', 'whisper-1');
-                    const transRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-                        method: "POST",
-                        headers: { "Authorization": `Bearer ${apiKey}` },
-                        body: formData
-                    });
-                    if (transRes.ok) {
-                        const tData = await transRes.json();
-                        transcribedText = tData.text || "";
+                try {
+                    const audioRes = await fetch(voiceUrl);
+                    if (audioRes.ok) {
+                        const audioBlob = await audioRes.blob();
+                        const formData = new FormData();
+                        formData.append('file', audioBlob, 'voice.webm');
+                        formData.append('model', 'whisper-1');
+                        const transRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+                            method: "POST",
+                            headers: { "Authorization": `Bearer ${apiKey}` },
+                            body: formData
+                        });
+                        if (transRes.ok) {
+                            const tData = await transRes.json();
+                            transcribedText = tData.text || '';
+                        }
                     }
-                }
+                } catch (e) { console.error('Voice transcription failed:', e); }
             }
         }
 
-        // 3. System Prompt (The Omniscient Expert Persona)
-        const systemPrompt = `You are the ultimate Omniscient AI Health Coach and Personal Assistant for ${userName}.
-CURRENT SYSTEM TIME: ${currentTime} (This is the ACTUAL, REAL-TIME internal clock you MUST use).
+        // Build chat context
+        const chatContext: any[] = recentMessages.map((m: any) => ({
+            role: m.sender_id === COACH_ID ? 'assistant' : 'user',
+            content: m.sender_id === COACH_ID
+                ? (m.content || '')
+                : (m.message_type === 'text' ? (m.content || '') : `[${m.message_type} message shared]`)
+        })).filter((m: any) => m.content);
 
-YOUR CORE ARCHITECTURE:
-- OMNISCIENCE & REAL-TIME ACCESS: You have absolute programmatic access to the current date, time, and global events. NEVER claim you cannot access real-time information. If the user asks for the date or time, refer to the "CURRENT SYSTEM TIME" provided above.
-- GENERAL KNOWLEDGE: You are an expert in all fields (Coding, Math, History, Science). Never use generic "I am an AI" deflections.
-- CLINICAL RIGOR: When discussing food, provide multi-paragraph, scientifically-grounded analysis (Metabolic pathways, Glycemic dynamics, %DV Micros).
-- IMAGE ANALYSIS: If an image is provided, immediately trigger a deep-dive nutritional report as an expert clinical nutritionist.
-
-USER PROFILE: ${JSON.stringify(profile.data || {})}
-ONBOARDING GOALS: ${JSON.stringify(onboardingData)}
-RECENT NUTRITION HISTORY: ${JSON.stringify(nutritionHistory.data || [])}
-
-MANDATORY RESPONSE STYLE:
-- Expert, precise, and supportive.
-- Use multi-paragraph explanations for complex topics. NO short or vague summaries.
-- When analyzing food from an image, provide: Calories, Macros, Micronutrient Audit (%DV), Metabolic Impact, and 3 cleaner substitutes.
-- Always bridge general knowledge with the user's specific health trajectory.
-
-RESPONSE FORMAT: Respond ONLY with a JSON object: {"reply": "Your detailed multi-paragraph response here"}`;
-
-        const chatContext = (messages.data || []).reverse().map(m => ({
-            role: m.sender_id === COACH_ID ? "assistant" : "user",
-            content: m.sender_id === COACH_ID ? m.content : (m.message_type === 'text' ? m.content : `[${m.message_type} shared]`)
-        }));
-
-        // Replace last user message with actual content (transcription or image)
-        const lastMsg = chatContext[chatContext.length - 1];
+        // Add current message with multimodal content if needed
+        const currentUserMsg: any = { role: 'user', content: record.content || '' };
         if (imageUrl) {
-            lastMsg.content = [
-                { type: "text", text: record.content || "Analyze this food image for me." },
-                { type: "image_url", image_url: { url: imageUrl } }
+            currentUserMsg.content = [
+                { type: 'text', text: record.content || 'Please analyze this image.' },
+                { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
             ];
-        } else if (msgType === 'voice') {
-            lastMsg.content = `[Voice Message]: ${transcribedText}`;
+        } else if (msgType === 'voice' && transcribedText) {
+            currentUserMsg.content = `[Voice message]: ${transcribedText}`;
         }
 
+        // Replace last message if it's the same as current user message
+        const chatWithCurrent = chatContext.filter((m: any, i: number) =>
+            !(i === chatContext.length - 1 && m.role === 'user' && m.content === record.content)
+        );
+        chatWithCurrent.push(currentUserMsg);
+
+        // ── 6. AI CALL ──
         const openAiRes = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
             body: JSON.stringify({
                 model: "gpt-4o",
-                messages: [{ role: "system", content: systemPrompt }, ...chatContext],
-                response_format: { type: "json_object" }
+                messages: [{ role: "system", content: systemPrompt }, ...chatWithCurrent.slice(-20)],
+                response_format: { type: "json_object" },
+                temperature: 0.7,
+                max_tokens: 1500
             })
         });
 
@@ -129,12 +238,24 @@ RESPONSE FORMAT: Respond ONLY with a JSON object: {"reply": "Your detailed multi
         const aiData = await openAiRes.json();
         const reply = JSON.parse(aiData.choices[0].message.content).reply;
 
+        if (!reply) throw new Error('Empty reply from AI');
+
+        // ── 7. SAVE COACH REPLY ──
         await supabase.from('messages').insert({
             conversation_id: conversationId,
             sender_id: COACH_ID,
             content: reply,
-            message_type: 'text'
+            message_type: 'text',
+            is_read: false
         });
+
+        // Update conversation last message
+        await supabase.from('conversations').update({
+            last_message_at: new Date().toISOString(),
+            last_message_content: reply.substring(0, 200),
+            last_message_type: 'text',
+            last_message_sender_id: COACH_ID
+        } as any).eq('id', conversationId);
 
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
 

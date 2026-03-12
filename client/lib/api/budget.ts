@@ -4,7 +4,7 @@ import { supabase } from '../supabase'
 // BUDGET MANAGEMENT
 // ============================================================================
 
-export const createBudget = async (userId: string, totalBudget: number, startDate: string, endDate: string) => {
+export const createBudget = async (userId: string, totalBudget: number, startDate: string, endDate: string, currencyCode: string = 'USD', currencySymbol: string = '$') => {
     // Deactivate existing budgets
     await supabase
         .from('user_budgets')
@@ -19,6 +19,8 @@ export const createBudget = async (userId: string, totalBudget: number, startDat
             remaining_budget: totalBudget,
             period_start: startDate,
             period_end: endDate,
+            currency_code: currencyCode,
+            currency_symbol: currencySymbol,
             is_active: true,
         } as any)
         .select()

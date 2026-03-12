@@ -11,7 +11,7 @@ export default function Budget() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const { t } = useTranslation();
-    const { currencySymbol, formatCurrency } = useCurrency();
+    const { currencyCode, currencySymbol, formatCurrency } = useCurrency();
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newBudget, setNewBudget] = useState({
         amount: 500,
@@ -35,7 +35,7 @@ export default function Budget() {
 
     // Create budget mutation
     const createBudgetMutation = useMutation({
-        mutationFn: (data: any) => createBudget(user!.id, data.amount, data.startDate, data.endDate),
+        mutationFn: (data: any) => createBudget(user!.id, data.amount, data.startDate, data.endDate, currencyCode, currencySymbol),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['active-budget', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['budget-history', user?.id] });
@@ -50,6 +50,7 @@ export default function Budget() {
     // Adjust default amount based on currency
     useEffect(() => {
         if (!activeBudget) {
+            // Scale default amount for currencies with large denominations (like IDR)
             const defaultAmt = currencySymbol === 'Rp' ? 5000000 : 500;
             setNewBudget(prev => ({ ...prev, amount: defaultAmt }));
         }
@@ -57,7 +58,7 @@ export default function Budget() {
 
     const handleCreateBudget = (e: React.FormEvent) => {
         e.preventDefault();
-        createBudgetMutation.mutate(newBudget);
+        createBudgetMutation.mutate({ ...newBudget });
     };
 
     const handleDeleteBudget = async (id: string) => {

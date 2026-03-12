@@ -303,6 +303,8 @@ export default function ChatConversation() {
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const shouldSendOnStopRef = useRef(false);
+    const recordingStartTimeRef = useRef(0);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -543,9 +545,7 @@ export default function ChatConversation() {
             recorder.onstop = () => {
                 const finalMimeType = mimeType || 'audio/webm';
                 const blob = new Blob(chunksRef.current, { type: finalMimeType });
-                const url = URL.createObjectURL(blob);
-                setRecordedAudio({ blob, url });
-                setRecordingStatus('preview');
+
                 stream.getTracks().forEach(track => track.stop());
 
                 if (audioContextRef.current) {
@@ -555,6 +555,41 @@ export default function ChatConversation() {
                 if (animationFrameRef.current) {
                     cancelAnimationFrame(animationFrameRef.current);
                     animationFrameRef.current = null;
+                }
+
+                if (blob.size < 1000) {
+                    // Too small / cancelled
+                    setRecordedAudio(null);
+                    setRecordingStatus('idle');
+                    return;
+                }
+
+                if (shouldSendOnStopRef.current) {
+                    // Send immediately! No preview.
+                    setRecordingStatus('idle');
+                    const uploadAndSend = async () => {
+                        toast.loading("Sending audio...", { id: 'voice-upload' });
+                        try {
+                            const actualDuration = Math.max(1, Math.floor((Date.now() - recordingStartTimeRef.current) / 1000));
+                            const audioFile = new File([blob], `voice_note_${Date.now()}.webm`, { type: 'audio/webm' });
+                            const publicUrl = await uploadChatMedia(user!.id, audioFile);
+                            sendMutation.mutate({
+                                content: "Voice Message",
+                                type: 'voice',
+                                metadata: { url: publicUrl, duration: actualDuration }
+                            });
+                            toast.success("Sent!", { id: 'voice-upload' });
+                        } catch (err) {
+                            console.error("Failed to upload audio:", err);
+                            toast.error("Failed to send audio", { id: 'voice-upload' });
+                        }
+                    };
+                    uploadAndSend();
+                } else {
+                    // Show preview (because they locked it)
+                    const url = URL.createObjectURL(blob);
+                    setRecordedAudio({ blob, url });
+                    setRecordingStatus('preview');
                 }
             };
 
@@ -571,6 +606,7 @@ export default function ChatConversation() {
                 console.error("Audio Context Init Failed", e);
             }
 
+            recordingStartTimeRef.current = Date.now();
             recorder.start(1000);
             setIsRecording(true);
             setRecordingStatus('recording');
@@ -589,9 +625,10 @@ export default function ChatConversation() {
         }
     };
 
-    const stopRecording = (cancel = false) => {
+    const stopRecording = (cancel = false, sendImmediately = false) => {
         if (mediaRecorderRef.current && isRecording) {
             if (cancel) {
+                shouldSendOnStopRef.current = false;
                 mediaRecorderRef.current.onstop = () => {
                     console.log("[Voice] Recording cancelled");
                     setIsRecording(false);
@@ -600,6 +637,8 @@ export default function ChatConversation() {
                     setRecordedAudio(null);
                     setRecordingDragY(0);
                 };
+            } else {
+                shouldSendOnStopRef.current = sendImmediately;
             }
             mediaRecorderRef.current.stop();
             setIsRecording(false);
@@ -1158,8 +1197,8 @@ export default function ChatConversation() {
                                         <div className="flex items-center gap-2 mb-1">
                                             <h4 className="font-black text-vic-green text-sm uppercase tracking-tight">{metadata.foodAnalysis.name}</h4>
                                             <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest border ${metadata.foodAnalysis.healthStatus === 'GOOD' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                                                    metadata.foodAnalysis.healthStatus === 'POOR' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                                                        'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                                metadata.foodAnalysis.healthStatus === 'POOR' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                                    'bg-amber-500/20 text-amber-400 border-amber-500/30'
                                                 }`}>
                                                 {metadata.foodAnalysis.healthStatus || 'Neutral'}
                                             </span>
@@ -1231,8 +1270,8 @@ export default function ChatConversation() {
                                         <div>
                                             <h3 className="font-black text-vic-green text-sm uppercase tracking-tight mb-1">{parsed.foodAnalysis.name}</h3>
                                             <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest border ${parsed.foodAnalysis.healthStatus === 'GOOD' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                                                    parsed.foodAnalysis.healthStatus === 'POOR' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                                                        'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                                parsed.foodAnalysis.healthStatus === 'POOR' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                                    'bg-amber-500/20 text-amber-400 border-amber-500/30'
                                                 }`}>
                                                 {parsed.foodAnalysis.healthStatus || 'Neutral'}
                                             </span>
@@ -1568,25 +1607,33 @@ export default function ChatConversation() {
                                     }}
                                     onTouchStart={(e) => {
                                         if (!message.trim() && recordingStatus === 'idle') {
-                                            e.preventDefault();
+                                            // Don't prevent default here so clicks still work, but prevent ghost clicks if needed
                                             startRecording(e);
                                         }
                                     }}
-                                    onClick={() => {
+                                    onClick={(e) => {
                                         if (message.trim()) {
                                             handleSend();
-                                        } else if (recordingStatus === 'recording') {
-                                            stopRecording();
                                         }
                                     }}
                                     onMouseUp={() => {
                                         if (recordingStatus === 'recording' && !isRecordingLocked) {
-                                            stopRecording();
+                                            if (recordingDuration < 1) {
+                                                stopRecording(true);
+                                                toast("Hold to record, release to send", { duration: 2000 });
+                                            } else {
+                                                stopRecording(false, true); // send immediately
+                                            }
                                         }
                                     }}
                                     onTouchEnd={() => {
                                         if (recordingStatus === 'recording' && !isRecordingLocked) {
-                                            stopRecording();
+                                            if (recordingDuration < 1) {
+                                                stopRecording(true);
+                                                toast("Hold to record, release to send", { duration: 2000 });
+                                            } else {
+                                                stopRecording(false, true); // send immediately
+                                            }
                                         }
                                     }}
 

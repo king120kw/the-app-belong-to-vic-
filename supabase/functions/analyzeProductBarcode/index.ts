@@ -7,26 +7,29 @@ const corsHeaders = {
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
-// ─── Ethical Brand Database Logic ──────────────────────────────────────────
-// Refactored to use Supabase DB 'companies' table
-
+// checkPoliticalAffiliation is now async and uses Supabase DB
 async function checkPoliticalAffiliation(supabase: any, brand: string): Promise<{ invest_israel: boolean; invest_uae: boolean; warning: string | null }> {
     if (!brand) return { invest_israel: false, invest_uae: false, warning: null };
 
-    const { data: company } = await supabase
+    const { data: companyRow, error } = await supabase
         .from('companies')
-        .select('*')
+        .select('name, invest_israel, invest_uae, political_reason')
         .ilike('name', `%${brand.split(',')[0].trim()}%`)
         .maybeSingle();
 
-    if (company && (company.invest_israel || company.invest_uae)) {
+    if (error) {
+        console.error("Database check failed for brand:", brand, error);
+        return { invest_israel: false, invest_uae: false, warning: null };
+    }
+
+    if (companyRow && (companyRow.invest_israel || companyRow.invest_uae)) {
         return {
-            invest_israel: company.invest_israel,
-            invest_uae: company.invest_uae,
-            warning: `🔴 ETHICAL ALERT: ${brand} — ${company.reason}`
+            invest_israel: companyRow.invest_israel,
+            invest_uae: companyRow.invest_uae,
+            warning: `🔴 ETHICAL ALERT: ${brand} — ${companyRow.political_reason || 'Known political affiliation detected'}`
         };
     }
-    
+
     return { invest_israel: false, invest_uae: false, warning: null };
 }
 
@@ -187,6 +190,23 @@ serve(async (req) => {
             }
         }
 
+        // If neither FDA nor OpenFoodFacts nor local cache knows about this product, early exit!
+        // EXCEPT if it's a strongly formatted NDC code (10-11 digits), we still want the AI to try and identify the medication.
+        if (!productData && !isPotentialNDC) {
+             return new Response(JSON.stringify({ 
+                 found: false, 
+                 error: "Product not found. Please enter details manually." 
+             }), {
+                 status: 404,
+                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+             });
+        }
+        
+        // If it's a potential NDC but FDA failed, set productData type to medication so AI knows what to do
+        if (!productData && isPotentialNDC) {
+            productData = { type: 'medication', isFallback: true };
+        }
+
         // ── 3. POLITICAL AFFILIATION CHECK ──
         const brandForCheck = productData?.brand || '';
         const political = await checkPoliticalAffiliation(supabase, brandForCheck);
@@ -197,19 +217,19 @@ serve(async (req) => {
         let prompt: string;
 
         if (productData?.type === 'medication') {
-            prompt = `You are a clinical pharmacist AI. Analyze this verified FDA-registered medication.
-
-FDA DATA: ${JSON.stringify(medicationData)}
+            prompt = `You are a clinical pharmacist AI. Analyze this medication barcode or NDC: ${barcode}.
+${medicationData ? `\nFDA DATA: ${JSON.stringify(medicationData)}\n` : '\nNOTE: FDA database lookup failed. Identify this medication based on the NDC/Barcode if possible.\n'}
+USER PROFILE: Location ${geoInfo.country_name} (${currencySymbol})
 
 Provide a JSON response. All fields required:
 {
-  "name": "${medicationData?.proprietary_name || medicationData?.generic_name}",
-  "brand": "${medicationData?.manufacturer}",
-  "generic_name": "${medicationData?.generic_name || ''}",
-  "description": "2-3 paragraph clinical overview of the drug",
-  "purpose": "What this medication treats and how it works",
-  "side_effects": "List common and serious side effects clearly",
-  "interactions": "Key drug interactions the patient should know",
+  "name": "${medicationData?.proprietary_name || medicationData?.generic_name || 'Exact Medication Name'}",
+  "brand": "${medicationData?.manufacturer || 'Manufacturer'}",
+  "generic_name": "${medicationData?.generic_name || 'Generic Name'}",
+  "description": "2-3 paragraph clinical overview of the drug and what condition it treats",
+  "purpose": "A detailed explanation of how it works in the body (mechanism of action)",
+  "side_effects": "List common and serious side effects clearly, including what users should monitor",
+  "interactions": "Key drug or food interactions the patient should know",
   "warnings": "FDA black box warnings and contraindications",
   "storage": "Storage requirements",
   "healthStatus": "SAFE",
@@ -217,42 +237,39 @@ Provide a JSON response. All fields required:
 }`;
         } else {
             const hasVerifiedNutrition = verifiedNutrition !== null;
-            prompt = `You are a Consumer Health AI. Analyze this food product for a user in ${geoInfo.city || 'Unknown'}, ${geoInfo.country_name || 'Unknown'}.
+            prompt = `You are a Consumer Health AI. Provide a "Factory Analysis" for this food product for a user in ${geoInfo.city || 'Unknown'}, ${geoInfo.country_name || 'Unknown'}.
 
 PRODUCT DETAILS: ${JSON.stringify(productData || { barcode })}
-${hasVerifiedNutrition ? `
-⚠️ VERIFIED NUTRITIONAL DATA (PER 100g) — MANDATORY: USE THESE EXACT NUMBERS. DO NOT HALLUCINATE:
-- Calories: ${verifiedNutrition.calories} kcal
-- Protein: ${verifiedNutrition.protein}g
-- Carbs: ${verifiedNutrition.carbs}g
-- Fat: ${verifiedNutrition.fat}g
-- Sugar: ${verifiedNutrition.sugar}g
-- Fiber: ${verifiedNutrition.fiber}g
-` : '(No verified nutritional database entry found — estimate based on product type)'}
+COUNTRY OF ORIGIN: ${productData?.country_of_origin || 'Unknown'}
+FACTORY INGREDIENTS: ${productData?.ingredients || 'Refer to available data or estimate based on product type'}
 
 POLITICAL STATUS: invest_israel=${political.invest_israel}, invest_uae=${political.invest_uae}
 USER LOCATION: ${geoInfo.city}, ${geoInfo.country_name} | CURRENCY: ${currencySymbol} (${geoInfo.currency_code})
 
-MANDATORY RULES:
-1. ${hasVerifiedNutrition ? 'USE THE VERIFIED NUMBERS ABOVE EXACTLY. Never change them.' : 'Provide your best scientific estimate for macros.'}
-2. ${political.invest_israel ? `SET is_compliant=false. SET political_warning="${political.warning}"` : 'is_compliant=true unless you identify a known ethical issue.'}
-3. Provide realistic estimated_price in ${currencySymbol} for ${geoInfo.country_name} market. Research typical local prices.
-4. Provide 2-3 cheaper_alternatives specific to ${geoInfo.country_name}.
-5. vitamins_and_nutrition must be 2-3 detailed paragraphs.
-6. description must be 2-3 detailed paragraphs.
+MANDATORY FACTORY ANALYSIS RULES:
+1. ${hasVerifiedNutrition ? 'USE THE VERIFIED NUTRITION NUMBERS EXACTLY. Never change them.' : 'Provide your best scientific estimate for macros.'}
+2. ${political.invest_israel || political.invest_uae 
+     ? `SET is_compliant=false. SET political_warning="WARNING: ${political.warning || 'Company is involved in controversial investments in Israel/UAE.'}"` 
+     : `SET is_compliant=true. SET political_warning="Company is not involved in these two countries (Israel/UAE)."`}
+3. Provide a realistic estimated_price in ${currencySymbol} for the ${geoInfo.country_name} market. Research typical local prices.
+4. Provide 2-3 cheaper_alternatives specific to ${geoInfo.country_name} market.
 
 Respond with ONLY this JSON (no markdown):
 {
   "name": "exact product name",
   "brand": "brand name",
-  "description": "2-3 paragraph description",
-  "vitamins_and_nutrition": "2-3 paragraph vitamin analysis",
-  "recommendation": "one personalized sentence",
+  "description": "1-2 paragraph general description of the product",
+  "usage_instructions": "How the product is used",
+  "factory_ingredients": "Detailed breakdown of the factory ingredients",
+  "suitability_analysis": "Whether the product is healthy and suitable for the user",
+  "country_origin_details": "Specifically state the country of origin.",
+  "vitamins_and_nutrition": "2-3 paragraph vitamin and health impact analysis",
+  "recommendation": "one personalized sentence about whether they should consume it",
   "recommended_pairings": "2 paragraphs",
   "estimated_price": "${currencySymbol}X.XX",
   "cheaper_alternatives": [{"name": "...", "price": "${currencySymbol}X.XX", "reason": "..."}],
-  "is_compliant": true,
-  "political_warning": ${political.invest_israel ? `"${political.warning}"` : 'null'},
+  "is_compliant": ${!political.invest_israel},
+  "political_warning": ${political.invest_israel ? `"${political.warning}"` : '"Company is not involved in these two countries (Israel/UAE)."'},
   "calories": ${hasVerifiedNutrition ? verifiedNutrition.calories : 'number'},
   "protein": ${hasVerifiedNutrition ? verifiedNutrition.protein : 'number'},
   "carbs": ${hasVerifiedNutrition ? verifiedNutrition.carbs : 'number'},
@@ -261,7 +278,9 @@ Respond with ONLY this JSON (no markdown):
   "fiber": ${hasVerifiedNutrition ? verifiedNutrition.fiber : 'number'},
   "healthStatus": "GOOD|MODERATE|POOR",
   "user_alignment_boolean": true
-}`;
+}
+
+LANGUAGE MANDATE: Auto-detect language. If in Arabic/Urdu speaking region or requested so, respond in ARABIC or URDU. You are fluent in ARABIC, URDU, and ENGLISH. Translate all text fields into the detected language.`;
         }
 
         const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {

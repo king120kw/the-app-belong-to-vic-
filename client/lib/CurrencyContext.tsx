@@ -32,26 +32,12 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
     // Centralized location fetch via detectLocation utility
     const fetchGeoLocation = async () => {
         try {
-            const { detectLocation } = await import('./api/location');
-            const data = await detectLocation();
+            const { getUserLocation } = await import('./api/location');
+            const data = await getUserLocation();
 
-            // Lookup exact currency formatting from our DB
-            const { data: dbData } = await (supabase as any)
-                .from('currency_lookup')
-                .select('*')
-                .eq('country_code', data.countryCode)
-                .maybeSingle();
-
-            if (dbData) {
-                setCountryCode(dbData.country_code);
-                setCurrencyCode(dbData.currency_code);
-                setCurrencySymbol(dbData.currency_symbol);
-            } else {
-                // Fallback if country not in our major list
-                setCountryCode(data.countryCode || 'US');
-                setCurrencyCode(data.currency || 'USD');
-                setCurrencySymbol(data.currencySymbol || '$');
-            }
+            setCountryCode(data.location.country_code || 'US');
+            setCurrencyCode(data.currency.code || 'USD');
+            setCurrencySymbol(data.currency.symbol || '$');
         } catch (e) {
             console.error('Failed to fetch geo IP', e);
         } finally {
@@ -99,16 +85,18 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
         // Replaced standard code with explicit symbol if Intl tries to use the 3-letter code
     };
 
+    const value = React.useMemo(() => ({
+        countryCode,
+        currencyCode,
+        currencySymbol,
+        setManualOverride,
+        clearOverride,
+        formatCurrency,
+        isLoading
+    }), [countryCode, currencyCode, currencySymbol, isLoading]);
+
     return (
-        <CurrencyContext.Provider value={{
-            countryCode,
-            currencyCode,
-            currencySymbol,
-            setManualOverride,
-            clearOverride,
-            formatCurrency,
-            isLoading
-        }}>
+        <CurrencyContext.Provider value={value}>
             {children}
         </CurrencyContext.Provider>
     );

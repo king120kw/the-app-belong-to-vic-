@@ -213,30 +213,63 @@ export const logMeal = async (userId: string, mealData: any) => {
 
     const currentProgress = progressRows && progressRows.length > 0 ? progressRows[0] : null;
 
+    // Calculate sum of macros from current meal items
+    const mealMacros = (mealData.foodItems || []).reduce((acc: any, item: any) => ({
+        protein: acc.protein + Number(item.protein || 0),
+        carbs: acc.carbs + Number(item.carbs || 0),
+        fat: acc.fat + Number(item.fat || 0),
+        fiber: acc.fiber + Number(item.fiber || 0),
+        sugar: acc.sugar + Number(item.sugar || 0)
+    }), { protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 });
+
+    const totalMealCalories = Number(mealData.totalCalories || 0);
+
     if (currentProgress) {
         await supabase
             .from('daily_progress')
             .update({
-                calories_consumed: (currentProgress.calories_consumed || 0) + Number(mealData.totalCalories || 0),
+                calories_consumed: (currentProgress.calories_consumed || 0) + totalMealCalories,
+                protein_consumed: (Number(currentProgress.protein_consumed) || 0) + mealMacros.protein,
+                carbs_consumed: (Number(currentProgress.carbs_consumed) || 0) + mealMacros.carbs,
+                fat_consumed: (Number(currentProgress.fat_consumed) || 0) + mealMacros.fat,
+                fiber_consumed: (Number(currentProgress.fiber_consumed) || 0) + mealMacros.fiber,
+                sugar_consumed: (Number(currentProgress.sugar_consumed) || 0) + mealMacros.sugar,
             })
             .eq('id', currentProgress.id);
     } else {
-        // Get goal from profile
+        // Get goals from onboarding responses (new location) or profile
+        const { data: onboardingRows } = await supabase
+            .from('onboarding_responses')
+            .select('*')
+            .eq('user_id', userId)
+            .limit(1);
+
         const { data: profileRows } = await supabase
             .from('user_profiles')
             .select('goal_calories')
             .eq('id', userId)
             .limit(1);
 
-        const profile = profileRows && profileRows.length > 0 ? profileRows[0] : null;
+        const onboarding = onboardingRows?.[0];
+        const profile = profileRows?.[0];
 
         await supabase
             .from('daily_progress')
             .insert({
                 user_id: userId,
                 progress_date: today,
-                calories_consumed: mealData.totalCalories,
-                calories_goal: profile?.goal_calories || 2000
+                calories_consumed: totalMealCalories,
+                calories_goal: onboarding?.daily_calorie_goal || profile?.goal_calories || 2000,
+                protein_consumed: mealMacros.protein,
+                protein_goal: onboarding?.protein_goal || 50,
+                carbs_consumed: mealMacros.carbs,
+                carbs_goal: onboarding?.carbs_goal || 250,
+                fat_consumed: mealMacros.fat,
+                fat_goal: onboarding?.fat_goal || 70,
+                fiber_consumed: mealMacros.fiber,
+                fiber_goal: onboarding?.fiber_goal || 30,
+                sugar_consumed: mealMacros.sugar,
+                sugar_goal: onboarding?.sugar_goal || 50
             });
     }
 

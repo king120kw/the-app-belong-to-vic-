@@ -4,15 +4,27 @@ import { useAuth } from "@/lib/AuthContext";
 import { getNotifications, markNotificationAsRead } from "../lib/api/settings";
 import { useTranslation } from "../lib/api/translation";
 import { getPrayerTimes, getPersonalizedSpiritualReminder, isPrayerTime } from "../lib/api/prayerTimes";
+import { useNotificationStore } from "@/store/notificationStore";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { NotificationSkeleton } from "@/components/NotificationSkeleton";
 
 export default function Notifications() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { t, lang } = useTranslation();
+  
+  // Local Notifications Store
+  const { 
+    notifications: localNotifications, 
+    markAsRead, 
+    markAllAsRead, 
+    clearAll, 
+    removeNotification 
+  } = useNotificationStore();
 
-  // Fetch Notifications
-  const { data: notifications, isLoading } = useQuery({
+  // Fetch Supabase Notifications
+  const { data: dbNotifications, isLoading } = useQuery({
     queryKey: ['notifications', user?.id],
     queryFn: () => getNotifications(user!.id),
     enabled: !!user?.id
@@ -40,21 +52,50 @@ export default function Notifications() {
     reference: spiritualReminder.reference
   } : null;
 
-  // Mark as read mutation
-  const markAsReadMutation = useMutation({
+  // Mark DB notification as read mutation
+  const markDbAsReadMutation = useMutation({
     mutationFn: (id: string) => markNotificationAsRead(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
     }
   });
 
+  const handleMarkAllRead = () => {
+    markAllAsRead();
+    if (dbNotifications) {
+      dbNotifications.forEach((n: any) => {
+        if (!n.is_read) markDbAsReadMutation.mutate(n.id);
+      });
+    }
+    toast.success("All marked as read");
+  };
+
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-white dark:bg-[#0d1418]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-vic-green"></div>
-      </div>
-    );
+    return <NotificationSkeleton />;
   }
+
+  // Combine and sort notifications
+  const allNotifications = [
+    ...localNotifications.map(n => ({ ...n, source: 'local' as const })),
+    ...(dbNotifications || []).map((n: any) => ({
+      id: n.id,
+      type: n.type === 'alert' ? 'warning' : 'info',
+      message: n.content,
+      timestamp: new Date(n.created_at).getTime(),
+      isRead: n.is_read,
+      title: n.title,
+      source: 'db' as const
+    }))
+  ].sort((a, b) => b.timestamp - a.timestamp);
+
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'success': return 'check_circle';
+      case 'error': return 'error';
+      case 'warning': return 'warning';
+      default: return 'notifications';
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen max-w-2xl mx-auto w-full bg-white dark:bg-[#0d1418]">
@@ -64,7 +105,16 @@ export default function Notifications() {
           <span className="material-symbols-outlined">arrow_back</span>
         </Link>
         <h1 className="text-xl font-bold text-slate-900 dark:text-white">{t('notifications_section')}</h1>
-        <div className="w-6"></div>
+        <div className="flex gap-2">
+          {allNotifications.length > 0 && (
+            <button 
+              onClick={handleMarkAllRead}
+              className="text-xs font-bold text-vic-green hover:underline"
+            >
+              Mark All Read
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="flex-1 overflow-y-auto">
@@ -85,37 +135,88 @@ export default function Notifications() {
           </div>
         )}
 
-        {notifications && notifications.length > 0 ? (
+        {allNotifications.length > 0 ? (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {notifications.map((notification: any) => (
-              <div
-                key={notification.id}
-                onClick={() => !notification.is_read && markAsReadMutation.mutate(notification.id)}
-                className={`p-4 flex gap-4 transition-colors cursor-pointer ${notification.is_read ? 'bg-transparent' : 'bg-vic-green/5 dark:bg-vic-green/10'}`}
-              >
-                <div className={`size-10 rounded-full flex items-center justify-center shrink-0 ${notification.type === 'alert' ? 'bg-red-100 text-red-600' : 'bg-vic-green/20 text-vic-green'}`}>
-                  <span className="material-symbols-outlined">
-                    {notification.type === 'alert' ? 'warning' : 'notifications'}
-                  </span>
-                </div>
-                <div className="flex-1">
-                  <div className="flex justify-between items-start mb-1">
-                    <h3 className={`font-bold text-sm ${notification.is_read ? 'text-slate-700 dark:text-slate-300' : 'text-slate-900 dark:text-white'}`}>
-                      {notification.title}
-                    </h3>
-                    <span className="text-[10px] text-slate-400">
-                      {new Date(notification.created_at).toLocaleDateString()}
+            <AnimatePresence mode="popLayout">
+              {allNotifications.map((notification) => (
+                <motion.div
+                  key={notification.id}
+                  layout
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -100, transition: { duration: 0.2 } }}
+                  drag={notification.source === 'local' ? "x" : false}
+                  dragConstraints={{ left: -100, right: 0 }}
+                  dragElastic={0.1}
+                  onDragEnd={(_, info) => {
+                    if (notification.source === 'local' && info.offset.x < -60) {
+                      removeNotification(notification.id);
+                    }
+                  }}
+                  onClick={() => {
+                    if (!notification.isRead) {
+                      if (notification.source === 'local') markAsRead(notification.id);
+                      else markDbAsReadMutation.mutate(notification.id);
+                    }
+                  }}
+                  className={`p-4 flex gap-4 transition-colors cursor-pointer group relative touch-pan-y ${notification.isRead ? 'bg-transparent' : 'bg-vic-green/5 dark:bg-vic-green/10'}`}
+                >
+                  {/* Swipe indicator for local notifications */}
+                  {notification.source === 'local' && (
+                    <div className="absolute inset-y-0 right-0 w-16 bg-red-500/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                       <span className="material-symbols-outlined text-red-500/40">swipe_left</span>
+                    </div>
+                  )}
+                  <div className={`size-10 rounded-full flex items-center justify-center shrink-0 
+                    ${notification.type === 'warning' ? 'bg-amber-100 text-amber-600' : 
+                      notification.type === 'error' ? 'bg-red-100 text-red-600' :
+                      notification.type === 'success' ? 'bg-green-100 text-green-600' :
+                      'bg-vic-green/20 text-vic-green'}`}>
+                    <span className="material-symbols-outlined">
+                      {getIcon(notification.type)}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                    {notification.content}
-                  </p>
-                </div>
-                {!notification.is_read && (
-                  <div className="size-2 rounded-full bg-vic-green mt-2"></div>
-                )}
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start mb-1">
+                      <h3 className={`font-bold text-sm ${notification.isRead ? 'text-slate-700 dark:text-slate-300' : 'text-slate-900 dark:text-white'}`}>
+                        {(notification as any).title || (notification.type.toUpperCase())}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(notification.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (notification.source === 'local') removeNotification(notification.id);
+                          }}
+                          className={`${notification.source === 'local' ? 'opacity-0 group-hover:opacity-100' : 'hidden'} text-slate-400 hover:text-red-500 transition-opacity`}
+                        >
+                          <span className="material-symbols-outlined text-xs">close</span>
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                      {notification.message}
+                    </p>
+                  </div>
+                  {!notification.isRead && (
+                    <div className="size-2 rounded-full bg-vic-green mt-2"></div>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            
+            {localNotifications.length > 0 && (
+              <div className="p-4 text-center">
+                <button 
+                  onClick={clearAll}
+                  className="text-sm font-bold text-slate-400 hover:text-red-500"
+                >
+                  Clear History
+                </button>
               </div>
-            ))}
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center">

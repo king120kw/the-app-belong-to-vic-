@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { requestMicrophoneAccess } from "../lib/api/permissions";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { getConversationById, getMessages, sendMessage, uploadChatMedia, markAsRead, sendTypingIndicator, initiateCallV2, updateCallStatus, softDeleteConversation, findUserByIdSecure, provisionAndSendMessage, findConversationByParticipants } from '../lib/api/chat';
@@ -10,6 +11,11 @@ import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 import { useTranslation } from '../lib/api/translation';
 import CameraCapture from '../components/CameraCapture';
 import { saveFoodAnalysis } from '../lib/api/food';
+import { useAnalysisStore } from '../store/analysisStore';
+import { useCoachInjectionStore } from '../store/coachInjectionStore';
+
+// --- Constants ---
+const COACH_ID = '00000000-0000-0000-0000-000000000001';
 
 // --- Sub-components ---
 
@@ -23,7 +29,6 @@ const AudioMessage = ({ src }: { src: string }) => {
     const [duration, setDuration] = useState(0);
     const MAX_RETRIES = 3;
 
-    // Reset state if src prop changes
     useEffect(() => {
         setInternalSrc(src);
         setIsPlaying(false);
@@ -33,54 +38,37 @@ const AudioMessage = ({ src }: { src: string }) => {
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
-            audioRef.current.load(); // Reload audio source
+            audioRef.current.load();
         }
     }, [src]);
 
     const performRetry = async (currentAttempt: number) => {
-        const delay = Math.pow(2, currentAttempt) * 1000; // 2s, 4s, 8s
-        console.log(`[Audio] Exponential backoff: Waiting ${delay}ms before attempt ${currentAttempt}/${MAX_RETRIES}...`);
-
+        const delay = Math.pow(2, currentAttempt) * 1000;
         setTimeout(async () => {
             try {
                 let blob: Blob;
-
                 if (src.startsWith('blob:')) {
                     const res = await fetch(src);
                     blob = await res.blob();
                 } else {
-                    // Try to extract bucket and path for Supabase URLs
                     const match = src.match(/object\/public\/([^\/]+)\/(.+)/);
                     if (match) {
-                        const bucket = match[1];
-                        const path = match[2];
-                        console.log(`[Audio] Fetching via SDK from bucket: ${bucket}, path: ${path}`);
-
-                        const { data, error: downloadErr } = await supabase.storage.from(bucket).download(path);
+                        const { data, error: downloadErr } = await supabase.storage.from(match[1]).download(match[2]);
                         if (downloadErr) throw downloadErr;
-                        if (!data) throw new Error("No data returned from Supabase download");
-                        blob = data;
+                        blob = data!;
                     } else {
-                        // Fallback to fetch if it doesn't match the pattern
                         const res = await fetch(src, { mode: 'cors' });
                         if (!res.ok) throw new Error(`HTTP ${res.status}`);
                         blob = await res.blob();
                     }
                 }
-
                 const objUrl = URL.createObjectURL(blob);
-                if (audioRef.current) audioRef.current.removeAttribute('crossorigin');
-                setInternalSrc(objUrl); // Success triggers native <audio> load
-                console.log("[Audio] Successfully recovered via Blob URL!");
+                setInternalSrc(objUrl);
             } catch (err) {
-                console.error(`[Audio] Fetch recovery attempt ${currentAttempt} failed:`, err);
                 if (currentAttempt < MAX_RETRIES) {
-                    setRetryCount(currentAttempt + 1);
                     performRetry(currentAttempt + 1);
                 } else {
-                    console.error("[Audio] Max retries exhausted. Final error triggered.");
                     setError(true);
-                    setIsPlaying(false);
                 }
             }
         }, delay);
@@ -91,110 +79,70 @@ const AudioMessage = ({ src }: { src: string }) => {
             if (isPlaying) {
                 audioRef.current.pause();
             } else {
-                audioRef.current.play().catch(e => {
-                    console.error("Audio playback failed:", e);
-                    setError(true);
-                    toast.error("Cannot play this audio format");
-                });
+                audioRef.current.play().catch(() => setError(true));
             }
-            setIsPlaying(!isPlaying);
         }
     };
 
+    const handleTogglePlay = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        togglePlay();
+    };
+
     return (
-        <div className="flex items-center gap-3 bg-[#D9FDD3] dark:bg-[#005c4b] p-3 rounded-xl min-w-[240px] shadow-sm border border-black/5">
+        <div className="flex items-center gap-3 bg-white/10 dark:bg-black/20 backdrop-blur-md p-2.5 px-4 rounded-2xl border border-white/20 dark:border-white/5 min-w-[200px] shadow-lg group hover:bg-white/20 dark:hover:bg-black/40 transition-all duration-300">
             <button
-                onClick={togglePlay}
-                className={`size-10 rounded-full bg-black/10 flex items-center justify-center text-[#54656F] dark:text-[#E9EDEF] hover:bg-black/20 transition-all ${error ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={handleTogglePlay}
                 disabled={error}
+                className="size-10 flex items-center justify-center bg-vic-green rounded-full shadow-[0_0_15px_rgba(19,236,55,0.4)] hover:scale-110 active:scale-95 transition-all text-slate-900 shrink-0"
             >
-                <span className="material-symbols-outlined text-[24px]">
-                    {error ? 'error' : (isPlaying ? 'pause' : 'play_arrow')}
+                <span className="material-symbols-outlined text-2xl font-bold">
+                    {error ? 'error' : isPlaying ? 'pause' : 'play_arrow'}
                 </span>
             </button>
 
-            <div className="flex-1 flex flex-col gap-1">
-                {/* Progress Bar Container */}
-                <div className="relative w-full h-8 flex items-center">
-                    {/* Placeholder Waveform (Behind) */}
-                    <div className="absolute inset-0 flex items-center justify-between pointer-events-none text-vic-green overflow-hidden">
-                        {/*  Visible waveform bars */}
-                        {[...Array(30)].map((_, i) => (
-                            <div
-                                key={i}
-                                className={`w-[3px] rounded-full transition-all duration-300 ${i / 30 * 100 < progress ? 'bg-[#54656F] dark:bg-[#E9EDEF]' : 'bg-[#54656F]/30 dark:bg-[#E9EDEF]/30'}`}
-                                style={{ height: `${30 + Math.random() * 50}%` }}
-                            ></div>
-                        ))}
-                    </div>
-
-                    {/* Actual Progress Slider (Invisible but clickable) */}
-                    <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={isNaN(progress) ? 0 : progress}
-                        onChange={(e) => {
-                            if (audioRef.current) {
-                                const newTime = (Number(e.target.value) / 100) * audioRef.current.duration;
-                                audioRef.current.currentTime = newTime;
-                                setProgress(Number(e.target.value));
-                            }
-                        }}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    />
+            <div className="flex-1 space-y-1">
+                <div className="flex items-end gap-0.5 h-6">
+                    {[...Array(20)].map((_, i) => (
+                        <div
+                            key={i}
+                            className={`w-1 rounded-full transition-all duration-300`}
+                            style={{ 
+                                height: `${30 + (Math.sin(i * 0.5) * 20) + 20}%`,
+                                backgroundColor: (progress * 20 / 100) > i ? '#13ec37' : 'currentColor',
+                                opacity: (progress * 20 / 100) > i ? 1 : 0.2
+                            }}
+                        />
+                    ))}
                 </div>
-
-                <div className="flex justify-between text-[11px] text-[#667781] dark:text-[#8696A0] font-medium">
-                    <span>
-                        {(() => {
-                            if (!audioRef.current) return "0:00";
-                            const cur = audioRef.current.currentTime;
-                            if (isNaN(cur) || !isFinite(cur)) return "0:00";
-                            const d = new Date(cur * 1000);
-                            return `${d.getUTCMinutes()}:${d.getUTCSeconds().toString().padStart(2, '0')}`;
-                        })()}
-                    </span>
-                    <span>
-                        {(() => {
-                            if (!audioRef.current) return "0:00";
-                            const dur = audioRef.current.duration;
-                            if (isNaN(dur) || !isFinite(dur)) return "0:00";
-                            const d = new Date(dur * 1000);
-                            return `${d.getUTCMinutes()}:${d.getUTCSeconds().toString().padStart(2, '0')}`;
-                        })()}
-                    </span>
+                
+                <div className="flex justify-between items-center text-[10px] font-black tracking-tighter text-slate-500 underline-offset-2 dark:text-white/70">
+                    <span>{isPlaying ? 'Playing...' : 'Voice Note'}</span>
+                    <span>{duration > 0 ? `${Math.floor(audioRef.current?.currentTime || 0 / 60)}:${Math.floor(audioRef.current?.currentTime || 0 % 60).toString().padStart(2, '0')}` : '0:00'}</span>
                 </div>
             </div>
 
             <audio
                 ref={audioRef}
                 src={internalSrc}
-                preload="metadata"
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => { setIsPlaying(false); setProgress(0); }}
                 onTimeUpdate={() => {
-                    const duration = audioRef.current?.duration || 0;
-                    const currentTime = audioRef.current?.currentTime || 0;
-                    if (duration > 0 && !isNaN(duration)) {
-                        setProgress((currentTime / duration) * 100);
-                    } else {
-                        setProgress(0);
+                    if (audioRef.current) {
+                        const p = (audioRef.current.currentTime / audioRef.current.duration) * 100;
+                        setProgress(p || 0);
                     }
                 }}
-                onEnded={() => { setIsPlaying(false); setProgress(0); }}
-                onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+                onLoadedMetadata={() => {
+                    if (audioRef.current) setDuration(audioRef.current.duration);
+                }}
                 onError={() => {
-                    // Prevent infinite loops if internalSrc is already the blob
-                    if (internalSrc.startsWith('blob:')) {
-                        console.error("[Audio] Final error triggered on Blob URL.");
+                    if (!internalSrc.startsWith('blob:') && retryCount < MAX_RETRIES) {
+                        setRetryCount(prev => prev + 1);
+                        performRetry(retryCount + 1);
+                    } else {
                         setError(true);
-                        setIsPlaying(false);
-                        return;
-                    }
-
-                    console.warn(`[Audio] Failed to load via <audio>: ${src}`);
-                    if (retryCount === 0) {
-                        setRetryCount(1);
-                        performRetry(1);
                     }
                 }}
                 className="hidden"
@@ -284,7 +232,20 @@ export default function ChatConversation() {
     const { t } = useTranslation();
     const queryClient = useQueryClient();
     const navigate = useNavigate();
+    const location = useLocation();
 
+    // V12: Robust stabilization
+    const pendingAnalysisContext = useAnalysisStore(state => state.pendingAnalysisContext);
+    const clearPendingAnalysisContext = useAnalysisStore(state => state.clearPendingAnalysisContext);
+    const lastMarkedId = useRef<string | null>(null);
+    const renderCount = useRef(0);
+    renderCount.current++;
+
+    if (renderCount.current % 20 === 0) {
+        console.log(`[Chat] Render #${renderCount.current} for ${activeId}`);
+    }
+
+    const [hasSentInitial, setHasSentInitial] = useState(false);
     const [message, setMessage] = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
     const [showAttachments, setShowAttachments] = useState(false);
@@ -316,6 +277,9 @@ export default function ChatConversation() {
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const animationFrameRef = useRef<number | null>(null);
+    const [isDictating, setIsDictating] = useState(false);
+    const recognitionRef = useRef<any>(null);
+    const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // --- Queries ---
 
@@ -418,12 +382,23 @@ export default function ChatConversation() {
         };
     }, [otherParticipantId, queryClient, activeId]);
 
-    // Guard: if the route param is not a valid UUID and not virtual, redirect back
+    // V13: Handle initial message and context from navigation state or stores
     useEffect(() => {
-        if (activeId && !isValidUUID(activeId) && !isVirtual) {
-            navigate('/chat');
+        const state = location.state as any;
+        if (state?.initialMessage && !hasSentInitial) {
+            setMessage(state.initialMessage);
+            setHasSentInitial(true);
+            
+            // If there's an attachment in state, we would normally set it in some media state
+            // But ChatConversation seems to handle media via uploadChatMedia directly in actions
+            // For now, we just populate the text as requested.
+        } else if (pendingAnalysisContext && !hasSentInitial && isAI) {
+            const ctx = pendingAnalysisContext;
+            const msg = `I just analyzed ${ctx.productName} (${ctx.calories} kcal). ${ctx.political_warning ? 'It has an ethical warning.' : ''} How does this look for me?`;
+            setMessage(msg);
+            setHasSentInitial(true);
         }
-    }, [activeId, navigate, isVirtual]);
+    }, [location.state, pendingAnalysisContext, hasSentInitial, isAI]);
 
     if (activeId && !isValidUUID(activeId) && !isVirtual) {
         return null;
@@ -525,7 +500,7 @@ export default function ChatConversation() {
     const startRecording = async (e?: React.MouseEvent | React.TouchEvent) => {
         try {
             console.log("[Voice] Starting recording session...");
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const stream = await requestMicrophoneAccess({ audio: true });
 
             // Determine optimal supported audio MIME type for cross-browser compatibility
             let mimeType = '';
@@ -623,6 +598,56 @@ export default function ChatConversation() {
             console.error("[Voice] Mic access denied:", err);
             toast.error("Microphone access denied");
         }
+    };
+
+    const startDictation = () => {
+        if (isDictating) {
+            recognitionRef.current?.stop();
+            setIsDictating(false);
+            return;
+        }
+
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            toast.error("Speech recognition not supported in this browser");
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = document.documentElement.lang || 'en-US';
+        recognition.interimResults = true;
+        recognition.continuous = true;
+
+        recognition.onstart = () => {
+            setIsDictating(true);
+            toast.info("Listening...", { id: 'stt-status' });
+        };
+
+        recognition.onresult = (event: any) => {
+            let finalTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                }
+            }
+            if (finalTranscript) {
+                setMessage(prev => prev + (prev ? ' ' : '') + finalTranscript);
+            }
+        };
+
+        recognition.onerror = (event: any) => {
+            console.error("STT Error:", event.error);
+            setIsDictating(false);
+            toast.error(`Error: ${event.error}`, { id: 'stt-status' });
+        };
+
+        recognition.onend = () => {
+            setIsDictating(false);
+            toast.dismiss('stt-status');
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
     };
 
     const stopRecording = (cancel = false, sendImmediately = false) => {
@@ -801,35 +826,48 @@ export default function ChatConversation() {
     const markConversationAsReadLocal = useCallback(async (convId: string) => {
         if (!user?.id || !convId) return;
 
+        // Loop Guard: If we JUST marked this ID as read in this component instance, STOP.
+        if (lastMarkedId.current === convId) {
+            return;
+        }
+
         let realId = convId;
 
-        // If it's a virtual ID, we need to find the REAL underlying UUID to mark it as read
+        // If it's a virtual ID, resolve it
         if (convId.startsWith('new-')) {
             const targetId = convId.replace('new-', '');
             const existingId = await findConversationByParticipants(user.id, targetId);
-            if (!existingId) return; // Truly no conversation, nothing to mark
+            if (!existingId) return;
             realId = existingId;
         } else if (!isValidUUID(convId)) {
             return;
         }
 
-        console.log(`[Chat] Marking as read: ${realId}`);
-        // 1. Optimistic UI update for the sidebar and local state
+        // --- Double Guard: Check local state too ---
+        const conversations = queryClient.getQueryData<any[]>(['conversations', user.id]);
+        const currentConv = conversations?.find(c => c.id === realId);
+
+        // Only skip if unread_count is zero AND we've already marked THIS specific ID in this session.
+        // If unread_count > 0, we ALWAYS want to try marking as read.
+        if (currentConv && currentConv.unread_count === 0 && lastMarkedId.current === convId) {
+            return;
+        }
+
+        console.log(`[Chat] Marking as read (API call): ${realId}`);
+        lastMarkedId.current = convId; // Set guard IMMEDIATELY before async work
+
+        // 1. Optimistic UI update
         queryClient.setQueryData(['conversations', user.id], (old: any) => {
             if (!old) return old;
             return old.map((c: any) => c.id === realId ? { ...c, unread_count: 0, is_read: true } : c);
         });
 
         try {
-            // Use current timestamp for absolute precision
             await markAsRead(user.id, realId, new Date().toISOString());
-
-            // Force invalidate conversation related queries to clear sidebar/navbar badges
-            queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
-            queryClient.invalidateQueries({ queryKey: ['chat-verified', user.id] });
-            queryClient.invalidateQueries({ queryKey: ['unread-messages-global', user.id] });
+            // No forced invalidation here, let the real-time events handle it
         } catch (err) {
             console.error('[Chat] Failed to clear unread:', err);
+            lastMarkedId.current = null; // Reset guard on failure to allow retry
         }
     }, [user?.id, queryClient]);
 
@@ -847,15 +885,43 @@ export default function ChatConversation() {
             if (payload.eventType === 'INSERT') {
                 const newMessage = payload.new;
 
-                // 1. Update local cache
+                // 1. Update local cache with deduplication
                 queryClient.setQueryData(['messages', activeId], (old: any) => {
                     const base = Array.isArray(old) ? old : [];
-                    if (base.some((m: any) => m.id === newMessage.id)) return old;
-                    const filtered = base.filter((m: any) => !m.id?.toString().startsWith('opt-'));
-                    return [...filtered, newMessage].sort((a, b) =>
+
+                    // Already have this real message?
+                    if (base.some((m: any) => m.id === newMessage.id)) {
+                        console.log(`[Chat] Message ${newMessage.id} already in cache, skipping.`);
+                        return old;
+                    }
+
+                    // If it's from US, try to match and replace the optimistic one
+                    if (newMessage.sender_id === user?.id) {
+                        const optIndex = base.findIndex(m =>
+                            m.id?.toString().startsWith('opt-') &&
+                            m.content === newMessage.content &&
+                            m.message_type === newMessage.message_type
+                        );
+                        if (optIndex > -1) {
+                            console.log(`[Chat] Replacing optimistic message with real message ${newMessage.id}`);
+                            const updated = [...base];
+                            updated[optIndex] = newMessage;
+                            return updated;
+                        }
+                    }
+
+                    console.log(`[Chat] Appending new message ${newMessage.id} to conversation ${activeId}`);
+                    const next = [...base, newMessage].sort((a, b) =>
                         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                     );
+
+                    return next;
                 });
+
+                // Clear AI typing state if we received an AI message
+                if (newMessage.sender_id === COACH_ID) {
+                    setOtherUserTyping(false);
+                }
 
                 // 2. Mark as read if not from us
                 if (newMessage.sender_id !== user?.id && activeId) {
@@ -863,10 +929,15 @@ export default function ChatConversation() {
                 }
 
                 // --- Sidebar Sync ---
-                // Invalidate conversations to update preview text and unread count in Sidebar
                 queryClient.invalidateQueries({ queryKey: ['conversations', user?.id] });
             } else if (payload.eventType === 'UPDATE') {
                 const updatedMessage = payload.new;
+
+                // If AI message is updating (streaming), ensure typing is false once it has content
+                if (updatedMessage.sender_id === COACH_ID && updatedMessage.content?.length > 0) {
+                    setOtherUserTyping(false);
+                }
+
                 queryClient.setQueryData(['messages', activeId], (old: any) => {
                     if (!old) return old;
                     return old.map((m: any) => m.id === updatedMessage.id ? { ...m, ...updatedMessage } : m);
@@ -891,25 +962,15 @@ export default function ChatConversation() {
             ? `private_chat_${[user.id, vTargetId].sort().join('_')}`
             : `chat_room_${activeId}`;
 
-        // Debounce connection logic to prevent flapping during rapid transitions
         const initChannel = () => {
-            // Check if we're already subscribed to this exact channel
-            if (activeChannelRef.current && activeChannelRef.current.topic === `realtime:${channelName}`) {
-                console.log(`[Chat] V11 Connection Manager: Already subscribed to ${channelName}. Skipping initialization.`);
-                return;
-            }
-
-            // Cleanup previous channel if activeId changed and we have an old channel
             if (activeChannelRef.current) {
-                console.log(`[Chat] V11 Connection Manager: Cleaning up old channel before switch: ${activeChannelRef.current.topic}`);
+                console.log(`[Chat] V12 Cleaning up stale channel: ${activeChannelRef.current.topic}`);
                 supabase.removeChannel(activeChannelRef.current);
                 activeChannelRef.current = null;
             }
 
-            console.log(`[Chat] V11 INITIALIZING PERSISTENT CHANNEL: ${channelName}`);
-            const channel = supabase.channel(channelName);
-
-            channel
+            console.log(`[Chat] V12 Subscribing to: ${channelName} for ${activeId}`);
+            const channel = supabase.channel(channelName)
                 .on('presence', { event: 'sync' }, () => {
                     const state = channel.presenceState();
                     let isTyping = false;
@@ -927,48 +988,59 @@ export default function ChatConversation() {
                         });
                     });
 
-                    setOtherUserTyping(isTyping);
-                    setOtherUserOnline(isOnline);
+                    setOtherUserTyping(prev => (prev !== isTyping ? isTyping : prev));
+                    setOtherUserOnline(prev => (prev !== isOnline ? isOnline : prev));
                 })
                 .on('postgres_changes', {
                     event: '*',
                     schema: 'public',
-                    table: 'messages',
-                    filter: isV ? undefined : `conversation_id=eq.${activeId}`
+                    table: 'messages'
+                    // V13: NO FILTER HERE. We filter manually in the handler to ensure 100% reliability.
                 }, (payload) => {
-                    onMessageEventRef.current?.(payload);
+                    const incomingConvId = payload.new ? (payload.new as any).conversation_id : (payload.old as any)?.conversation_id;
+                    
+                    // Only process messages for the CURRENT conversation (Case-Insensitive UUID check)
+                    const isMatch = incomingConvId?.toString().toLowerCase() === activeId?.toString().toLowerCase();
+
+                    if (isMatch || (isV && incomingConvId)) {
+                        console.log(`[Chat] Real-time event [${payload.eventType}] matching ${activeId}. Incoming: ${incomingConvId}`);
+                        onMessageEventRef.current?.(payload);
+                    } else {
+                        console.log(`[Chat] Skipping real-time event [${payload.eventType}] - No match. Target: ${activeId}, Received: ${incomingConvId}`);
+                    }
                 })
-                .subscribe(async (status, err) => {
+                .subscribe(async (status) => {
                     if (status === 'SUBSCRIBED') {
-                        console.log(`[Chat] V11 Channel ${channelName} SUBSCRIBED.`);
+                        console.log(`[Chat] V12 channel ${channelName} SUBSCRIBED`);
                         await channel.track({
                             user_id: user.id,
                             conversation_id: activeId,
                             online_at: new Date().toISOString(),
                             typing: false
                         });
-                    } else if (status === 'CHANNEL_ERROR') {
-                        console.error(`[Chat] V11 Channel ${channelName} Error:`, err);
                     }
                 });
 
             activeChannelRef.current = channel;
         };
 
-        // Delay initialization slightly to batch rapid navigation changes
-        const connectionTimer = setTimeout(initChannel, 150);
+        initChannel();
 
         return () => {
-            clearTimeout(connectionTimer);
-            // Only teardown immediately if component is unmounting, otherwise let the next effect handle cleanup
-            // to avoid flapping. We keep activeChannelRef.current alive for the next tick.
+            if (activeChannelRef.current) {
+                console.log(`[Chat] V12 Hook Cleanup for ${activeChannelRef.current.topic}`);
+                supabase.removeChannel(activeChannelRef.current);
+                activeChannelRef.current = null;
+            }
         };
-    }, [activeId, user?.id]); // STRICT DEPENDENCY: Only re-initialize when conversation context changes
+    }, [activeId, user?.id]); // STRICT DEPENDENCY
 
     // On mount or switch: clear unread
     useEffect(() => {
-        if (activeId && user?.id) {
+        if (activeId && user?.id && lastMarkedId.current !== activeId) {
+            console.log(`[Chat] Effect: Checking read status for ${activeId}`);
             markConversationAsReadLocal(activeId);
+            lastMarkedId.current = activeId;
         }
 
         // Also clear unread when the window gains focus (e.g. user comes back to the tab)
@@ -980,7 +1052,11 @@ export default function ChatConversation() {
         };
 
         window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            // Reset lastMarkedId on unmount if we want it to run again on remount
+            // lastMarkedId.current = null; 
+        };
     }, [activeId, user?.id, markConversationAsReadLocal]);
 
     // --- Call Handlers ---
@@ -1032,7 +1108,19 @@ export default function ChatConversation() {
                 return { id: 'new', realId: newId };
             }
 
-            return sendMessage(user.id, activeId, args.content, (args.type as any) || 'text', args.metadata, isAI, isSelf);
+            // Inject context if sending to AI
+            const { latestAnalysis, clearLatestAnalysis } = useCoachInjectionStore.getState();
+            const messageMetadata = {
+                ...args.metadata,
+                latest_analysis: isAI ? latestAnalysis : null
+            };
+
+            // Clear analysis after injection to prevent stale context next time
+            if (isAI && latestAnalysis) {
+                clearLatestAnalysis();
+            }
+
+            return sendMessage(user.id, activeId, args.content, (args.type as any) || 'text', messageMetadata, isAI, isSelf);
         },
         onMutate: async (newMsg) => {
             console.log("[Chat] sendMutation.onMutate", newMsg);
@@ -1080,8 +1168,39 @@ export default function ChatConversation() {
         const content = message.trim();
 
         console.log(`[Chat] handleSend to ${activeId}`);
-        sendMutation.mutate({ content });
+
+        // Instant simulated response indicator for AI
+        if (isAI) {
+            setOtherUserTyping(true);
+        }
+
+        // Attach any pending analysis context when sending to the coach
+        const contextMetadata = isAI && pendingAnalysisContext
+            ? { scannedProductContext: pendingAnalysisContext }
+            : undefined;
+
+        if (isAI && pendingAnalysisContext) {
+            clearPendingAnalysisContext();
+        }
+
+        sendMutation.mutate({ content, metadata: contextMetadata });
     };
+
+    // --- Context Injection: Pre-populate input from navigation state ---
+    useEffect(() => {
+        if (hasSentInitial) return;
+        const initialMsg = location.state?.initialMessage as string;
+        if (initialMsg && !isLoadingConv) {
+            console.log("[Chat] Pre-populating input with context message...");
+            setHasSentInitial(true);
+            // Set message in input (pre-populate, don't auto-send)
+            setMessage(initialMsg);
+            // Focus the input so user can review and send
+            setTimeout(() => inputRef.current?.focus(), 300);
+            // Clear nav state so the message doesn't re-inject on re-renders
+            window.history.replaceState({}, document.title);
+        }
+    }, [location.state, hasSentInitial, isLoadingConv]);
 
     const handleLocationShare = async () => {
         if (!navigator.geolocation) {
@@ -1129,27 +1248,22 @@ export default function ChatConversation() {
         );
     };
 
-    const typingTimeoutRef = useRef<any>(null);
+    const lastTypingSentRef = useRef<number>(0);
     const handleTyping = async () => {
         if (!user || !activeId || !activeChannelRef.current) return;
 
-        // EPHEMERAL PRESENCE TYPING (WhatsApp Style per V7 Spec)
-        await activeChannelRef.current.track({
-            user_id: user.id,
-            conversation_id: activeId,
-            typing: true,
-            online_at: new Date().toISOString()
-        });
+        // Throttle presence updates to once every 2 seconds to avoid channel noise
+        const now = Date.now();
+        if (now - lastTypingSentRef.current < 2000) return;
+        lastTypingSentRef.current = now;
+
+        // EPHEMERAL PRESENCE TYPING
+        await sendTypingIndicator(activeChannelRef.current, user.id, activeId, true);
 
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = setTimeout(async () => {
             if (activeChannelRef.current) {
-                await activeChannelRef.current.track({
-                    user_id: user.id,
-                    conversation_id: activeId,
-                    typing: false,
-                    online_at: new Date().toISOString()
-                });
+                await sendTypingIndicator(activeChannelRef.current, user.id, activeId, false);
             }
         }, 3000);
     };
@@ -1548,6 +1662,15 @@ export default function ChatConversation() {
                                     className={`p-2 text-[#54656F] dark:text-[#8696A0] hover:text-[#111B21] transition-colors rounded-full hover:bg-black/5 ${showAttachments ? 'text-[#00A884] bg-black/5' : ''}`}
                                 >
                                     <span className="material-symbols-outlined text-[26px] rotate-45">attach_file</span>
+                                </button>
+
+                                {/* STT button */}
+                                <button
+                                    onClick={startDictation}
+                                    className={`p-2 transition-colors rounded-full hover:bg-black/5 ${isDictating ? 'text-red-500 animate-pulse bg-red-50' : 'text-[#54656F] dark:text-[#8696A0] hover:text-[#111B21]'}`}
+                                    title="Dictate"
+                                >
+                                    <span className="material-symbols-outlined text-[26px]">{isDictating ? 'mic' : 'keyboard_voice'}</span>
                                 </button>
 
                                 {/* Text Input */}

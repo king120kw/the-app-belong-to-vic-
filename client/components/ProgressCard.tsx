@@ -112,7 +112,7 @@ export const ProgressCard: React.FC<ProgressCardProps> = ({ profile, dailyProgre
                 </div>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-2 text-center pt-6 border-t border-black/5 dark:border-white/10">
+                <div className="grid grid-cols-3 gap-2 text-center py-6 border-t border-black/5 dark:border-white/10">
                     <div className="bg-white/40 dark:bg-black/20 p-2 rounded-xl backdrop-blur-sm border border-white/20 dark:border-white/5">
                         <p className="text-xl font-black text-slate-900 dark:text-white leading-none mb-1">{caloriesConsumed}</p>
                         <p className="text-[10px] text-slate-700 dark:text-slate-400 font-bold uppercase tracking-wider">{t('eaten')}</p>
@@ -126,6 +126,7 @@ export const ProgressCard: React.FC<ProgressCardProps> = ({ profile, dailyProgre
                         <p className="text-[10px] text-slate-700 dark:text-slate-400 font-bold uppercase tracking-wider">{t('goal_stat')}</p>
                     </div>
                 </div>
+
             </div>
         </div>
     );

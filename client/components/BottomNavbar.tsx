@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '@/lib/api/translation';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { useNotificationStore } from '@/store/notificationStore';
 
 export const BottomNavbar: React.FC = () => {
     const { t } = useTranslation();
@@ -28,7 +29,8 @@ export const BottomNavbar: React.FC = () => {
     });
 
     // Global listener in App.tsx handles real-time updates for unread counts
-
+    const { notifications } = useNotificationStore();
+    const unreadNotificationsCount = notifications.filter(n => !n.isRead).length;
 
     // Hide navbar on certain pages
     const hiddenPaths = ['/', '/auth', '/onboarding', '/phone-input', '/verification-code'];
@@ -49,6 +51,7 @@ export const BottomNavbar: React.FC = () => {
             path: '/notifications',
             label: t('alerts') || 'Alerts',
             icon: 'notifications',
+            badge: unreadNotificationsCount,
         },
         {
             path: '/chat',

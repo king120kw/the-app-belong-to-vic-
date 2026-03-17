@@ -22,7 +22,11 @@ import { supabase } from "@/lib/supabase";
 import { SpiritualReminder } from "@/components/SpiritualReminder";
 import { ManualProgressInput } from "@/components/ManualProgressInput";
 import QRScanner from "@/components/QRScanner";
-import { scanProduct } from "@/lib/api/food";
+import { scanProduct, saveFoodAnalysis } from "@/lib/api/food";
+import { DashboardSkeleton } from "@/components/DashboardSkeleton";
+import { requestCameraAccess } from "../lib/api/permissions";
+import { useNotificationStore } from "@/store/notificationStore";
+import { useCoachInjectionStore } from "@/store/coachInjectionStore";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -53,6 +57,8 @@ export default function Dashboard() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { countryCode, currencySymbol: globalCurrencySymbol } = useCurrency();
   const [showProgressInput, setShowProgressInput] = useState(false);
+  const addNotification = useNotificationStore(state => state.addNotification);
+  const setLatestAnalysis = useCoachInjectionStore(state => state.setLatestAnalysis);
 
   // Derive locationContext from the global currency provider
   const locationContext = {
@@ -140,7 +146,7 @@ export default function Dashboard() {
   // Camera functions
   const openCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await requestCameraAccess({
         video: {
           facingMode: facingMode,
           width: { ideal: 1280 },
@@ -150,7 +156,6 @@ export default function Dashboard() {
       if (cameraVideoRef.current) {
         cameraVideoRef.current.srcObject = stream;
         cameraStreamRef.current = stream;
-        // Force play
         try {
           await cameraVideoRef.current.play();
         } catch (e) {
@@ -159,8 +164,8 @@ export default function Dashboard() {
       }
       setShowCameraModal(true);
     } catch (err) {
-      console.error("Camera error:", err);
-      toast.error("Camera access failed. Please check permissions.");
+      console.error("Camera access failed in Dashboard.tsx:", err);
+      // Detailed error is already handled by requestCameraAccess toast
     }
   };
 
@@ -175,7 +180,7 @@ export default function Dashboard() {
 
     // Start new stream
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await requestCameraAccess({
         video: {
           facingMode: newMode,
           width: { ideal: 1280 },
@@ -192,7 +197,7 @@ export default function Dashboard() {
         }
       }
     } catch (err) {
-      toast.error("Failed to switch camera.");
+      console.error("Failed to switch camera:", err);
     }
   };
 
@@ -277,9 +282,10 @@ export default function Dashboard() {
       };
 
       setAnalysisData(formattedAnalysis);
+      setLatestAnalysis(formattedAnalysis);
       closeCamera();
       setShowMealAnalysis(true);
-      toast.success("Meal analyzed!");
+      addNotification('success', "Meal analyzed and ready for review");
     } catch (err: any) {
       console.error("Capture Photo Error:", err);
       toast.error(`Analysis failed: ${err.message}`);
@@ -357,9 +363,13 @@ export default function Dashboard() {
       };
 
       setAnalysisData(formattedAnalysis);
+      setLatestAnalysis(formattedAnalysis);
       closeCamera();
       setShowMealAnalysis(true);
-      toast.success("Image analyzed!");
+      addNotification('success', "Image analyzed successfully");
+
+      // Immediate Persistence
+      saveFoodAnalysis(user.id, analysis).catch(e => console.error("Auto-save failed:", e));
     } catch (err: any) {
       console.error("Gallery Upload Error:", err);
       toast.error(`Analysis failed: ${err.message}`);
@@ -374,7 +384,8 @@ export default function Dashboard() {
     if (!user || !analysisData) return;
     try {
       await logMeal(user.id, analysisData);
-      toast.success("Meal logged successfully!");
+      addNotification('success', `Meal ${analysisData.name || ''} logged successfully!`);
+      // toast.success("Meal logged!"); // Removing separate toast to avoid redundancy
       setShowMealAnalysis(false);
       queryClient.invalidateQueries({ queryKey: ['daily-progress', user.id] });
     } catch (err: any) {
@@ -393,46 +404,55 @@ export default function Dashboard() {
       const file = new File([blob], "product_scan.jpg", { type: "image/jpeg" });
       const analysis = await apiAnalyzeFoodImage(user.id, file, {
         currentTime: new Date().toISOString(),
-        locationContext
+        locationContext,
+        isProductScan: true
       });
 
       const imageData = URL.createObjectURL(blob);
-      const formattedAnalysis = {
-        mealImage: imageData,
-        totalCalories: analysis.calories,
-        foodItems: [
-          {
-            name: analysis.name,
-            calories: analysis.calories,
-            description: analysis.description,
-            vitamins_and_nutrition: analysis.vitamins_and_nutrition,
-            recommended_pairings: analysis.recommended_pairings,
-            recommendation: analysis.recommendation,
-            protein: analysis.protein,
-            carbs: analysis.carbs,
-            fat: analysis.fat,
-            sugar: analysis.sugar,
-            fiber: analysis.fiber,
-            healthStatus: (analysis as any).verdict || analysis.healthStatus,
-            is_compliant: analysis.is_compliant,
-            user_alignment_boolean: analysis.user_alignment_boolean,
-            political_warning: analysis.political_warning,
-            estimated_price: analysis.estimated_price,
-            cheaper_alternatives: analysis.cheaper_alternatives,
-            type: 'FOOD' as const,
-            brand: (analysis as any).brand,
-            manufacturer: (analysis as any).manufacturer,
-            country_of_origin: (analysis as any).country_of_origin,
-            ingredients: (analysis as any).ingredients,
-          }
-        ],
-        ...analysis
+      const formattedProduct = {
+        productImage: analysis.image_url || imageData,
+        productName: analysis.name || analysis.productName || "Unknown Product",
+        servingSize: analysis.serving_size || "1 serving",
+        description: analysis.description,
+        vitamins_and_nutrition: analysis.vitamins_and_nutrition,
+        recommendation: analysis.recommendation,
+        recommended_pairings: analysis.recommended_pairings,
+        healthStatus: analysis.healthStatus || analysis.verdict || 'GOOD',
+        calories: analysis.calories,
+        protein: analysis.protein,
+        carbs: analysis.carbs,
+        fat: analysis.fat,
+        sugar: analysis.sugar,
+        fiber: analysis.fiber,
+        origin_country: analysis.country_of_origin || analysis.origin_country,
+        brand: analysis.brand,
+        manufacturer: analysis.manufacturer,
+        estimated_price: analysis.estimated_price,
+        cheaper_alternatives: analysis.cheaper_alternatives,
+        is_compliant: analysis.is_compliant,
+        user_alignment_boolean: analysis.user_alignment_boolean,
+        political_warning: analysis.political_warning,
+        usage_instructions: analysis.usage_instructions,
+        factory_ingredients: analysis.factory_ingredients,
+        suitability_analysis: analysis.suitability_analysis,
+        country_origin_details: analysis.country_origin_details,
+        type: analysis.type === 'medication' ? 'MEDICATION' : 'FOOD',
+        generic_name: analysis.generic_name,
+        purpose: analysis.purpose,
+        side_effects: analysis.side_effects,
+        interactions: analysis.interactions,
+        warnings: analysis.warnings,
+        storage: analysis.storage,
       };
 
-      setAnalysisData(formattedAnalysis);
+      setProductData(formattedProduct);
+      setLatestAnalysis(formattedProduct);
       setShowScannerModal(false);
-      setShowMealAnalysis(true);
-      toast.success("Product analyzed visually!");
+      setShowProductDetails(true);
+      addNotification('success', "Product analyzed visually!");
+
+      // Immediate Persistence
+      saveFoodAnalysis(user.id, analysis).catch(e => console.error("Auto-save failed:", e));
     } catch (err: any) {
       console.error("Manual QR Capture Error:", err);
       toast.error(`Visual analysis failed: ${err.message}`);
@@ -448,7 +468,8 @@ export default function Dashboard() {
       setIsAnalyzing(true);
       const data = await scanProduct(user.id, barcode, {
         currentTime: new Date().toISOString(),
-        locationContext
+        locationContext,
+        forceReload: true // Bypass 5-minute cache to instantly test Edge Function changes
       });
 
       const formattedProduct = {
@@ -474,12 +495,27 @@ export default function Dashboard() {
         is_compliant: data.is_compliant,
         user_alignment_boolean: data.user_alignment_boolean,
         political_warning: data.political_warning,
+        usage_instructions: data.usage_instructions,
+        factory_ingredients: data.factory_ingredients,
+        suitability_analysis: data.suitability_analysis,
+        country_origin_details: data.country_origin_details,
+        type: data.type === 'medication' ? 'MEDICATION' : 'FOOD',
+        generic_name: data.generic_name,
+        purpose: data.purpose,
+        side_effects: data.side_effects,
+        interactions: data.interactions,
+        warnings: data.warnings,
+        storage: data.storage,
       };
 
       setProductData(formattedProduct);
+      setLatestAnalysis(formattedProduct);
       setShowScannerModal(false);
       setShowProductDetails(true);
-      toast.success("Product identified via Barcode!");
+      addNotification('success', "Product identified via Barcode!");
+
+      // Immediate Persistence
+      saveFoodAnalysis(user.id, data).catch(e => console.error("Auto-save failed:", e));
     } catch (err: any) {
       console.error("Barcode Scan Error:", err);
       toast.error(`Barcode scan failed: ${err.message}`);
@@ -504,7 +540,8 @@ export default function Dashboard() {
         }]
       };
       await logMeal(user.id, mealToLog);
-      toast.success("Product logged successfully!");
+      addNotification('success', `${productData.productName} logged to your diary!`);
+      // toast.success("Product logged!"); // Removing separate toast
       setShowProductDetails(false);
       queryClient.invalidateQueries({ queryKey: ['daily-progress', user.id] });
     } catch (err: any) {
@@ -533,11 +570,7 @@ export default function Dashboard() {
   };
 
   if (authLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-white dark:bg-[#0d1418]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-vic-green"></div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   if (!user) {

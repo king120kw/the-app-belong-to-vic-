@@ -28,6 +28,31 @@ export interface FoodAnalysisResult {
     cheaper_alternatives?: any[]
     price?: number
     image_url: string
+    is_already_saved?: boolean
+}
+
+export const checkBudgetStatus = async (userId: string, itemPrice: number) => {
+    try {
+        const { data: onboarding } = await (supabase
+            .from('onboarding_responses') as any)
+            .select('budget')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (!onboarding || !(onboarding as any).budget) return { isOver: false, budget: 0 };
+
+        const budget = Number((onboarding as any).budget);
+
+        // Simple logic: if a single item is > 5% of monthly budget, it's a "significant spend"
+        // Or we could check month-to-date spending, but for now we'll do a simple threshold check
+        // as requested: "check the product price against the user's budget"
+        const isOver = itemPrice > (budget * 0.05);
+
+        return { isOver, budget };
+    } catch (e) {
+        console.error("Budget check failed:", e);
+        return { isOver: false, budget: 0 };
+    }
 }
 
 export const analyzeFoodImage = async (userId: string, file: File, options?: any) => {
@@ -61,12 +86,14 @@ export const analyzeFoodImage = async (userId: string, file: File, options?: any
         const base64Data = await base64Promise;
 
         // 2. Invoke Edge Function
-        const { data, error } = await supabase.functions.invoke('food-analysis', {
+        const { data, error } = await supabase.functions.invoke('analyzeFoodImage', {
             body: {
                 imageUrl: publicUrl,
                 imageBase64: base64Data, // Added base64 data
                 apiKey: import.meta.env.VITE_OPENAI_API_KEY,
                 userId,
+                language: navigator.language,
+                time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 ...options
             }
         });
@@ -91,21 +118,41 @@ export const analyzeFoodImage = async (userId: string, file: File, options?: any
     }
 }
 
+const productCache = new Map<string, { data: any, timestamp: number }>();
+const CACHE_TTL_MS = 1000 * 60 * 5; // Reduced to 5 minutes so users see fresh AI logic sooner
+
 export const scanProduct = async (userId: string, barcode: string, options?: any) => {
-    const { data, error: edgeError } = await supabase.functions.invoke('product-scanner', {
+    // If forcing a reload, skip the cache
+    if (!options?.forceReload) {
+        const cached = productCache.get(barcode);
+        if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+            console.log(`[Cache Hit] Returning cached data for barcode: ${barcode}`);
+            return cached.data;
+        }
+    }
+
+    const { data, error: edgeError } = await supabase.functions.invoke('analyzeProductBarcode', {
         body: {
             barcode,
             userId: userId,
             apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+            language: navigator.language,
+            time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             ...options
         }
     })
 
     if (edgeError) throw edgeError
+
+    // Save to cache
+    productCache.set(barcode, { data, timestamp: Date.now() });
+
     return data
 }
 
 export const saveFoodAnalysis = async (userId: string, analysis: any) => {
+    if (analysis.is_already_saved) return null;
+
     // 1. Save food item
     const { data: foodItemRows, error: foodError } = await (supabase
         .from('food_items') as any)
@@ -117,8 +164,8 @@ export const saveFoodAnalysis = async (userId: string, analysis: any) => {
             fat: Number(analysis.fat || 0),
             fiber: Number(analysis.fiber || 0),
             sugar: Number(analysis.sugar || 0),
-            health_rating: Number(analysis.healthRating || 5),
-            description: analysis.description,
+            health_rating: Number(analysis.healthRating || analysis.health_impact_score || 5),
+            description: analysis.description || analysis.verdict,
             serving_size: analysis.serving_size || '1 serving',
             image_url: analysis.image_url || analysis.mealImage,
             barcode: analysis.barcode,
@@ -146,14 +193,18 @@ export const saveFoodAnalysis = async (userId: string, analysis: any) => {
             fat: Number(analysis.fat || 0),
             image_url: analysis.image_url || analysis.mealImage,
             analysis_data: {
-                origin_story: analysis.country_of_origin,
-                vitamins_and_nutrition: analysis.ingredients ? [{ name: 'Ingredients', description: analysis.ingredients }] : [],
-                recommendations: analysis.recommended_pairings || analysis.advice,
-                user_alignment: analysis.is_compliant,
+                origin_story: analysis.country_of_origin || analysis.origin_country,
+                vitamins_and_nutrition: analysis.ingredients || analysis.vitamins_and_nutrition,
+                recommendations: analysis.recommended_pairings || analysis.advice || analysis.recommendation,
+                user_alignment: analysis.is_compliant || analysis.user_alignment_boolean,
                 health_score: analysis.health_impact_score || analysis.healthRating,
-                allergen_warnings: analysis.restrictions || []
+                allergen_warnings: analysis.restrictions || [],
+                brand: analysis.brand,
+                manufacturer: analysis.manufacturer,
+                price: analysis.price || analysis.estimated_price,
+                political_warning: analysis.political_warning
             },
-            notes: String(analysis.political_warning || analysis.description || analysis.advice || '').substring(0, 1000)
+            notes: String(analysis.political_warning || analysis.description || analysis.advice || analysis.verdict || '').substring(0, 1000)
         })
         .select();
 
@@ -164,12 +215,11 @@ export const saveFoodAnalysis = async (userId: string, analysis: any) => {
         }
         throw historyError;
     }
-    const history = historyRows && historyRows.length > 0 ? historyRows[0] : null;
 
-    // 3. Daily progress is handled by DB TRIGGERS on food_analysis_history
-    // No manual update needed to avoid double-counting or drift.
+    // Mark as saved locally to prevent double logging
+    analysis.is_already_saved = true;
 
-    return history
+    return historyRows && historyRows.length > 0 ? historyRows[0] : null;
 }
 
 // ============================================================================

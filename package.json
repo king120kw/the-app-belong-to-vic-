@@ -32,7 +32,8 @@
     "jsqr": "^1.4.0",
     "pg": "^8.19.0",
     "react-qr-code": "^2.0.18",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@hookform/resolvers": "^5.2.1",

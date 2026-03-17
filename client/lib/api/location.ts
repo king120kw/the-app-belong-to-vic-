@@ -1,76 +1,101 @@
-export interface LocationData {
-    country: string;
-    countryCode: string;
-    currency: string;
-    currencySymbol: string;
-    language: string;
-    timezone: string;
+import { supabase } from '../supabase'
+
+export interface GeoLocationData {
+    ip: string;
+    location: {
+        country_code: string;
+        country_name: string;
+        city: string;
+        region: string;
+        timezone: string;
+    };
+    currency: {
+        code: string;
+        symbol: string;
+    };
+    regional_config: {
+        cost_of_living_tier: number;
+        budget_hints: {
+            low: number;
+            high: number;
+        };
+    };
 }
 
-const fetchGetLocation = async () => {
+export interface LocationData {
+    country: string;
+    country_code: string;
+    city: string;
+    currency: string;
+    currency_symbol: string;
+    timezone: string;
+    language: string;
+}
+
+let cachedGeoData: GeoLocationData | null = null;
+let fetchPromise: Promise<GeoLocationData> | null = null;
+
+export const getUserLocation = async (): Promise<GeoLocationData> => {
+    // Return memory cache if present
+    if (cachedGeoData) return cachedGeoData;
+
+    // Check localStorage
     try {
-        const { supabase } = await import('../supabase');
-        const { data, error } = await supabase.functions.invoke('get-location');
-        
-        if (error || !data) return null;
-
-        const languages = data.languages ? data.languages.split(',') : ['en'];
-        const firstLangCode = languages[0].split('-')[0].toLowerCase();
-
-        return {
-            country: data.country_name,
-            countryCode: data.country_code,
-            currency: data.currency_code,
-            currencySymbol: data.currency_symbol,
-            timezone: data.timezone,
-            language: firstLangCode
-        };
+        const localCache = localStorage.getItem('geo_location_data');
+        if (localCache) {
+            const parsed = JSON.parse(localCache);
+            cachedGeoData = parsed;
+            return parsed;
+        }
     } catch (e) {
-        console.error("fetchGetLocation error:", e);
-        return null;
+        console.warn('Failed to parse geo location from local storage');
     }
+
+    // Prevent duplicate concurrent requests
+    if (fetchPromise) return fetchPromise;
+
+    fetchPromise = (async () => {
+        try {
+            console.log('[Location API] Fetching user location from edge function...');
+            const { data, error } = await supabase.functions.invoke('detectUserLocation');
+
+            if (error) throw error;
+
+            cachedGeoData = data;
+
+            try {
+                localStorage.setItem('geo_location_data', JSON.stringify(data));
+            } catch (e) { }
+
+            return data as GeoLocationData;
+        } catch (error) {
+            console.error('[Location API] Error detecting location:', error);
+
+            // Fallback
+            const fallback: GeoLocationData = {
+                ip: 'unknown',
+                location: { country_code: 'US', country_name: 'United States', city: 'Unknown', region: 'Unknown', timezone: 'UTC' },
+                currency: { code: 'USD', symbol: '$' },
+                regional_config: { cost_of_living_tier: 3, budget_hints: { low: 300, high: 800 } }
+            };
+            return fallback;
+        } finally {
+            fetchPromise = null;
+        }
+    })();
+
+    return fetchPromise;
 };
 
 export const detectLocation = async (): Promise<LocationData> => {
-    // 1. Try to get from sessionStorage
-    const cached = sessionStorage.getItem('last_detected_location');
-    const cachedTime = sessionStorage.getItem('last_detected_time');
-
-    if (cached && cachedTime && (Date.now() - parseInt(cachedTime)) < 3600000) {
-        return JSON.parse(cached);
-    }
-
-    // 2. Try browser geolocation as a secondary source if needed (optional, but for now let's stick to IP)
-
-    // 3. Try IP services via our server proxy
-    const rawData = await fetchGetLocation();
-
-    const supported = ['en', 'fr', 'de', 'id', 'hi', 'ms', 'nl', 'es', 'it', 'ja', 'ko', 'zh'];
-
-    if (rawData) {
-        const finalLang = supported.includes(rawData.language) ? rawData.language : 'en';
-        const result: LocationData = {
-            country: rawData.country,
-            countryCode: rawData.countryCode,
-            currency: rawData.currency || 'USD',
-            currencySymbol: rawData.currencySymbol || '$',
-            language: finalLang,
-            timezone: rawData.timezone || 'UTC'
-        };
-        sessionStorage.setItem('last_detected_location', JSON.stringify(result));
-        sessionStorage.setItem('last_detected_time', Date.now().toString());
-        return result;
-    }
-
-    // 4. Ultimate Fallback
-    const fallback: LocationData = {
-        country: 'United States',
-        countryCode: 'US',
-        currency: 'USD',
-        currencySymbol: '$',
-        language: 'en',
-        timezone: 'UTC'
+    const data = await getUserLocation();
+    return {
+        country: data.location.country_name,
+        country_code: data.location.country_code,
+        city: data.location.city,
+        currency: data.currency.code,
+        currency_symbol: data.currency.symbol,
+        timezone: data.location.timezone,
+        language: ['SA', 'AE', 'QA', 'KW', 'BH', 'OM', 'EG', 'JO', 'LB'].includes(data.location.country_code) ? 'ar' : 'en'
     };
-
-    return fallback;
 };

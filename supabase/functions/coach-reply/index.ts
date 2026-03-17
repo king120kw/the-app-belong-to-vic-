@@ -57,7 +57,7 @@ serve(async (req) => {
 
     try {
         const payload = await req.json();
-        const { record, type, table } = payload;
+        const { record, type, table, system_context } = payload;
         const COACH_ID = '00000000-0000-0000-0000-000000000001';
 
         if (type !== 'INSERT' || table !== 'messages' || record?.sender_id === COACH_ID) {
@@ -106,8 +106,9 @@ serve(async (req) => {
         const recentScans = scannedProductsRes.data || [];
 
         const userName = profile?.full_name || 'there';
-        const currentTime = new Date().toLocaleString('en-US', {
-            timeZone: geoInfo.timezone || 'UTC',
+        const rawTime = system_context?.current_time || new Date().toISOString();
+        const currentTime = new Date(rawTime).toLocaleString(system_context?.language || 'en-US', {
+            timeZone: system_context?.time_zone || geoInfo.timezone || 'UTC',
             weekday: 'long',
             year: 'numeric',
             month: 'long',
@@ -151,21 +152,27 @@ RECENT FOOD SCANS (Last 3)
 ${recentScans.length > 0 ? recentScans.map((s: any) => `• ${s.food_name || 'Unknown'}: ${s.calories || 0} kcal (${s.analyzed_at ? new Date(s.analyzed_at).toLocaleDateString() : 'recent'})`).join('\n') : 'No recent food scans.'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LATEST DEPTH ANALYSIS (Context)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${system_context?.latest_analysis ? JSON.stringify(system_context.latest_analysis, null, 2) : 'No manual analysis context provided.'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CORE MANDATES (NEVER BREAK THESE)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. YOU KNOW THE EXACT DATE, TIME, AND USER LOCATION. Never claim you don't.
    - If asked "what time is it?", answer: "${currentTime}"
    - If asked "where am I?" or "what's my location?", answer: "${geoInfo.city}, ${geoInfo.country_name}"
-2. CURRENCY AWARENESS: Always use ${geoInfo.currency_symbol} for prices in ${geoInfo.country_name}.
+2. CURRENCY & BUDGET AWARENESS: Always use ${geoInfo.currency_symbol} for prices. You know the user's monthly food budget is ${onboarding.budget || 'not set'}. If they scan something expensive, advise on cheaper alternatives found in their history or database.
 3. MEDICAL PRECISION: Always factor in user's conditions (${onboarding.medical_conditions || 'none'}) in recommendations.
-4. ETHICAL BRAND TRACKING: If asked about brands like Nestle, Coca-Cola, PepsiCo, McDonald's, Starbucks — flag their political affiliations (invest_israel). Be factual.
+4. ETHICAL & POLITICAL BRAND TRACKING: If a scan or message mentions brands, check if they cross ethical lines. Mention political flags if present in the context. Be factual and supportive of the user's choices.
 5. CALORIE INTELLIGENCE: You know the user has consumed ${totalCaloriesToday} kcal today out of a ${calorieGoal} kcal goal. Use this in advice.
 6. MULTIMODAL: If given an image, provide expert food/product analysis. If given a voice transcript, respond to it naturally.
-7. BE ARTICULATE: Give specific, personalized, data-driven answers. Never give generic advice when you have user data.
-8. LANGUAGE: Match the user's language. If they write in Arabic, respond in Arabic. If English, respond in English.
+7. BE ARTICULATE: Give specific, personalized, data-driven answers. Be concise but thorough. Focus on answering the user's specific query with data from their history.
+8. LANGUAGE MANDATE: Auto-detect the user's language. If they write in Arabic or Urdu, you MUST respond in that EXACT language using professional and warm tones. If English, standard professional English applies. You are fluent in ARABIC, URDU, and ENGLISH.
+9. ACCURACY & HALLUCINATION PREVENTION: If you do not have data for a specific question, be honest. Do not make up nutritional values or medical history.
 
-RESPONSE FORMAT: Respond ONLY with a valid JSON object: {"reply": "your full response here"}
-The reply should be conversational, warm, and detailed. Use markdown formatting (bold, bullets) inside the reply string for readability.`;
+RESPONSE FORMAT: Respond directly with your detailed markdown message. Do NOT wrap it in a JSON object.
+Use markdown formatting (bolding, lists) for clarity. The reply should be conversational and warm.`;
 
         // ── 5. MULTIMODAL MESSAGE HANDLING ──
         const msgType = record.message_type;
@@ -205,14 +212,26 @@ The reply should be conversational, warm, and detailed. Use markdown formatting 
         })).filter((m: any) => m.content);
 
         // Add current message with multimodal content if needed
-        const currentUserMsg: any = { role: 'user', content: record.content || '' };
+        let content = record.content || '';
+        const scanCtx = record.metadata?.scannedProductContext;
+        let ctxSummary = '';
+
+        if (scanCtx) {
+            ctxSummary = `[Context for Health Coach: User scanned ${scanCtx.productName || scanCtx.name}. ` +
+                `Macros: ${scanCtx.calories}kcal, P:${scanCtx.protein}g, C:${scanCtx.carbs}g, F:${scanCtx.fat}g. ` +
+                `Budget: ${scanCtx.price || 'Unknown'} (Budget: ${onboarding.budget || 'Not set'}). ` +
+                `Political/Ethical: ${scanCtx.political_warning || 'None'}]`;
+            content = `${ctxSummary}\n\n${content}`;
+        }
+
+        const currentUserMsg: any = { role: 'user', content };
         if (imageUrl) {
             currentUserMsg.content = [
-                { type: 'text', text: record.content || 'Please analyze this image.' },
+                { type: 'text', text: content || 'Please analyze this image.' },
                 { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
             ];
         } else if (msgType === 'voice' && transcribedText) {
-            currentUserMsg.content = `[Voice message]: ${transcribedText}`;
+            currentUserMsg.content = `[Voice message]: ${transcribedText}${ctxSummary ? `\n\n${ctxSummary}` : ''}`;
         }
 
         // Replace last message if it's the same as current user message
@@ -221,46 +240,117 @@ The reply should be conversational, warm, and detailed. Use markdown formatting 
         );
         chatWithCurrent.push(currentUserMsg);
 
-        // ── 6. AI CALL ──
+        // ── 5. IDEMPOTENCY CHECK ──
+        // Check if we've already replied to this exact message record
+        const { data: existingReply } = await supabase
+            .from('messages')
+            .select('id')
+            .eq('conversation_id', conversationId)
+            .eq('sender_id', COACH_ID)
+            .gt('created_at', record.created_at)
+            .limit(1)
+            .maybeSingle();
+
+        if (existingReply) {
+            console.log(`[Coach] Already replied to message ${record.id}, skipping.`);
+            return new Response(JSON.stringify({ message: "Already replied", id: existingReply.id }), { headers: corsHeaders });
+        }
+
+        // ── 6. CREATE DB ROW FOR STREAMING UPDATE ──
+        const { data: newMsg, error: insertErr } = await supabase.from('messages').insert({
+            conversation_id: conversationId,
+            sender_id: COACH_ID,
+            content: '', // Empty initially
+            message_type: 'text',
+            is_read: false,
+            metadata: { replying_to: record.id }
+        }).select().single();
+
+        if (insertErr || !newMsg) {
+            console.error("Placeholder creation failed:", insertErr);
+            throw new Error(`Failed to create message placeholder: ${insertErr.message}`);
+        }
+
+        // ── 7. AI CALL (STREAMING) ──
         const openAiRes = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
             body: JSON.stringify({
                 model: "gpt-4o",
                 messages: [{ role: "system", content: systemPrompt }, ...chatWithCurrent.slice(-20)],
-                response_format: { type: "json_object" },
+                stream: true, // Enable streaming
                 temperature: 0.7,
                 max_tokens: 1500
             })
         });
 
         if (!openAiRes.ok) throw new Error(`OpenAI error: ${await openAiRes.text()}`);
-        const aiData = await openAiRes.json();
-        const reply = JSON.parse(aiData.choices[0].message.content).reply;
+        if (!openAiRes.body) throw new Error('No stream body from AI');
 
-        if (!reply) throw new Error('Empty reply from AI');
+        const reader = openAiRes.body.getReader();
+        const decoder = new TextDecoder("utf-8");
 
-        // ── 7. SAVE COACH REPLY ──
-        await supabase.from('messages').insert({
-            conversation_id: conversationId,
-            sender_id: COACH_ID,
-            content: reply,
-            message_type: 'text',
-            is_read: false
-        });
+        let fullReply = "";
+        let lastUpdateTime = Date.now();
+
+        // Consume the stream
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed === 'data: [DONE]') continue;
+
+                if (trimmed.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(trimmed.slice(6));
+                        const content = data.choices[0]?.delta?.content || "";
+                        if (content) fullReply += content;
+                    } catch (e) {
+                        // Ignore parse errors on partial chunks
+                    }
+                }
+            }
+
+            // Rate-limit DB updates to ~2 times per second to avoid stressing Postgres
+            if (Date.now() - lastUpdateTime > 500 && fullReply.length > 0) {
+                lastUpdateTime = Date.now();
+                // Send chunk update in background (fire and forget for intermediate chunks)
+                supabase.from('messages').update({ content: fullReply }).eq('id', newMsg.id).then();
+            }
+        }
+
+        if (!fullReply) {
+            fullReply = "I apologize, but I encountered a technical glitch while thinking. Could you please try asking that again? I'm ready to help!";
+        }
+
+        // ── 8. FINAL SAVE ──
+        await supabase.from('messages').update({ 
+            content: fullReply,
+            delivered_at: new Date().toISOString()
+        }).eq('id', newMsg.id);
 
         // Update conversation last message
         await supabase.from('conversations').update({
             last_message_at: new Date().toISOString(),
-            last_message_content: reply.substring(0, 200),
+            last_message_content: fullReply.substring(0, 200),
             last_message_type: 'text',
             last_message_sender_id: COACH_ID
         } as any).eq('id', conversationId);
 
-        return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true, message_id: newMsg.id }), { headers: corsHeaders });
 
     } catch (err: any) {
         console.error("Coach Reply Error:", err.message);
-        return new Response(JSON.stringify({ error: err.message }), { status: 200, headers: corsHeaders });
+        // Return a structured error response that the client can optionally display
+        return new Response(JSON.stringify({ 
+            error: true, 
+            message: err.message,
+            actionable_feedback: "The AI Coach is momentarily overwhelmed. Re-sending your message might help."
+        }), { status: 200, headers: corsHeaders });
     }
 });

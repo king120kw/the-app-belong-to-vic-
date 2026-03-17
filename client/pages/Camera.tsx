@@ -3,13 +3,20 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Camera as CameraIcon, RotateCw, Check, X, Info, Zap, Scale, HeartPulse, Activity, AlertCircle, ShoppingCart, Globe, FlaskConical, MessageSquare, Pill, TriangleAlert, Dna } from "lucide-react";
 import { analyzeFoodImage, scanProduct, saveFoodAnalysis } from "../lib/api/food";
+import { useAnalysisStore } from "../store/analysisStore";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
+import { requestCameraAccess } from "../lib/api/permissions";
+import { useNotificationStore } from "@/store/notificationStore";
+import { useCoachInjectionStore } from "@/store/coachInjectionStore";
 
 type ScanMode = "FOOD" | "BARCODE" | "MEDICATION";
 
 export default function Camera() {
   const navigate = useNavigate();
+  const setPendingAnalysisContext = useAnalysisStore(state => state.setPendingAnalysisContext);
+  const addNotification = useNotificationStore(state => state.addNotification);
+  const setLatestAnalysis = useCoachInjectionStore(state => state.setLatestAnalysis);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -36,7 +43,7 @@ export default function Camera() {
 
   const startCamera = async () => {
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
+      const mediaStream = await requestCameraAccess({
         video: { facingMode: "environment" },
         audio: false,
       });
@@ -45,8 +52,8 @@ export default function Camera() {
         videoRef.current.srcObject = mediaStream;
       }
     } catch (err) {
-      console.error("Error accessing camera:", err);
-      toast.error("Could not access camera. Please check permissions.");
+      console.error("Camera access failed in Camera.tsx:", err);
+      // Detailed error is already handled by requestCameraAccess toast
     }
   };
 
@@ -109,8 +116,13 @@ export default function Camera() {
     try {
       const result = await scanProduct(userId, barcode);
       if (result.error) throw new Error(result.error);
-      setAnalysisResult({ ...result, type: 'BARCODE' });
-      toast.success("Product identified!");
+      const fullResult = { ...result, type: 'BARCODE' as const };
+      setAnalysisResult(fullResult);
+      setLatestAnalysis(fullResult);
+      addNotification('success', "Product identified via Barcode!");
+
+      // Immediate Persistence
+      saveFoodAnalysis(userId, fullResult).catch(e => console.error("Auto-save failed:", e));
     } catch (err: any) {
       console.error("Barcode scan failed:", err);
       toast.error(err.message || "Failed to identify product.");
@@ -142,8 +154,13 @@ export default function Camera() {
       const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
 
       const result = await analyzeFoodImage(userId, file);
-      setAnalysisResult({ ...result, type: 'FOOD' });
-      toast.success("Food analysis complete!");
+      const fullResult = { ...result, type: 'FOOD' as const };
+      setAnalysisResult(fullResult);
+      setLatestAnalysis(fullResult);
+      addNotification('success', "Food analysis complete!");
+
+      // Immediate Persistence
+      saveFoodAnalysis(userId, fullResult).catch(e => console.error("Auto-save failed:", e));
     } catch (err) {
       console.error("Analysis failed:", err);
       toast.error("Analysis failed. Please try again.");
@@ -157,7 +174,8 @@ export default function Camera() {
     if (!userId || !analysisResult) return;
     try {
       await saveFoodAnalysis(userId, analysisResult);
-      toast.success("Logged successfully!");
+      addNotification('success', "Logged to your diary successfully!");
+      // toast.success("Saved!"); // Removing separate toast
       navigate("/dashboard");
     } catch (err) {
       console.error("Save failed:", err);
@@ -380,7 +398,42 @@ export default function Camera() {
 
                   <div className="flex flex-col sm:flex-row gap-4 pt-4">
                     <button
-                      onClick={() => navigate('/chat', { state: { initialMessage: `I just scanned ${analysisResult.name} (${analysisResult.generic_name}). Can you tell me more about it and if it's safe given my health profile?` } })}
+                      onClick={async () => {
+                        if (!userId) return;
+                        try {
+                          const { data, error } = await (supabase as any).rpc('provision_user_system_chats', { p_user_id: userId });
+                          if (error) throw error;
+                          const coachConvId = (data as any)?.coach_conversation_id;
+                          if (!coachConvId) throw new Error("Coach conversation not found");
+
+                          // set context
+                          setPendingAnalysisContext({
+                            productName: analysisResult.name,
+                            brand: analysisResult.brand,
+                            calories: analysisResult.calories,
+                            protein: analysisResult.protein,
+                            carbs: analysisResult.carbs,
+                            fat: analysisResult.fat,
+                            sugar: analysisResult.sugar,
+                            price: analysisResult.estimated_price ? Number(analysisResult.estimated_price.replace(/[^0-9.]/g, '')) : 0,
+                            country: analysisResult.origin_country || analysisResult.country_of_origin,
+                            political_warning: analysisResult.political_warning,
+                            is_compliant: analysisResult.is_compliant,
+                            healthStatus: analysisResult.healthStatus || analysisResult.verdict,
+                            type: 'MEDICATION'
+                          });
+
+                          // Navigate with context
+                          navigate(`/chat/${coachConvId}`, {
+                            state: {
+                              initialMessage: `I just scanned ${analysisResult.name} (${analysisResult.generic_name}). Can you tell me more about it and if it's safe given my health profile?`
+                            }
+                          });
+                        } catch (err) {
+                          console.error("Coach nav error:", err);
+                          toast.error("Failed to connect to Health Coach.");
+                        }
+                      }}
                       className="flex-1 py-4 bg-purple-600 text-white rounded-2xl font-bold hover:bg-purple-700 flex items-center justify-center gap-2 transition-all"
                     >
                       <MessageSquare className="w-5 h-5" /> Ask Health Coach
@@ -473,14 +526,49 @@ export default function Camera() {
 
                   <div className="mt-10 flex flex-col sm:flex-row gap-4">
                     <button
-                      onClick={handleSave}
-                      className="flex-1 py-4 bg-vic-blue text-white rounded-2xl font-bold hover:bg-vic-blue/80 flex items-center justify-center gap-2 transition-all shadow-xl shadow-vic-blue/20"
+                      onClick={() => navigate("/dashboard")}
+                      className="flex-1 py-4 bg-white/5 border border-white/10 text-slate-400 rounded-2xl font-bold hover:bg-white/10 flex items-center justify-center gap-2 transition-all"
                     >
-                      <Check className="w-5 h-5" /> Log Daily Intake
+                      <Check className="w-5 h-5 text-vic-green" /> Already Logged
                     </button>
                     <button
-                      onClick={() => navigate('/chat', { state: { initialMessage: `Tell me more about ${analysisResult.name}. How does it fit my health goals?` } })}
-                      className="flex-1 py-4 bg-white/5 border border-white/10 rounded-2xl font-bold hover:bg-white/10 flex items-center justify-center gap-2 transition-all"
+                      onClick={async () => {
+                        if (!userId || !analysisResult) return;
+                        try {
+                          const { data, error } = await (supabase as any).rpc('provision_user_system_chats', { p_user_id: userId });
+                          if (error) throw error;
+                          const coachConvId = (data as any)?.coach_conversation_id;
+                          if (!coachConvId) throw new Error("Coach conversation not found");
+
+                          // set context
+                          setPendingAnalysisContext({
+                            productName: analysisResult.name,
+                            calories: analysisResult.calories,
+                            protein: analysisResult.protein,
+                            carbs: analysisResult.carbs,
+                            fat: analysisResult.fat,
+                            sugar: analysisResult.sugar,
+                            price: analysisResult.estimated_price ? Number(analysisResult.estimated_price.replace(/[^0-9.]/g, '')) : 0,
+                            country: analysisResult.origin_country || analysisResult.country_of_origin,
+                            political_warning: analysisResult.political_warning,
+                            is_compliant: analysisResult.is_compliant,
+                            healthStatus: analysisResult.healthStatus || analysisResult.verdict,
+                            type: 'FOOD'
+                          });
+
+                          const priceStr = analysisResult.estimated_price ? ` (${analysisResult.estimated_price})` : '';
+                          const originStr = analysisResult.origin_country || analysisResult.country_of_origin ? `, manufactured in ${analysisResult.origin_country || analysisResult.country_of_origin}` : '';
+                          const ethicalStr = analysisResult.political_warning ? ' and has some ethical manufacturer flags' : '';
+
+                          const initialMessage = `I just analyzed ${analysisResult.name}${priceStr}${originStr} (${analysisResult.calories} kcal)${ethicalStr}. How does this fit my health goals?`;
+
+                          navigate(`/chat/${coachConvId}`, { state: { initialMessage } });
+                        } catch (err) {
+                          console.error("Coach nav error:", err);
+                          toast.error("Failed to connect to Health Coach.");
+                        }
+                      }}
+                      className="flex-1 py-4 bg-vic-blue text-white rounded-2xl font-bold hover:bg-vic-blue/90 flex items-center justify-center gap-2 transition-all shadow-lg shadow-vic-blue/20"
                     >
                       <MessageSquare className="w-5 h-5" /> Consult Coach
                     </button>

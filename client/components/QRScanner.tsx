@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { MultiFormatReader, BinaryBitmap, HybridBinarizer, HTMLCanvasElementLuminanceSource } from '@zxing/library';
+import { MultiFormatReader, BinaryBitmap, HybridBinarizer, HTMLCanvasElementLuminanceSource, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
 interface QRScannerProps {
     onScan: (data: string) => void;
@@ -34,6 +34,7 @@ export default function QRScanner({ onScan, onClose, onManualCapture, isAnalyzin
                     facingMode: mode,
                     width: { ideal: 1920 },
                     height: { ideal: 1080 },
+                    advanced: [{ focusMode: 'continuous' } as any]
                 },
                 audio: false,
             });
@@ -94,9 +95,22 @@ export default function QRScanner({ onScan, onClose, onManualCapture, isAnalyzin
             const luminanceSource = new HTMLCanvasElementLuminanceSource(canvas);
             const binaryBitmap = new BinaryBitmap(new HybridBinarizer(luminanceSource));
 
-            const result = codeReaderRef.current.decode(binaryBitmap);
+            // Hints to only look for typical product barcodes instead of QR
+            const hints = new Map();
+            hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+                BarcodeFormat.EAN_8,
+                BarcodeFormat.EAN_13,
+                BarcodeFormat.UPC_A,
+                BarcodeFormat.UPC_E,
+                BarcodeFormat.CODE_128,
+                BarcodeFormat.CODE_39,
+                BarcodeFormat.ITF
+            ]);
+
+            const result = codeReaderRef.current.decode(binaryBitmap, hints);
 
             if (result && !hasScannedRef.current) {
+                // Ensure it's not a QR code if possible, or just accept the result since we are in barcode mode
                 hasScannedRef.current = true;
                 setStatus('detected');
                 stopCamera();

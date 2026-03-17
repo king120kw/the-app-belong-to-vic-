@@ -60,8 +60,8 @@ export const useTranslation = () => {
     const { data: detectedLoc, refetch: refreshLocation } = useQuery({
         queryKey: ['detected-location'],
         queryFn: () => detectLocation(),
-        staleTime: 5000,
-        refetchOnWindowFocus: true,
+        staleTime: 60 * 60 * 1000, // Increase to 1 hour to prevent frequent refetching
+        refetchOnWindowFocus: false, // Prevent looping on window focus
         refetchOnMount: true
     });
 
@@ -85,6 +85,11 @@ export const useTranslation = () => {
 
     useEffect(() => {
         if (user && detectedLoc && isAuto) {
+            const sessionStorageKey = `location_synced_${user.id}`;
+            const hasSyncedThisSession = sessionStorage.getItem(sessionStorageKey);
+
+            if (hasSyncedThisSession) return;
+
             const s = settings as any;
             // Sync if any core location attribute is missing or different
             const needsSync = !s ||
@@ -102,16 +107,27 @@ export const useTranslation = () => {
                     is_language_auto: true
                 }).then(() => {
                     queryClient.invalidateQueries({ queryKey: ['settings', user.id] });
-                    // Only toast if it's a significant change
-                    if (s && s.country_code !== detectedLoc.countryCode) {
-                        toast.success(t('location_updated_toast').replace('%s', detectedLoc.country), {
-                            icon: '🌎',
-                            duration: 5000
-                        });
+
+                    // Use a separate flag for the toast to ensure it only shows once
+                    const toastKey = `location_toasted_${user.id}`;
+                    if (!sessionStorage.getItem(toastKey)) {
+                        // Only toast if it's a significant change
+                        if (s && s.country_code !== detectedLoc.countryCode) {
+                            toast.success(t('location_updated_toast').replace('%s', detectedLoc.country), {
+                                icon: '🌎',
+                                duration: 5000
+                            });
+                            sessionStorage.setItem(toastKey, 'true');
+                        }
                     }
+
+                    sessionStorage.setItem(sessionStorageKey, 'true');
                 }).catch(err => {
                     console.error("Failed to sync location settings:", err);
                 });
+            } else {
+                // If it doesn't need sync, we can still mark it as "checked" for this session
+                sessionStorage.setItem(sessionStorageKey, 'true');
             }
         }
     }, [detectedLoc, isAuto, user, settings, queryClient]);

@@ -1,6 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, ShoppingCart, Scale, MessageSquare, Check, Globe, Pill, TriangleAlert, Dna, HeartPulse } from "lucide-react";
 import { useCurrency } from "../lib/CurrencyContext";
+import { useAnalysisStore } from '../store/analysisStore';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/AuthContext';
+import { useState, useEffect } from 'react';
+import { saveFoodAnalysis, checkBudgetStatus } from '../lib/api/food';
+import { toast } from 'sonner';
 
 interface ProductDetailsProps {
     productImage: string;
@@ -25,6 +31,10 @@ interface ProductDetailsProps {
     user_alignment_boolean?: boolean;
     political_warning?: string;
     cheaper_alternatives?: Array<{ name: string; price: string | number; reason: string }>;
+    usage_instructions?: string;
+    factory_ingredients?: string;
+    suitability_analysis?: string;
+    country_origin_details?: string;
     // Medication-specific fields
     type?: string;
     generic_name?: string;
@@ -65,6 +75,10 @@ export function ProductDetails({
     user_alignment_boolean,
     political_warning,
     cheaper_alternatives,
+    usage_instructions,
+    factory_ingredients,
+    suitability_analysis,
+    country_origin_details,
     type,
     generic_name,
     purpose,
@@ -76,17 +90,112 @@ export function ProductDetails({
 }: ProductDetailsProps) {
     const navigate = useNavigate();
     const { formatCurrency } = useCurrency();
-    const isEthical = !political_warning;
+    const { user } = useAuth();
+    const setPendingAnalysisContext = useAnalysisStore(state => state.setPendingAnalysisContext);
+    const [isNavigating, setIsNavigating] = useState(false);
+    const [budgetStatus, setBudgetStatus] = useState<{ isOver: boolean; budget: number } | null>(null);
     const isMedication = type === 'medication';
 
-    const handleConsultCoach = () => {
-        navigate('/chat', {
-            state: {
-                initialMessage: isMedication
-                    ? `I just scanned ${productName} (${generic_name}). Can you tell me more and whether it's safe given my health profile?`
-                    : `I just scanned ${productName}. Tell me more about this product and whether it fits my health goals.`
+    // Immediate Persistence on mount for barcode/analysis results
+    useEffect(() => {
+        if (!user?.id || type === 'medication') return;
+
+        const persistResult = async () => {
+            try {
+                // Prepare analysis object for storage
+                const analysisToSave = {
+                    name: productName,
+                    calories,
+                    protein,
+                    carbs,
+                    fat,
+                    sugar,
+                    fiber,
+                    healthRating: healthStatus === 'Healthy' || healthStatus === 'Healty' ? 8 : 4,
+                    description,
+                    image_url: productImage,
+                    barcode: (productName + (brand || '')).substring(0, 20), // Fallback if no barcode prop
+                    brand,
+                    manufacturer,
+                    origin_country,
+                    price: Number(estimated_price || 0),
+                    political_warning,
+                    is_compliant,
+                    user_alignment_boolean
+                };
+
+                await saveFoodAnalysis(user.id, analysisToSave);
+
+                // Budget check
+                if (estimated_price) {
+                    const status = await checkBudgetStatus(user.id, Number(estimated_price));
+                    setBudgetStatus(status);
+
+                    if (status.isOver) {
+                        toast.warning(`Budget Alert: This item represents a significant portion of your monthly budget (${formatCurrency(status.budget)}).`);
+                    }
+                }
+            } catch (err) {
+                console.error("Auto-save failed:", err);
             }
-        });
+        };
+
+        persistResult();
+    }, [user?.id]);
+
+    const handleConsultCoach = async () => {
+        if (!user?.id) return;
+        setIsNavigating(true);
+
+        try {
+            // Ensure chats exist and grab the Coach ID
+            const { data, error } = await (supabase as any).rpc('provision_user_system_chats', { p_user_id: user.id });
+            if (error) throw error;
+
+            const coachConvId = (data as any)?.coach_conversation_id;
+            if (!coachConvId) throw new Error("Could not find Health Coach conversation");
+
+            // Save complete context globally using structured pendingAnalysisContext
+            setPendingAnalysisContext({
+                productName,
+                brand,
+                calories,
+                protein,
+                carbs,
+                fat,
+                sugar,
+                price: Number(estimated_price || 0),
+                currency: 'USD',
+                country: origin_country,
+                political_warning,
+                is_compliant,
+                healthStatus,
+                type,
+                generic_name,
+                purpose,
+                side_effects,
+                warnings,
+                interactions
+            });
+
+            let initialMessage = '';
+
+            if (isMedication) {
+                initialMessage = `I just scanned ${productName} (${generic_name}). Can you tell me more and whether it's safe given my health profile?`;
+            } else {
+                const priceStr = estimated_price ? ` (${formatCurrency(estimated_price)})` : '';
+                const originStr = origin_country ? `, manufactured in ${origin_country}` : '';
+                const ethicalStr = political_warning ? ` and the manufacturer has flagged ethical/political concerns` : '';
+                const budgetStr = budgetStatus?.isOver ? `. This purchase slightly exceeds my typical budget threshold` : '';
+
+                initialMessage = `I scanned ${productName}${priceStr}${originStr}. The analysis shows it contains ${sugar || 0}g of sugar per serving${ethicalStr}${budgetStr}. Can you recommend a healthy alternative that fits my budget and goals?`;
+            }
+
+            navigate(`/chat/${coachConvId}`, { state: { initialMessage } });
+        } catch (error) {
+            console.error("Failed to navigate to Coach:", error);
+            setIsNavigating(false);
+        }
     };
 
     const renderParagraphs = (text: string | undefined) => {
@@ -102,13 +211,17 @@ export function ProductDetails({
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xl p-0 sm:p-4">
             <div className="w-full max-w-md sm:rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col bg-white dark:bg-[#0a0f14] max-h-screen sm:max-h-[92vh] rounded-t-[2.5rem]">
 
-                {/* POLITICAL ALERT — Red Banner (Highest Priority) */}
+                {/* POLITICAL ALERT / ETHICAL CONFIRMATION Banner */}
                 {political_warning && (
-                    <div className="bg-rose-600 py-4 px-6 flex items-start gap-3 shrink-0">
-                        <AlertCircle className="w-5 h-5 text-white shrink-0 mt-0.5" />
+                    <div className={`${!is_compliant ? 'bg-rose-600' : 'bg-emerald-600'} py-4 px-6 flex items-start gap-3 shrink-0`}>
+                        {!is_compliant ? (
+                            <AlertCircle className="w-5 h-5 text-white shrink-0 mt-0.5" />
+                        ) : (
+                            <Check className="w-5 h-5 text-white shrink-0 mt-0.5" strokeWidth={3} />
+                        )}
                         <div>
                             <p className="text-white text-[12px] font-black uppercase tracking-wider mb-1">
-                                ⚠️ Ethical Responsibility Alert
+                                {!is_compliant ? '⚠️ Ethical Responsibility Alert' : 'Ethically Clear'}
                             </p>
                             <p className="text-white/90 text-[12px] leading-relaxed">
                                 {political_warning}
@@ -117,12 +230,12 @@ export function ProductDetails({
                     </div>
                 )}
 
-                {/* ETHICAL CLEAR Banner */}
-                {isEthical && user_alignment_boolean && (
+                {/* USER ALIGNMENT Banner (If cleared and aligns with health) */}
+                {is_compliant && user_alignment_boolean && (
                     <div className="bg-[#0a2e52] py-3 px-6 flex items-center justify-center gap-2 shrink-0">
-                        <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                        <HeartPulse className="w-4 h-4 text-white" strokeWidth={3} />
                         <span className="text-white text-[11px] font-black uppercase tracking-[0.2em]">
-                            Ethically Clear · Personalized Match
+                            Personalized Match
                         </span>
                     </div>
                 )}
@@ -173,6 +286,43 @@ export function ProductDetails({
                     {description && (
                         <div className="space-y-4">
                             {renderParagraphs(description)}
+                        </div>
+                    )}
+
+                    {/* Factory Analysis Blocks */}
+                    {country_origin_details && (
+                        <div className="space-y-3 p-4 bg-blue-500/5 border border-blue-500/10 rounded-2xl">
+                            <h3 className="text-[13px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                                <Globe className="w-4 h-4" /> Country of Origin
+                            </h3>
+                            <p className="text-[14px] text-slate-700 dark:text-slate-300 leading-relaxed">{country_origin_details}</p>
+                        </div>
+                    )}
+
+                    {usage_instructions && (
+                        <div className="space-y-3 p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
+                            <h3 className="text-[13px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                                Description & Usage
+                            </h3>
+                            <p className="text-[14px] text-slate-700 dark:text-slate-300 leading-relaxed">{usage_instructions}</p>
+                        </div>
+                    )}
+
+                    {factory_ingredients && (
+                        <div className="space-y-3 p-4 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl">
+                            <h3 className="text-[13px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                                Factory Ingredients
+                            </h3>
+                            <p className="text-[14px] text-slate-700 dark:text-slate-300 leading-relaxed">{factory_ingredients}</p>
+                        </div>
+                    )}
+
+                    {suitability_analysis && (
+                        <div className="space-y-3 p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
+                            <h3 className="text-[13px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                                <Check className="w-4 h-4" /> Suitability for You
+                            </h3>
+                            <p className="text-[14px] text-slate-700 dark:text-slate-300 leading-relaxed">{suitability_analysis}</p>
                         </div>
                     )}
 
@@ -235,27 +385,18 @@ export function ProductDetails({
                             )}
                         </div>
                     ) : (
-                    /* 5. Calorie & Macro Summary — Food Products */
-                    <div className="bg-slate-900 dark:bg-white/5 rounded-3xl p-6 text-center border border-slate-800 dark:border-white/10">
-                        <div className="text-4xl font-black text-white mb-1">~{calories} kcal</div>
-                        <div className="text-sm font-bold text-slate-400 tracking-wider mb-4">
-                            P: {protein}g &nbsp;•&nbsp; F: {fat}g &nbsp;•&nbsp; C: {carbs}g
+                        /* 5. Calorie & Macro Summary — Food Products */
+                        <div className="bg-slate-900 dark:bg-white/5 rounded-3xl p-6 text-center border border-slate-800 dark:border-white/10">
+                            <div className="text-4xl font-black text-white mb-1">~{calories} kcal</div>
+                            <div className="flex justify-center flex-wrap gap-2">
+                                {estimated_price && (
+                                    <span className="px-3 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full flex items-center gap-1">
+                                        <ShoppingCart className="w-3 h-3" />
+                                        {formatCurrency(estimated_price)} (market est.)
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                        <div className="flex justify-center flex-wrap gap-2">
-                            {sugar != null && (
-                                <span className="px-3 py-1 bg-rose-500/10 text-rose-400 text-xs font-bold rounded-full">Sugar {sugar}g</span>
-                            )}
-                            {fiber != null && (
-                                <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">Fiber {fiber}g</span>
-                            )}
-                            {estimated_price && (
-                                <span className="px-3 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full flex items-center gap-1">
-                                    <ShoppingCart className="w-3 h-3" />
-                                    {formatCurrency(estimated_price)} (market est.)
-                                </span>
-                            )}
-                        </div>
-                    </div>
                     )}
 
                     {/* Personalized Recommendation */}
@@ -288,10 +429,10 @@ export function ProductDetails({
                     )}
                 </main>
 
-                    {/* Footer Actions */}
+                {/* Footer Actions */}
                 <div className="px-7 py-6 shrink-0 bg-white dark:bg-[#0a0f14] border-t border-slate-100 dark:border-white/5 space-y-3">
                     <div className="flex gap-3">
-                        {!political_warning && !isMedication && (
+                        {!isMedication && is_compliant && (
                             <button
                                 onClick={onAddToDiary}
                                 className="flex-1 py-4 bg-[#0a2e52] text-white rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all shadow-xl flex items-center justify-center gap-2"
@@ -300,7 +441,7 @@ export function ProductDetails({
                                 Log Product
                             </button>
                         )}
-                        {political_warning && !isMedication && (
+                        {!isMedication && !is_compliant && (
                             <button
                                 onClick={onClose}
                                 className="flex-1 py-4 bg-rose-600 text-white rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
@@ -311,9 +452,14 @@ export function ProductDetails({
                         )}
                         <button
                             onClick={handleConsultCoach}
-                            className={`flex-1 py-4 rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${isMedication ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-white'}`}
+                            disabled={isNavigating}
+                            className={`flex-1 py-4 rounded-[1.5rem] font-black text-[15px] active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${isNavigating ? 'opacity-70 cursor-not-allowed' : ''} ${isMedication ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-white'}`}
                         >
-                            <MessageSquare className="w-5 h-5" />
+                            {isNavigating ? (
+                                <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <MessageSquare className="w-5 h-5" />
+                            )}
                             {isMedication ? 'Ask Health Coach' : 'Ask Coach'}
                         </button>
                     </div>

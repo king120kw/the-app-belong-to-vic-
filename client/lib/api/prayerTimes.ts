@@ -122,9 +122,9 @@ export const isPrayerTime = (prayerTimes: PrayerTimes): boolean => {
         minutes: timeToMinutes(time)
     }));
 
-    // Check if within 45 minutes window for any prayer (extended for better coverage)
+    // Check if within 10 minutes window for any prayer (strictly limited as requested)
     return timings.some(t => {
         const diff = Math.abs(t.minutes - currentTime);
-        return diff <= 22; // ~22 mins before or after
+        return diff <= 10; // 10 mins before or after
     });
 };

@@ -15,27 +15,31 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
     useEffect(() => {
         const checkSpiritualWindow = async () => {
             const prayerTimes = await getPrayerTimes();
-            if (prayerTimes && isPrayerTime(prayerTimes)) {
-                // It's prayer time window, check if we already have a reminder for this session
-                const sessionKey = `spiritual_reminder_${new Date().toDateString()}`;
-                const alreadyShown = localStorage.getItem(sessionKey);
+            const inWindow = prayerTimes ? isPrayerTime(prayerTimes) : false;
 
-                if (!alreadyShown) {
+            if (inWindow) {
+                // If in window and not already visible, fetch and show
+                if (!isVisible) {
                     const data = await getPersonalizedSpiritualReminder(userId);
                     if (data) {
                         setReminder(data);
                         setIsVisible(true);
-                        localStorage.setItem(sessionKey, 'true');
                     }
+                }
+            } else {
+                // Not in window, hide immediately
+                if (isVisible) {
+                    setIsVisible(false);
+                    setReminder(null);
                 }
             }
         };
 
         checkSpiritualWindow();
-        // Check every 5 minutes
-        const interval = setInterval(checkSpiritualWindow, 5 * 60 * 1000);
+        // Check every minute for precision given the 10-min window
+        const interval = setInterval(checkSpiritualWindow, 60 * 1000);
         return () => clearInterval(interval);
-    }, [userId]);
+    }, [userId, isVisible]);
 
     if (!isVisible || !reminder) return null;
 

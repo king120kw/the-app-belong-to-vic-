@@ -2,7 +2,7 @@ export const en = {
     welcome: "Welcome back",
     ready_journey: "Ready to continue your journey?",
     camera: "Meal Camera",
-    scanner: "Barcode Scanner",
+    scanner: "Scanner",
     cook: "Cook",
     cookbook: "Cookbook",
     budget: "Budget",

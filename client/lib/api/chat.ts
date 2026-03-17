@@ -361,16 +361,37 @@ export const sendMessage = async (
 
     if (isAI) {
         // Explicitly trigger the coach reply function if this is an AI chat
-        supabase.functions.invoke('coach-reply', {
-            body: {
-                type: 'INSERT',
-                table: 'messages',
-                record: data,
-                system_context: {
-                    current_time: new Date().toISOString()
+        const systemContext = {
+            current_time: new Date().toISOString(),
+            time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            language: navigator.language,
+            location_hint: metadata?.location_hint,
+            latest_analysis: metadata?.latest_analysis || metadata?.analysisContext
+        };
+
+        const invokeWithRetry = async (retryCount = 0) => {
+            try {
+                const { error: invokeErr } = await supabase.functions.invoke('coach-reply', {
+                    body: {
+                        type: 'INSERT',
+                        table: 'messages',
+                        record: data,
+                        system_context: systemContext
+                    }
+                });
+                if (invokeErr) throw invokeErr;
+            } catch (err) {
+                if (retryCount < 3) {
+                    const delay = Math.pow(2, retryCount) * 1000;
+                    console.warn(`Coach reply failed, retrying in ${delay}ms... (Attempt ${retryCount + 1})`);
+                    setTimeout(() => invokeWithRetry(retryCount + 1), delay);
+                } else {
+                    console.error("Coach reply failed after maximum retries:", err);
                 }
             }
-        }).catch(err => console.error("Coach reply trigger failed:", err));
+        };
+
+        invokeWithRetry().catch(err => console.error("Initial coach trigger failed:", err));
     }
 
     return data
@@ -500,27 +521,15 @@ export const unsubscribeFromMessages = (channel: RealtimeChannel) => {
     supabase.removeChannel(channel)
 }
 
-// --- Typing Indicator Singleton ---
-// This prevents creating dozens of unsubscribed channels and falling back to REST
-const typingChannels = new Map<string, RealtimeChannel>();
-
-export const sendTypingIndicator = async (userId: string, conversationId: string, isTyping: boolean) => {
-    let channel = typingChannels.get(conversationId);
-
-    if (!channel) {
-        channel = supabase.channel(`typing:${conversationId}`);
-        await new Promise((resolve) => {
-            channel!.subscribe((status) => {
-                if (status === 'SUBSCRIBED') resolve(true);
-            });
-        });
-        typingChannels.set(conversationId, channel);
-    }
-
-    return channel.send({
-        type: 'broadcast',
-        event: 'typing',
-        payload: { userId, isTyping }
+// --- Typing Indicator ---
+// V12: We prefer Presence (track) on the main room channel for robust "is typing" status.
+// Use this only if you need a separate broadcast event for some reason.
+export const sendTypingIndicator = async (channel: RealtimeChannel, userId: string, conversationId: string, isTyping: boolean) => {
+    return channel.track({
+        user_id: userId,
+        conversation_id: conversationId,
+        typing: isTyping,
+        online_at: new Date().toISOString()
     });
 }
 

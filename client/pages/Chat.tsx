@@ -125,13 +125,12 @@ export default function Chat() {
     const listUpdateChannel = supabase
       .channel('chat-list-global-manager')
       .on('postgres_changes', {
-        event: 'INSERT',
+        event: '*', // Listen to INSERT, UPDATE, DELETE for full sync
         schema: 'public',
         table: 'messages'
       }, (payload: any) => {
-        // A new message was inserted in SOME conversation.
-        // We invalidate the conversations list to ensure the latest message preview and sorting are updated.
-        console.log("[Chat] V10 Global message event:", payload.new.conversation_id);
+        // A message change happened. Invalidate conversations and contacts if needed.
+        console.log(`[Chat] V10 Global message event [${payload.eventType}]:`, payload.new?.id || payload.old?.id);
         queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
       })
       .on('postgres_changes', {

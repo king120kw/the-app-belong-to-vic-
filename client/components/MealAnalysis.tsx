@@ -3,6 +3,9 @@ import { useTranslation } from "@/lib/api/translation";
 import { AlertCircle, ShoppingCart, Scale, MessageSquare, Check, ChevronLeft, Heart } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useCurrency } from "../lib/CurrencyContext";
+import { useAnalysisStore } from "../store/analysisStore";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../lib/AuthContext";
 
 interface FoodItem {
     name: string;
@@ -42,7 +45,9 @@ interface MealAnalysisProps {
 
 export function MealAnalysis({ mealImage, foodItems, totalCalories, dailyCalorieGoal, onClose, onLog }: MealAnalysisProps) {
     const { t } = useTranslation();
+    const { user } = useAuth();
     const navigate = useNavigate();
+    const setPendingAnalysisContext = useAnalysisStore(state => state.setPendingAnalysisContext);
     const [isSaved, setIsSaved] = useState(false);
 
     const item: FoodItem = foodItems[0] || {
@@ -67,20 +72,54 @@ export function MealAnalysis({ mealImage, foodItems, totalCalories, dailyCalorie
         onLog();
     };
 
-    const handleConsultCoach = () => {
-        // Build a detailed context for the coach
-        const mealSummary = `I just analyzed ${item.name}. 
-Nutritional Breakdown: ${totalCalories || item.calories} kcal, P: ${item.protein}g, F: ${item.fat}g, C: ${item.carbs}g.
-Health Verdict: ${verdict}.
-Ingredients: ${item.ingredients || 'Visual analysis'}.
-Political Warning: ${item.political_warning || 'None'}.`;
+    const handleConsultCoach = async () => {
+        if (!user) return;
 
-        navigate('/chat', {
-            state: {
-                initialMessage: `I've scanned ${item.name} with VicCalary. ${item.political_warning ? 'I see an ethical concern.' : ''} Can you give me more personalized advice based on my goals?\n\n[Meal Context: ${mealSummary}]`,
-                attachment: mealImage
-            }
-        });
+        // 1. Provision chats for immediate routing
+        try {
+            const { data, error } = await (supabase as any).rpc('provision_user_system_chats', { p_user_id: user.id });
+            if (error) throw error;
+            const coachConvId = (data as any)?.coach_conversation_id;
+            if (!coachConvId) throw new Error("Coach conversation not found");
+
+            // 2. Build complete context for the AI
+            const contextData = {
+                productName: item.name,
+                calories: totalCalories || item.calories,
+                protein: item.protein,
+                carbs: item.carbs,
+                fat: item.fat,
+                sugar: item.sugar,
+                fiber: item.fiber,
+                price: item.estimated_price ? Number(item.estimated_price.replace(/[^0-9.]/g, '')) : 0,
+                country: item.country_of_origin,
+                political_warning: item.political_warning,
+                is_compliant: item.is_compliant,
+                healthStatus: item.healthStatus || item.verdict,
+                type: item.type || 'FOOD',
+                description: item.description,
+                ingredients: item.ingredients,
+                image: mealImage
+            };
+            
+            setPendingAnalysisContext(contextData);
+
+            const priceStr = item.estimated_price ? ` (${item.estimated_price})` : '';
+            const originStr = item.country_of_origin ? `, manufactured in ${item.country_of_origin}` : '';
+            const ethicalStr = item.political_warning ? ' and has some ethical manufacturer flags' : '';
+            const initialMessage = `I just analyzed ${item.name}${priceStr}${originStr} (${totalCalories || item.calories} kcal)${ethicalStr}. How does this fit my health goals?`;
+
+            navigate(`/chat/${coachConvId}`, {
+                state: {
+                    initialMessage,
+                    attachment: mealImage,
+                    analysisContext: contextData
+                }
+            });
+        } catch (err) {
+            console.error("Coach nav error:", err);
+            navigate('/chat');
+        }
     };
 
     // Split narrative text into paragraphs
@@ -211,21 +250,7 @@ Political Warning: ${item.political_warning || 'None'}.`;
                         <div className="text-4xl font-black text-white mb-1">
                             ~{totalCalories || item.calories} kcal
                         </div>
-                        <div className="text-sm font-bold text-slate-400 tracking-wider mb-4">
-                            P: {item.protein || 0}g &nbsp;•&nbsp; F: {item.fat || 0}g &nbsp;•&nbsp; C: {item.carbs || 0}g
-                        </div>
-
                         <div className="flex justify-center gap-3">
-                            {item.sugar != null && (
-                                <span className="px-3 py-1 bg-rose-500/10 text-rose-400 text-xs font-bold rounded-full">
-                                    Sugar {item.sugar}g
-                                </span>
-                            )}
-                            {item.fiber != null && (
-                                <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">
-                                    Fiber {item.fiber}g
-                                </span>
-                            )}
                             {item.estimated_price && (
                                 <span className="px-3 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full flex items-center gap-1">
                                     <ShoppingCart className="w-3 h-3" />

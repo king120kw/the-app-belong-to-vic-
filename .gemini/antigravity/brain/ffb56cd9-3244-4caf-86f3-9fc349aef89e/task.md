@@ -1,7 +1,0 @@
-- [x] Fix Onboarding Database Error (Created `onboarding_responses` table) <!-- id: 6 -->
-- [x] Implement Personalized Calorie Calculation (Mifflin-St Jeor + Activity Level) <!-- id: 7 -->
-- [x] Enable Real AI Meal Analysis in Dashboard (Connected Gemini to Camera) <!-- id: 8 -->
-- [x] Connect Logging Logic to Supabase (Added `logMeal` feature) <!-- id: 9 -->
-- [x] Populate Dashboard with Initial Meal Data (Seeded `meals` table) <!-- id: 10 -->
-- [x] Synchronize TypeScript types for new database schema <!-- id: 11 -->
-- [x] Push all stable changes to GitHub main branch <!-- id: 12 -->

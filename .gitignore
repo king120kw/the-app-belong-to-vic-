@@ -30,6 +30,7 @@ dist-ssr
 
 # Local Netlify folder
 .netlify
+.next
 
 # Scratch/Log files
 *.log

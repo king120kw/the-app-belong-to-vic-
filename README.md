@@ -60,8 +60,8 @@ VicCalary is a next-generation health, nutrition, and spiritual wellness applica
 3. **Environment Setup**:
    Create a `.env` file in the root:
    ```env
-   VITE_SUPABASE_URL=your_supabase_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   VITE_NEXT_PUBLIC_SUPABASE_URL=your_NEXT_PUBLIC_SUPABASE_URL
+   VITE_NEXT_PUBLIC_SUPABASE_ANON_KEY=your_NEXT_PUBLIC_SUPABASE_ANON_KEY
    ```
 
 4. **Run Development Server**:

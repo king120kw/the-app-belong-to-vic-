@@ -11,7 +11,7 @@ import { useTranslation } from "@/lib/api/translation";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import dynamic from "next/dynamic";
-const QRScanner = dynamic(() => import("../components/QRScanner"), { ssr: false });
+const QRScanner = dynamic(() => import("@/components/QRScanner"), { ssr: false });
 import { Button } from "@/components/ui/button";
 
 const COACH_ID = '00000000-0000-0000-0000-000000000001';

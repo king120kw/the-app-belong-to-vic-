@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react";
 import { useTranslation } from "@/lib/api/translation";
-import "../styles/FoodCarousel.css";
+
 
 interface Meal {
     id: string;

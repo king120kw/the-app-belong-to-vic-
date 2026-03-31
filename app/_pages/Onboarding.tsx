@@ -280,7 +280,7 @@ export default function Onboarding() {
             // Profile missing and no sync attempted yet!
             setSyncAttempted(true);
             console.warn("Profile missing in Onboarding, triggering initial sync...");
-            import("../lib/api/auth").then(({ syncUserWithSupabase }) => {
+            import("../../lib/api/auth").then(({ syncUserWithSupabase }) => {
               syncUserWithSupabase(user).catch(err => {
                 console.error("Critical: Failed to sync profile during onboarding recovery:", err);
                 toast.error("Failed to initialize your profile. Please try logging in again or refresh the page.");
@@ -297,7 +297,7 @@ export default function Onboarding() {
       // One last check for profile before saving to avoid foreign key violation
       const profile = await getUserProfile(user!.id);
       if (!profile) {
-        const { syncUserWithSupabase } = await import("../lib/api/auth");
+        const { syncUserWithSupabase } = await import("../../lib/api/auth");
         await syncUserWithSupabase(user);
       }
       return saveOnboardingResponses(user!.id, data);

@@ -69,7 +69,7 @@ export const useTranslation = () => {
     const isAuto = (settings as any)?.is_language_auto !== false;
 
     // Use localStorage as a fast-cache for visual consistency
-    const cachedLang = localStorage.getItem('app_lang') as Language;
+    const cachedLang = (typeof window !== 'undefined' ? localStorage.getItem('app_lang') : null) as Language;
 
     // Core Precedence Logic: 
     // Manual settings ALWAYS win if auto is off.

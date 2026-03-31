@@ -396,7 +396,7 @@ export default function Chat() {
           <MessageCircle className="text-vic-green" size={48} />
         </div>
         <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-xs">{t('chat_desc')}</p>
-        {localStorage.getItem("pending_otp") === "true" ? (
+        {(typeof window !== 'undefined' && localStorage.getItem("pending_otp") === "true") ? (
           <div className="w-full max-w-xs space-y-3 shrink-0">
             <button onClick={() => router.push("/verification-code")} className="w-full py-4 bg-vic-green text-slate-900 font-bold rounded-2xl shadow-lg">
               Masukkan Kode

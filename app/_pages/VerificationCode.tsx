@@ -18,8 +18,8 @@ export default function VerificationCode() {
     const [code, setCode] = useState(["", "", "", "", "", ""]);
     const [loading, setLoading] = useState(false);
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-    const phoneNumber = localStorage.getItem("phoneNumber") || "your phone";
-    const localPhoneNumber = localStorage.getItem("localPhoneNumber") || "";
+    const phoneNumber = (typeof window !== 'undefined' ? localStorage.getItem("phoneNumber") : null) || "your phone";
+    const localPhoneNumber = (typeof window !== 'undefined' ? localStorage.getItem("localPhoneNumber") : null) || "";
 
     // Focus first input on mount
     useEffect(() => {

@@ -1,6 +1,6 @@
 "use client"
 import { useRouter } from "next/navigation";
-import { AlertCircle, ShoppingCart, Scale, MessageSquare, Check, Globe, Pill, TriangleAlert, Dna, HeartPulse } from "lucide-react";
+import { AlertCircle, ShoppingCart, Scale, MessageSquare, Check, Globe, Pill, TriangleAlert, Dna, HeartPulse, ChevronLeft } from "lucide-react";
 import { useCurrency } from "@/lib/CurrencyContext";
 import { useAnalysisStore } from '@/store/analysisStore';
 import { supabase } from '@/lib/supabase';
@@ -47,11 +47,6 @@ interface ProductDetailsProps {
     onAddToDiary: () => void;
 }
 
-const ChevronLeft = ({ className }: { className?: string }) => (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
-    </svg>
-);
 
 export function ProductDetails({
     productImage,

@@ -2,6 +2,7 @@
 import { useState, useRef } from "react";
 import Link from "next/link"
 import { useRouter } from "next/navigation";
+import { ArrowLeft, Settings, ImagePlus, Camera, CalendarDays, BadgeCheck, LogOut } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { getUserProfile, updateUserProfile, uploadAvatar } from "@/lib/api/auth";
@@ -95,11 +96,11 @@ export default function Profile() {
       {/* Header */}
       <header className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 bg-white dark:bg-[#0d1418]">
         <Link href="/dashboard" className="flex items-center gap-2 text-vic-deep-blue dark:text-vic-green font-bold">
-          <span className="material-symbols-outlined">arrow_back</span>
+          <ArrowLeft size={20} />
         </Link>
         <h1 className="text-xl font-bold text-slate-900 dark:text-white">{t('profile')}</h1>
         <button onClick={() => router.push("/settings")} className="text-slate-600 dark:text-slate-400">
-          <span className="material-symbols-outlined">settings</span>
+          <Settings size={20} />
         </button>
       </header>
 
@@ -115,7 +116,7 @@ export default function Profile() {
                 onClick={() => fileInputRef.current?.click()}
                 className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
               >
-                <span className="material-symbols-outlined text-white text-4xl">add_a_photo</span>
+                <ImagePlus className="text-white" size={36} />
               </div>
             </div>
 
@@ -124,7 +125,7 @@ export default function Profile() {
               onClick={() => fileInputRef.current?.click()}
               className="absolute bottom-1 right-1 size-10 bg-vic-green rounded-full border-4 border-white dark:border-[#0d1418] flex items-center justify-center shadow-xl cursor-pointer hover:scale-110 transition-transform z-20"
             >
-              <span className="material-symbols-outlined text-slate-900 text-xl">camera_alt</span>
+              <Camera className="text-slate-900" size={18} />
             </div>
 
             <input
@@ -155,7 +156,7 @@ export default function Profile() {
         <div className="space-y-4">
           <div className="flex items-center justify-between p-4 bg-white dark:bg-[#1f2c34] rounded-xl border border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-vic-green">calendar_today</span>
+              <CalendarDays className="text-vic-green" size={20} />
               <span className="font-medium text-slate-900 dark:text-white">{t('member_since')}</span>
             </div>
             <span className="text-slate-600 dark:text-slate-400">
@@ -164,7 +165,7 @@ export default function Profile() {
           </div>
           <div className="flex items-center justify-between p-4 bg-white dark:bg-[#1f2c34] rounded-xl border border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-vic-green">verified</span>
+              <BadgeCheck className="text-vic-green" size={20} />
               <span className="font-medium text-slate-900 dark:text-white">{t('account_status')}</span>
             </div>
             <span className="text-vic-green font-bold">{t('verified')}</span>
@@ -183,7 +184,7 @@ export default function Profile() {
           onClick={handleSignOut}
           className="w-full mt-12 px-6 py-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl font-bold hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors flex items-center justify-center gap-2"
         >
-          <span className="material-symbols-outlined">logout</span>
+          <LogOut size={18} />
           {t('sign_out')}
         </button>
       </main>

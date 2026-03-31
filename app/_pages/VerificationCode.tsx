@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { useTranslation } from "@/lib/api/translation";
 import { useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, LockKeyhole } from "lucide-react";
 
 export default function VerificationCode() {
     const router = useRouter();
@@ -144,7 +145,7 @@ export default function VerificationCode() {
             {/* Header */}
             <header className="p-4 flex items-center justify-between sticky top-0 z-20 bg-white/80 dark:bg-[#0d1418]/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
                 <button onClick={() => router.back()} className="text-slate-600 dark:text-slate-400 p-2">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={20} />
                 </button>
                 <h2 className="font-bold text-slate-800 dark:text-white">{t('enter_code_title')}</h2>
                 <div className="w-10"></div>
@@ -152,7 +153,7 @@ export default function VerificationCode() {
 
             <main className="flex-1 flex flex-col items-center px-6 pt-12 max-w-md mx-auto w-full">
                 <div className="size-20 bg-vic-green/10 rounded-3xl flex items-center justify-center mb-8 rotate-12">
-                    <span className="material-symbols-outlined text-4xl text-vic-green">lock_person</span>
+                    <LockKeyhole className="text-vic-green" size={36} />
                 </div>
 
                 <h1 className="text-3xl font-black text-slate-900 dark:text-white text-center mb-4">

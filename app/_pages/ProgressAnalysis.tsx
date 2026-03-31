@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import Link from 'next/link'
 import { useRouter } from 'next/navigation';
+import { ArrowLeft, Award, Brain, Sparkles, BarChart2, CheckCircle, Rocket } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { getUserProfile } from '@/lib/api/auth';
@@ -37,7 +38,7 @@ export default function ProgressAnalysis() {
             {/* Header */}
             <header className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 bg-background-light/90 dark:bg-[#0d1418]/90 backdrop-blur-sm">
                 <button onClick={() => router.back()} className="flex items-center gap-2 text-vic-deep-blue dark:text-vic-green font-bold">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={20} />
                 </button>
                 <h1 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">{t('analysis')}</h1>
                 <div className="size-6" /> {/* Spacer */}
@@ -48,7 +49,7 @@ export default function ProgressAnalysis() {
                 <div className="bg-gradient-to-br from-vic-green/20 to-transparent p-6 rounded-3xl border border-vic-green/10">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="size-12 rounded-2xl bg-vic-green flex items-center justify-center shadow-lg shadow-vic-green/20">
-                            <span className="material-symbols-outlined text-slate-900 font-bold">military_tech</span>
+                            <Award className="text-slate-900" size={22} />
                         </div>
                         <div>
                             <h2 className="text-xl font-black text-slate-900 dark:text-white leading-tight">{t('elite_progress')}</h2>
@@ -93,7 +94,7 @@ export default function ProgressAnalysis() {
                         ) : analysis ? (
                             <div className="flex gap-4 items-start">
                                 <div className="size-10 rounded-full bg-vic-green/10 flex items-center justify-center shrink-0">
-                                    <span className="material-symbols-outlined text-vic-green text-xl">psychology</span>
+                                    <Brain className="text-vic-green" size={20} />
                                 </div>
                                 <div className="space-y-4 flex-1">
                                     <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed font-medium">
@@ -114,14 +115,14 @@ export default function ProgressAnalysis() {
                                     </div>
 
                                     <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                        <span className="material-symbols-outlined text-vic-green text-sm">auto_awesome</span>
+                                        <Sparkles className="text-vic-green" size={14} />
                                         <p className="text-xs italic text-slate-500 font-medium">"{analysis.motivationalMessage}"</p>
                                     </div>
                                 </div>
                             </div>
                         ) : (
                             <div className="flex flex-col items-center justify-center py-6 text-center">
-                                <span className="material-symbols-outlined text-slate-300 text-4xl mb-2">analytics</span>
+                                <BarChart2 className="text-slate-300 mb-2" size={36} />
                                 <p className="text-sm font-bold text-slate-500">{t('no_analysis_yet')}</p>
                                 <p className="text-xs text-slate-400 mb-4">{t('unlock_milestones_msg')}</p>
                                 <button className="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300">
@@ -145,12 +146,12 @@ export default function ProgressAnalysis() {
                                     <p className="font-bold text-slate-900 dark:text-white text-sm">{t('checkpoint_reached')}</p>
                                     <p className="text-xs text-slate-500">{t('completed_on')} {format(subDays(new Date(), (i + 1) * 7), 'MMM d, yyyy')}</p>
                                 </div>
-                                <span className="material-symbols-outlined text-vic-green">check_circle</span>
+                                <CheckCircle className="text-vic-green" size={20} />
                             </div>
                         ))}
                         {Math.floor(daysSinceJoin / 7) === 0 && (
                             <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 grayscale opacity-50">
-                                <span className="material-symbols-outlined text-6xl">rocket_launch</span>
+                                <Rocket size={56} />
                                 <p className="text-sm font-bold text-slate-500">{t('journey_beginning')}<br />{t('reach_day_7_msg')}</p>
                             </div>
                         )}

@@ -1,6 +1,7 @@
 "use client"
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "@/lib/api/translation";
+import { Sunrise, Sun, Moon, ChevronLeft, ChevronRight, UtensilsCrossed } from "lucide-react";
 
 
 interface Meal {
@@ -76,9 +77,9 @@ export default function FoodCarousel({
     const visibleCards = getVisibleCards();
 
     const mealLabels: any = {
-        breakfast: { title: t('breakfast') || "Breakfast", time: "6:00 AM - 11:00 AM", icon: 'wb_twilight' },
-        lunch: { title: t('lunch') || "Lunch", time: "11:00 AM - 4:00 PM", icon: 'light_mode' },
-        dinner: { title: t('dinner') || "Dinner", time: "4:00 PM - 4:00 AM", icon: 'dark_mode' },
+        breakfast: { title: t('breakfast') || "Breakfast", time: "6:00 AM - 11:00 AM", icon: Sunrise },
+        lunch: { title: t('lunch') || "Lunch", time: "11:00 AM - 4:00 PM", icon: Sun },
+        dinner: { title: t('dinner') || "Dinner", time: "4:00 PM - 4:00 AM", icon: Moon },
     };
 
     const handleNext = () => setLocalIdx((prev) => (prev + 1) % activeMeals.length);
@@ -91,7 +92,7 @@ export default function FoodCarousel({
                     {t('meal_suggestions_title')}
                 </h1>
                 <div className="size-10 bg-vic-green/10 rounded-full flex items-center justify-center">
-                    <span className="material-symbols-outlined text-vic-green text-xl">{mealLabels[selectedTab].icon}</span>
+                    {React.createElement(mealLabels[selectedTab].icon, { className: "text-vic-green text-xl", size: 20 })}
                 </div>
             </div>
 
@@ -135,7 +136,7 @@ export default function FoodCarousel({
                     {activeMeals.length > 0 ? (
                         <>
                             <button className="nav prev" onClick={handlePrev}>
-                                <span className="material-symbols-outlined">chevron_left</span>
+                                <ChevronLeft />
                             </button>
 
                             <div className="deck">
@@ -162,7 +163,7 @@ export default function FoodCarousel({
                             </div>
 
                             <button className="nav next" onClick={handleNext}>
-                                <span className="material-symbols-outlined">chevron_right</span>
+                                <ChevronRight />
                             </button>
 
                             {/* Pagination Dots */}
@@ -177,7 +178,7 @@ export default function FoodCarousel({
                         </>
                     ) : (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 italic text-center">
-                            <span className="material-symbols-outlined text-4xl mb-2 text-vic-green">restaurant_menu</span>
+                            <UtensilsCrossed className="text-vic-green mb-2" size={36} />
                             <p>{t('checking_kitchen')}</p>
                         </div>
                     )}

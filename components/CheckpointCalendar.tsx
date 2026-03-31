@@ -6,6 +6,7 @@ import { MilestoneModal } from './MilestoneModal';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@/lib/api/translation';
+import { BarChart2, Info } from 'lucide-react';
 
 interface CheckpointCalendarProps {
     joinDate: string | Date;
@@ -161,7 +162,7 @@ export const CheckpointCalendar: React.FC<CheckpointCalendarProps> = ({ joinDate
                         : 'bg-slate-100 text-slate-400 border-slate-200 opacity-70 dark:bg-slate-800 dark:border-slate-700'
                         }`}
                 >
-                    <span className="material-symbols-outlined text-sm">analytics</span>
+                    <BarChart2 size={14} />
                     <span className="text-[10px] font-bold uppercase tracking-wide">{t('analysis')}</span>
                 </button>
             </div>
@@ -220,7 +221,7 @@ export const CheckpointCalendar: React.FC<CheckpointCalendarProps> = ({ joinDate
             </div>
 
             <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-3 flex items-start gap-3 mt-2 border border-indigo-100 dark:border-indigo-800/30 animate-in fade-in slide-in-from-bottom-2">
-                <span className="material-symbols-outlined text-indigo-500 mt-0.5">info</span>
+                <Info className="text-indigo-500 mt-0.5 shrink-0" size={18} />
                 <p className="text-xs text-indigo-900 dark:text-indigo-200 leading-relaxed font-medium">
                     {t('today_is')} <span className="font-bold">{getHijriDateString(today)}</span>. {t('milestone_info')}
                 </p>

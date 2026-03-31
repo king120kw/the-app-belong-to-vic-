@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { X, Smile, Zap, Leaf, BatteryLow, BrainCircuit, Frown, Save } from 'lucide-react';
 
 interface ManualProgressInputProps {
     onClose: () => void;
@@ -11,12 +12,12 @@ interface ManualProgressInputProps {
 }
 
 const MOODS = [
-    { label: 'Happy', icon: 'sentiment_very_satisfied', color: 'text-yellow-500' },
-    { label: 'Energetic', icon: 'bolt', color: 'text-orange-500' },
-    { label: 'Calm', icon: 'self_improvement', color: 'text-blue-500' },
-    { label: 'Tired', icon: 'battery_low', color: 'text-slate-500' },
-    { label: 'Stressed', icon: 'psychology_alt', color: 'text-purple-500' },
-    { label: 'Sad', icon: 'sentiment_very_dissatisfied', color: 'text-indigo-500' },
+    { label: 'Happy', icon: Smile, color: 'text-yellow-500' },
+    { label: 'Energetic', icon: Zap, color: 'text-orange-500' },
+    { label: 'Calm', icon: Leaf, color: 'text-blue-500' },
+    { label: 'Tired', icon: BatteryLow, color: 'text-slate-500' },
+    { label: 'Stressed', icon: BrainCircuit, color: 'text-purple-500' },
+    { label: 'Sad', icon: Frown, color: 'text-indigo-500' },
 ];
 
 export function ManualProgressInput({ onClose, onSuccess, initialDate = new Date() }: ManualProgressInputProps) {
@@ -79,7 +80,7 @@ export function ManualProgressInput({ onClose, onSuccess, initialDate = new Date
                 <header className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                     <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">Daily Check-in</h2>
                     <button onClick={onClose} className="size-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-sm">close</span>
+                        <X size={14} />
                     </button>
                 </header>
 
@@ -111,7 +112,7 @@ export function ManualProgressInput({ onClose, onSuccess, initialDate = new Date
                                             : 'bg-slate-50 dark:bg-black/20 border-transparent hover:bg-slate-100 dark:hover:bg-black/30'
                                         }`}
                                 >
-                                    <span className={`material-symbols-outlined ${mood === m.label ? 'text-vic-green' : m.color}`}>{m.icon}</span>
+                                    <m.icon className={mood === m.label ? 'text-vic-green' : m.color} size={20} />
                                     <span className="text-[10px] font-bold text-slate-500">{m.label}</span>
                                 </button>
                             ))}
@@ -139,7 +140,7 @@ export function ManualProgressInput({ onClose, onSuccess, initialDate = new Date
                             <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-slate-900"></div>
                         ) : (
                             <>
-                                <span className="material-symbols-outlined">save</span>
+                                <Save size={18} />
                                 SAVE PROGRESS
                             </>
                         )}

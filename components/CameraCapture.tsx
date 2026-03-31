@@ -1,6 +1,7 @@
 "use client"
 import { useState, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
+import { X, SwitchCamera, Send } from 'lucide-react';
 
 interface CameraCaptureProps {
     onCapture: (file: File) => void;
@@ -78,14 +79,14 @@ export default function CameraCapture({ onCapture, onClose }: CameraCaptureProps
             {/* Header */}
             <div className="flex items-center justify-between p-4 bg-black/50 backdrop-blur-sm">
                 <button onClick={onClose} className="text-white p-2">
-                    <span className="material-symbols-outlined text-3xl">close</span>
+                    <X className="text-3xl" size={30} />
                 </button>
                 {!captured && (
                     <button
                         onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')}
                         className="text-white p-2"
                     >
-                        <span className="material-symbols-outlined text-3xl">flip_camera_android</span>
+                        <SwitchCamera size={30} />
                     </button>
                 )}
             </div>
@@ -123,7 +124,7 @@ export default function CameraCapture({ onCapture, onClose }: CameraCaptureProps
                             onClick={sendPhoto}
                             className="px-6 py-3 bg-vic-green text-slate-900 rounded-full font-bold hover:bg-vic-green/90 transition-colors flex items-center gap-2"
                         >
-                            <span className="material-symbols-outlined">send</span>
+                            <Send size={18} />
                             Send
                         </button>
                     </>

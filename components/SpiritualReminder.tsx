@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { getPrayerTimes, getPersonalizedSpiritualReminder, isPrayerTime } from '@/lib/api/prayerTimes';
 import { useTranslation } from '@/lib/api/translation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { X, BadgeCheck, BookOpen } from 'lucide-react';
 
 interface SpiritualReminderProps {
     userId: string;
@@ -60,9 +61,7 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
                             <div className="size-10 rounded-2xl bg-vic-green/20 flex items-center justify-center">
-                                <span className="material-symbols-outlined text-vic-green text-2xl">
-                                    {reminder.type === 'quran' ? 'auto_stories' : 'menu_book'}
-                                </span>
+                                <BookOpen className="text-vic-green" size={22} />
                             </div>
                             <div>
                                 <h4 className="text-white font-bold text-sm tracking-tight uppercase">
@@ -75,7 +74,7 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
                             </div>
                         </div>
                         <button onClick={() => setIsVisible(false)} className="text-white/20 hover:text-white transition-colors">
-                            <span className="material-symbols-outlined">close</span>
+                            <X size={20} />
                         </button>
                     </div>
 
@@ -93,7 +92,7 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
                                     rel="noopener noreferrer"
                                     className="text-[10px] text-vic-green/60 hover:text-vic-green flex items-center gap-1 transition-colors font-bold uppercase"
                                 >
-                                    <span className="material-symbols-outlined text-xs">verified</span>
+                                    <BadgeCheck size={12} />
                                     Verify Online
                                 </a>
                             )}

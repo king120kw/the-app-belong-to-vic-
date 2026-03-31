@@ -1,6 +1,7 @@
 "use client"
 import Link from "next/link";
 import { useTranslation } from "@/lib/api/translation";
+import { ArrowLeft, Mail, Globe } from "lucide-react";
 
 export default function TermsOfService() {
     const { t } = useTranslation();
@@ -12,7 +13,7 @@ export default function TermsOfService() {
                     href="/settings"
                     className="flex items-center gap-2 text-vic-deep-blue dark:text-vic-green font-bold hover:opacity-70 transition-opacity"
                 >
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={20} />
                 </Link>
                 <h1 className="text-xl font-bold flex-1 text-center">
                     {t('terms_service')}
@@ -141,11 +142,11 @@ export default function TermsOfService() {
                         <p className="mb-4">For questions regarding these Terms or Privacy Policy:</p>
                         <div className="flex flex-col gap-2">
                             <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-vic-green">email</span>
+                                <Mail className="text-vic-green" size={18} />
                                 <span className="font-bold text-vic-green">vicalaryii@gmail.com</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-vic-green">language</span>
+                                <Globe className="text-vic-green" size={18} />
                                 <span className="text-slate-500 dark:text-slate-400 italic">Coming soon</span>
                             </div>
                         </div>

@@ -1,5 +1,6 @@
 "use client"
 import Link from "next/link";
+import { ArrowLeft, Sparkles, MoveLeft, CheckCircle, AlertCircle, Info, X, BellOff } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { getNotifications, markNotificationAsRead } from "@/lib/api/settings";
@@ -91,10 +92,10 @@ export default function Notifications() {
 
   const getIcon = (type: string) => {
     switch (type) {
-      case 'success': return 'check_circle';
-      case 'error': return 'error';
-      case 'warning': return 'warning';
-      default: return 'notifications';
+      case 'success': return <CheckCircle size={18} />;
+      case 'error': return <AlertCircle size={18} />;
+      case 'warning': return <AlertCircle size={18} />;
+      default: return <Info size={18} />;
     }
   };
 
@@ -103,7 +104,7 @@ export default function Notifications() {
       {/* Header */}
       <header className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 bg-white dark:bg-[#0d1418]">
         <Link href="/dashboard" className="flex items-center gap-2 text-vic-deep-blue dark:text-vic-green font-bold">
-          <span className="material-symbols-outlined">arrow_back</span>
+          <ArrowLeft size={20} />
         </Link>
         <h1 className="text-xl font-bold text-slate-900 dark:text-white">{t('notifications_section')}</h1>
         <div className="flex gap-2">
@@ -122,7 +123,7 @@ export default function Notifications() {
         {contextualReminder && (
           <div className="m-4 p-4 bg-vic-green/10 border border-vic-green/20 rounded-2xl">
             <div className="flex items-center gap-3 mb-2 text-vic-green">
-              <span className="material-symbols-outlined">auto_awesome</span>
+              <Sparkles size={18} />
               <h4 className="font-bold text-sm uppercase tracking-wider">{contextualReminder.title}</h4>
             </div>
             <p className="text-sm italic text-slate-700 dark:text-slate-300 leading-relaxed mb-2">
@@ -165,7 +166,7 @@ export default function Notifications() {
                   {/* Swipe indicator for local notifications */}
                   {notification.source === 'local' && (
                     <div className="absolute inset-y-0 right-0 w-16 bg-red-500/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                       <span className="material-symbols-outlined text-red-500/40">swipe_left</span>
+                       <MoveLeft className="text-red-500/40" size={18} />
                     </div>
                   )}
                   <div className={`size-10 rounded-full flex items-center justify-center shrink-0 
@@ -173,9 +174,7 @@ export default function Notifications() {
                       notification.type === 'error' ? 'bg-red-100 text-red-600' :
                       notification.type === 'success' ? 'bg-green-100 text-green-600' :
                       'bg-vic-green/20 text-vic-green'}`}>
-                    <span className="material-symbols-outlined">
-                      {getIcon(notification.type)}
-                    </span>
+                    {getIcon(notification.type)}
                   </div>
                   <div className="flex-1">
                     <div className="flex justify-between items-start mb-1">
@@ -193,7 +192,7 @@ export default function Notifications() {
                           }}
                           className={`${notification.source === 'local' ? 'opacity-0 group-hover:opacity-100' : 'hidden'} text-slate-400 hover:text-red-500 transition-opacity`}
                         >
-                          <span className="material-symbols-outlined text-xs">close</span>
+                          <X size={12} />
                         </button>
                       </div>
                     </div>
@@ -222,7 +221,7 @@ export default function Notifications() {
         ) : (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center">
             <div className="size-20 bg-slate-100 dark:bg-[#1f2c34] rounded-full flex items-center justify-center mb-4">
-              <span className="material-symbols-outlined text-4xl text-slate-400">notifications_off</span>
+              <BellOff className="text-slate-400" size={36} />
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">{t('no_notifications')}</h3>
             <p className="text-slate-500 dark:text-slate-400 text-sm">{t('notifications_desc')}</p>

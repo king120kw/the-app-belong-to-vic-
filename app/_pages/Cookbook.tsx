@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Link from "next/link"
 import { usePathname } from "next/navigation";
+import { ArrowLeft, Search, Coffee, Sandwich, Utensils, Cookie, Wine, IceCreamCone } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { searchRecipes, getDailyMealSuggestions } from "@/lib/api/recipes";
@@ -32,12 +33,12 @@ export default function Cookbook() {
     });
 
     const categories = [
-        { name: t('breakfast'), icon: "breakfast_dining" },
-        { name: t('lunch'), icon: "lunch_dining" },
-        { name: t('dinner'), icon: "dinner_dining" },
-        { name: t('snacks'), icon: "cookie" },
-        { name: t('drinks'), icon: "local_bar" },
-        { name: t('desserts'), icon: "icecream" },
+        { name: t('breakfast'), icon: Coffee },
+        { name: t('lunch'), icon: Sandwich },
+        { name: t('dinner'), icon: Utensils },
+        { name: t('snacks'), icon: Cookie },
+        { name: t('drinks'), icon: Wine },
+        { name: t('desserts'), icon: IceCreamCone },
     ];
 
     return (
@@ -46,7 +47,7 @@ export default function Cookbook() {
             <header className="p-4 bg-white dark:bg-[#0d1418] sticky top-0 z-10">
                 <div className="flex items-center justify-between mb-4">
                     <Link href="/dashboard" className="text-vic-deep-blue dark:text-vic-green">
-                        <span className="material-symbols-outlined">arrow_back</span>
+                        <ArrowLeft size={20} />
                     </Link>
                     <h1 className="text-xl font-bold text-slate-900 dark:text-white">{t('cookbook')}</h1>
                     <div className="w-6"></div>
@@ -54,7 +55,7 @@ export default function Cookbook() {
 
                 {/* Search Bar */}
                 <div className="relative">
-                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
                         type="text"
                         placeholder={t('search_placeholder')}
@@ -76,7 +77,7 @@ export default function Cookbook() {
                                     key={cat.name}
                                     className="flex flex-col items-center p-4 bg-slate-50 dark:bg-[#1f2c34] rounded-2xl hover:bg-vic-green/10 transition-colors"
                                 >
-                                    <span className="material-symbols-outlined text-vic-green mb-2">{cat.icon}</span>
+                                    <cat.icon className="text-vic-green mb-2" size={22} />
                                     <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{cat.name}</span>
                                 </button>
                             ))}
@@ -145,7 +146,7 @@ function CookbookCard({ item, type = 'recipe' }: { item: any, type?: 'recipe' | 
                     <img src={image} alt={title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                        <span className="material-symbols-outlined text-slate-400 text-4xl">restaurant</span>
+                        <Utensils className="text-slate-400" size={36} />
                     </div>
                 )}
             </div>

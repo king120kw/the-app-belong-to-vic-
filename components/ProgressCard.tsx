@@ -1,6 +1,7 @@
 "use client"
 import React, { useRef } from 'react';
 import { useTranslation } from '@/lib/api/translation';
+import { ImagePlus } from 'lucide-react';
 
 interface ProgressCardProps {
     profile: any;
@@ -97,7 +98,7 @@ export const ProgressCard: React.FC<ProgressCardProps> = ({ profile, dailyProgre
 
                             {/* Upload Badge */}
                             <div className="absolute -bottom-1 -right-1 size-9 bg-vic-green rounded-full border-2 border-white dark:border-[#1f2c34] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                <span className="material-symbols-outlined text-slate-900 text-xl">add_a_photo</span>
+                                <ImagePlus className="text-slate-900" size={18} />
                             </div>
                         </div>
 

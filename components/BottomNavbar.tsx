@@ -7,6 +7,7 @@ import { useTranslation } from '@/lib/api/translation';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useNotificationStore } from '@/store/notificationStore';
+import { Home, Bell, MessageSquare, UserCircle } from 'lucide-react';
 
 export const BottomNavbar: React.FC = () => {
     const { t } = useTranslation();
@@ -47,24 +48,24 @@ export const BottomNavbar: React.FC = () => {
         {
             path: '/dashboard',
             label: t('home') || 'Home',
-            icon: 'home',
+            icon: Home,
         },
         {
             path: '/notifications',
             label: t('alerts') || 'Alerts',
-            icon: 'notifications',
+            icon: Bell,
             badge: unreadNotificationsCount,
         },
         {
             path: '/chat',
             label: t('chat') || 'Chat',
-            icon: 'forum',
+            icon: MessageSquare,
             badge: unreadCount,
         },
         {
             path: '/settings',
             label: t('profile') || 'Profile', // The request specifically asked for Profile to lead to Settings
-            icon: 'account_circle',
+            icon: UserCircle,
         },
     ];
 
@@ -81,9 +82,7 @@ export const BottomNavbar: React.FC = () => {
                         `}
                     >
                         <div className="relative">
-                            <span className={`material-symbols-outlined transition-all duration-300 ${pathname === item.path ? 'scale-110 font-fill' : 'scale-100'}`}>
-                                {item.icon}
-                            </span>
+                            <item.icon className={`transition-all duration-300 ${pathname === item.path ? 'scale-110' : 'scale-100'}`} size={24} />
                             {/* Red Dot Badge */}
                             {!!item.badge && item.badge > 0 && (
                                 <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white shadow-sm ring-2 ring-white dark:ring-[#0d1418]">

@@ -1,6 +1,7 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from '@/lib/api/translation';
+import { Video, Phone, Minimize2, PhoneOff, MicOff, VideoOff, Volume2 } from 'lucide-react';
 
 interface CallOverlayProps {
     type: 'voice' | 'video';
@@ -82,9 +83,7 @@ export default function CallOverlay({
                     className="w-full h-full object-cover opacity-80"
                 />
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20">
-                    <span className="material-symbols-outlined text-white text-2xl animate-pulse">
-                        {type === 'video' ? 'videocam' : 'call'}
-                    </span>
+                    {type === 'video' ? <Video className="text-white animate-pulse" size={22} /> : <Phone className="text-white animate-pulse" size={22} />}
                     <span className="text-[10px] text-white font-bold">{formatDuration(duration)}</span>
                 </div>
             </div>
@@ -98,7 +97,7 @@ export default function CallOverlay({
                 onClick={onToggleMinimize}
                 className="absolute top-6 left-6 p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors"
             >
-                <span className="material-symbols-outlined text-white">close_fullscreen</span>
+                <Minimize2 className="text-white" size={20} />
             </button>
             {/* Hidden Audio for Remote Stream */}
             <audio ref={remoteAudioRef} autoPlay />
@@ -125,33 +124,33 @@ export default function CallOverlay({
                             onClick={onDecline}
                             className="size-16 rounded-full bg-[#EA0038] hover:bg-[#d00032] flex items-center justify-center shadow-xl active:scale-95 transition-all"
                         >
-                            <span className="material-symbols-outlined text-3xl">call_end</span>
+                            <PhoneOff size={28} />
                         </button>
                         <button
                             onClick={onAccept}
                             className="size-16 rounded-full bg-[#25D366] hover:bg-[#1ebc57] flex items-center justify-center shadow-xl active:scale-95 transition-all animate-bounce"
                         >
-                            <span className="material-symbols-outlined text-3xl">call</span>
+                            <Phone size={28} />
                         </button>
                     </div>
                 ) : (
                     <div className="flex flex-col items-center gap-8 w-full">
                         <div className="flex items-center justify-around w-full px-4">
                             <button className="size-14 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                                <span className="material-symbols-outlined text-2xl">mic_off</span>
+                                <MicOff size={22} />
                             </button>
                             <button className="size-14 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                                <span className="material-symbols-outlined text-2xl">videocam_off</span>
+                                <VideoOff size={22} />
                             </button>
                             <button className="size-14 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                                <span className="material-symbols-outlined text-2xl">volume_up</span>
+                                <Volume2 size={22} />
                             </button>
                         </div>
                         <button
                             onClick={onEnd}
                             className="size-20 rounded-full bg-[#EA0038] hover:bg-[#d00032] flex items-center justify-center shadow-xl active:scale-90 transition-all"
                         >
-                            <span className="material-symbols-outlined text-4xl leading-none">call_end</span>
+                            <PhoneOff size={36} />
                         </button>
                     </div>
                 )}

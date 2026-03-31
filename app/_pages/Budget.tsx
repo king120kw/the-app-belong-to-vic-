@@ -7,6 +7,7 @@ import { getActiveBudget, createBudget, getBudgetHistory, deleteBudget } from "@
 import { useTranslation } from "@/lib/api/translation";
 import { useCurrency } from "@/lib/CurrencyContext";
 import { toast } from "sonner";
+import { ArrowLeft, PlusCircle, Wallet, Trash2 } from "lucide-react";
 
 export default function Budget() {
     const queryClient = useQueryClient();
@@ -88,14 +89,14 @@ export default function Budget() {
             {/* Header */}
             <header className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 bg-white dark:bg-[#0d1418]">
                 <Link href="/dashboard" className="flex items-center gap-2 text-vic-deep-blue dark:text-vic-green font-bold">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={20} />
                 </Link>
                 <h1 className="text-xl font-bold text-slate-900 dark:text-white">{t('budget')}</h1>
                 <button
                     onClick={() => setShowCreateModal(true)}
                     className="text-vic-green"
                 >
-                    <span className="material-symbols-outlined">add_circle</span>
+                    <PlusCircle size={22} />
                 </button>
             </header>
 
@@ -130,7 +131,7 @@ export default function Budget() {
                     </div>
                 ) : (
                     <div className="bg-slate-50 dark:bg-[#1f2c34] p-8 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-center mb-8">
-                        <span className="material-symbols-outlined text-4xl text-slate-400 mb-2">account_balance_wallet</span>
+                        <Wallet className="text-slate-400 mb-2" size={36} />
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">{t('no_active_budget')}</h3>
                         <p className="text-slate-600 dark:text-slate-400 mb-6 text-sm">{t('setup_budget')}</p>
                         <button
@@ -159,7 +160,7 @@ export default function Budget() {
                                     onClick={() => handleDeleteBudget(item.id)}
                                     className="text-red-500 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                 >
-                                    <span className="material-symbols-outlined text-xl">delete</span>
+                                    <Trash2 size={20} />
                                 </button>
                             </div>
                         </div>

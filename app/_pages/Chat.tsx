@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link"
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { MessageCircle, ArrowLeft, MoreVertical, Search, Bookmark, CheckCheck, Image, Mic, Video, FileText, MessageSquarePlus, Trash2, X, ScanLine, UserSearch, UserPlus, UserRound } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByIdentifier, softDeleteConversation, getMyQRCodeData, getContacts, addContactPure } from "@/lib/api/chat";
@@ -392,7 +393,7 @@ export default function Chat() {
     return (
       <div className="flex flex-col items-center justify-center h-screen p-8 text-center bg-white dark:bg-[#0d1418] overflow-y-auto">
         <div className="size-24 bg-vic-green/10 rounded-full flex items-center justify-center mb-6 shrink-0">
-          <span className="material-symbols-outlined text-5xl text-vic-green">chat</span>
+          <MessageCircle className="text-vic-green" size={48} />
         </div>
         <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-xs">{t('chat_desc')}</p>
         {localStorage.getItem("pending_otp") === "true" ? (
@@ -419,7 +420,7 @@ export default function Chat() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <Link href="/dashboard" className="text-vic-deep-blue dark:text-vic-green hover:opacity-70 transition-opacity">
-              <span className="material-symbols-outlined text-2xl">arrow_back</span>
+              <ArrowLeft size={22} />
             </Link>
             <div>
               <h1 className="text-2xl font-black text-vic-deep-blue dark:text-white tracking-tight">VicCalary</h1>
@@ -429,7 +430,7 @@ export default function Chat() {
           <div className="flex items-center gap-4">
             <div className="relative">
               <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full p-2 transition-colors">
-                <span className="material-symbols-outlined">more_vert</span>
+                <MoreVertical size={20} />
               </button>
               {isMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-[#233138] rounded-xl shadow-xl border border-slate-100 dark:border-white/5 z-50 py-2">
@@ -463,7 +464,7 @@ export default function Chat() {
       {/* Search bar */}
       <div className="px-4 py-2 bg-white dark:bg-[#0d1418] border-b border-slate-50 dark:border-white/[0.02]">
         <div className="relative">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
             placeholder="Search chats..."
@@ -530,7 +531,7 @@ export default function Chat() {
                 <AvatarImg src={profile?.avatar_url} name="Me" />
                 <div className="absolute inset-0 flex items-end justify-end p-1">
                   <div className="w-5 h-5 bg-vic-pink rounded-full border-2 border-white dark:border-[#0b141a] flex items-center justify-center">
-                    <span className="material-symbols-outlined text-white text-[10px]">bookmark</span>
+                    <Bookmark className="text-white" size={10} />
                   </div>
                 </div>
               </div>
@@ -593,18 +594,16 @@ export default function Chat() {
                         {conv.last_message ? (
                           <>
                             {conv.last_message.sender_id === user?.id && (
-                              <span className={`material-symbols-outlined text-[15px] align-middle mr-1 ${conv.last_message.read_at ? 'text-[#34B7F1]' : 'text-[#8696A0]'}`}>
-                                {conv.last_message.delivered_at || conv.last_message.is_delivered ? 'done_all' : 'done'}
-                              </span>
+                              <CheckCheck className={`inline align-middle mr-1 ${conv.last_message.read_at ? 'text-[#34B7F1]' : 'text-[#8696A0]'}`} size={15} />
                             )}
                             {conv.last_message.message_type === 'image' ? (
-                              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">image</span> Image</span>
+                              <span className="flex items-center gap-1"><Image size={16} /> Image</span>
                             ) : conv.last_message.message_type === 'voice' ? (
-                              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">mic</span> Voice Message</span>
+                              <span className="flex items-center gap-1"><Mic size={16} /> Voice Message</span>
                             ) : conv.last_message.message_type === 'video' ? (
-                              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">videocam</span> Video</span>
+                              <span className="flex items-center gap-1"><Video size={16} /> Video</span>
                             ) : conv.last_message.message_type === 'file' ? (
-                              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">description</span> Document</span>
+                              <span className="flex items-center gap-1"><FileText size={16} /> Document</span>
                             ) : conv.last_message.content}
                           </>
                         ) : "No messages yet"}
@@ -622,7 +621,7 @@ export default function Chat() {
 
             {!isLoading && filteredPeerConvs.length === 0 && !coachConv && (
               <div className="p-12 text-center">
-                <span className="material-symbols-outlined text-4xl text-slate-300 mb-3 block">chat_bubble_outline</span>
+                <MessageCircle className="text-slate-300 mb-3 mx-auto" size={36} />
                 <p className="text-slate-500">No conversations yet. Add a friend to get started!</p>
               </div>
             )}
@@ -632,7 +631,7 @@ export default function Chat() {
 
       {/* FAB */}
       <button onClick={() => setIsDiscoveryOpen(true)} className="fixed bottom-24 right-6 size-14 bg-vic-pink text-white rounded-full shadow-lg flex items-center justify-center z-20">
-        <span className="material-symbols-outlined">add_comment</span>
+        <MessageSquarePlus size={22} />
       </button>
 
       {/* ── Long-press delete sheet ── */}
@@ -652,14 +651,14 @@ export default function Chat() {
               onClick={() => deleteConversationMutation.mutate(longPressConv.id)}
               className="w-full flex items-center gap-4 px-6 py-4 hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 transition-colors"
             >
-              <span className="material-symbols-outlined">delete</span>
+              <Trash2 size={20} />
               <span className="font-semibold">Delete Conversation</span>
             </button>
             <button
               onClick={() => setLongPressConv(null)}
               className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 text-slate-500 transition-colors"
             >
-              <span className="material-symbols-outlined">close</span>
+              <X size={20} />
               <span className="font-semibold">Cancel</span>
             </button>
           </div>
@@ -679,7 +678,7 @@ export default function Chat() {
                 }}
                 className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-full"
               >
-                <span className="material-symbols-outlined">close</span>
+                <X size={20} />
               </button>
             </div>
 
@@ -688,19 +687,19 @@ export default function Chat() {
               <div className="grid grid-cols-2 gap-3 mb-6">
                 <button onClick={() => { setShowQRScanner(true); setIsDiscoveryOpen(false); }}
                   className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl group active:scale-95 transition-transform">
-                  <span className="material-symbols-outlined text-3xl text-vic-green group-hover:scale-110 transition-transform">qr_code_scanner</span>
+                  <ScanLine className="text-vic-green group-hover:scale-110 transition-transform" size={28} />
                   <span className="text-xs font-bold dark:text-white text-center">Scan VicCode</span>
                 </button>
                 <button onClick={() => { setShowManualEntry(true); setIsDiscoveryOpen(false); }}
                   className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl group active:scale-95 transition-transform">
-                  <span className="material-symbols-outlined text-3xl text-vic-pink group-hover:scale-110 transition-transform">person_search</span>
+                  <UserSearch className="text-vic-pink group-hover:scale-110 transition-transform" size={28} />
                   <span className="text-xs font-bold dark:text-white text-center">Search for Friends</span>
                 </button>
               </div>
 
               {/* Discovery Search */}
               <div className="relative mb-6">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input
                   type="text"
                   placeholder="Type a name or username..."
@@ -735,7 +734,7 @@ export default function Chat() {
                               {isAlreadyContact && <p className="text-[10px] text-vic-green font-bold mt-0.5">ALREADY IN CONTACTS</p>}
                             </div>
                             {!isAlreadyContact && (
-                              <span className="material-symbols-outlined text-vic-green">person_add</span>
+                              <UserPlus className="text-vic-green" size={20} />
                             )}
                           </button>
                         );
@@ -772,7 +771,7 @@ export default function Chat() {
                       ))}
                       {contactList.length === 0 && (
                         <div className="p-8 text-center text-slate-500">
-                          <span className="material-symbols-outlined text-4xl text-slate-200 mb-2">face</span>
+                          <UserRound className="text-slate-200 mb-2" size={36} />
                           <p className="text-sm">You haven't added any friends yet.</p>
                         </div>
                       )}

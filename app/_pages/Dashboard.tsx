@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useRef } from "react";
+import { X, SwitchCamera, Images, Camera, Sun, Moon } from "lucide-react";
 import Link from "next/link"
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -606,14 +607,14 @@ export default function Dashboard() {
                 className="size-12 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center border border-white/10 hover:bg-black/60 transition-colors"
                 title="Close"
               >
-                <span className="material-symbols-outlined text-2xl">close</span>
+                <X size={22} />
               </button>
               <button
                 onClick={switchCamera}
                 className="size-12 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center border border-white/10 hover:bg-black/60 transition-colors"
                 title="Switch Camera"
               >
-                <span className="material-symbols-outlined text-2xl">flip_camera_ios</span>
+                <SwitchCamera size={22} />
               </button>
             </div>
 
@@ -629,7 +630,7 @@ export default function Dashboard() {
                   className="size-14 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center border border-white/20 hover:bg-white/20 transition-all active:scale-95"
                   title="Upload from Gallery"
                 >
-                  <span className="material-symbols-outlined text-3xl">photo_library</span>
+                  <Images size={28} />
                 </button>
 
                 <button
@@ -641,7 +642,7 @@ export default function Dashboard() {
                     {isAnalyzing ? (
                       <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-vic-green"></div>
                     ) : (
-                      <span className="material-symbols-outlined text-vic-green text-5xl">photo_camera</span>
+                      <Camera className="text-vic-green" size={44} />
                     )}
                   </div>
                 </button>
@@ -697,7 +698,7 @@ export default function Dashboard() {
           ></div>
         </Link>
         <button onClick={toggleTheme} className="text-[#111812] dark:text-white">
-          <span className="material-symbols-outlined">{darkMode ? "light_mode" : "dark_mode"}</span>
+          {darkMode ? <Sun size={22} /> : <Moon size={22} />}
         </button>
       </header>
 

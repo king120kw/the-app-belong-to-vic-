@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useParams, usePathname } from 'next/navigation';
 import { requestMicrophoneAccess } from "@/lib/api/permissions";
+import { AlertCircle, MapPin, Navigation, Plus, Link, FileText, ArrowLeft, Bookmark, Video, Phone, Trash2, MoreVertical, Smile, Paperclip, Mic, Send, CheckCheck, Lock, Image, Headphones, User, BarChart, ChevronLeft } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { getConversationById, getMessages, sendMessage, uploadChatMedia, markAsRead, sendTypingIndicator, initiateCallV2, updateCallStatus, softDeleteConversation, findUserByIdSecure, provisionAndSendMessage, findConversationByParticipants } from '@/lib/api/chat';
@@ -97,9 +98,9 @@ const AudioMessage = ({ src }: { src: string }) => {
                 disabled={error}
                 className="size-10 flex items-center justify-center bg-vic-green rounded-full shadow-[0_0_15px_rgba(19,236,55,0.4)] hover:scale-110 active:scale-95 transition-all text-slate-900 shrink-0"
             >
-                <span className="material-symbols-outlined text-2xl font-bold">
-                    {error ? 'error' : isPlaying ? 'pause' : 'play_arrow'}
-                </span>
+                {error ? <AlertCircle size={22} /> : isPlaying
+                    ? <span className="text-2xl font-bold leading-none">⏸</span>
+                    : <span className="text-2xl font-bold leading-none">▶</span>}
             </button>
 
             <div className="flex-1 space-y-1">
@@ -187,7 +188,7 @@ const LocationMessage = ({ lat, lng, name }: { lat: number; lng: number; name?: 
             ) : (
                 // Fallback: OpenStreetMap tile via a different provider
                 <div className="w-full h-[140px] bg-[#e8f4e8] dark:bg-[#1a2e1a] flex flex-col items-center justify-center gap-2 rounded-t-xl">
-                    <span className="material-symbols-outlined text-[48px] text-vic-green">location_on</span>
+                    <MapPin className="text-vic-green" size={48} />
                     <p className="text-xs text-[#667781] font-mono">{lat.toFixed(4)}, {lng.toFixed(4)}</p>
                 </div>
             )}
@@ -195,7 +196,7 @@ const LocationMessage = ({ lat, lng, name }: { lat: number; lng: number; name?: 
             {/* Red Pin Overlay */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="relative">
-                    <span className="material-symbols-outlined text-[36px] text-red-500 drop-shadow-lg" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))' }}>location_on</span>
+                    <MapPin className="text-red-500 drop-shadow-lg" size={36} style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))' }} />
                 </div>
             </div>
 
@@ -204,7 +205,7 @@ const LocationMessage = ({ lat, lng, name }: { lat: number; lng: number; name?: 
 
             {/* Location Info Bar */}
             <div className="bg-white dark:bg-[#202c33] px-3 py-2 flex items-center gap-2 border-t border-black/5 rounded-b-xl">
-                <span className="material-symbols-outlined text-[18px] text-vic-green shrink-0">near_me</span>
+                <Navigation className="text-vic-green shrink-0" size={18} />
                 <div className="min-w-0">
                     <p className="text-[13px] font-semibold text-[#111B21] dark:text-[#E9EDEF] truncate">
                         {name || 'Shared Location'}
@@ -1324,7 +1325,7 @@ export default function ChatConversation() {
                                         onClick={() => handleLogFood(metadata.foodAnalysis)}
                                         className="shrink-0 w-10 h-10 bg-vic-green text-white rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-vic-green/20"
                                     >
-                                        <span className="material-symbols-outlined text-lg">add</span>
+                                        <Plus size={18} />
                                     </button>
                                 </div>
                                 {metadata.foodAnalysis.clinical_synopsis && (
@@ -1353,14 +1354,14 @@ export default function ChatConversation() {
             case 'link':
                 return (
                     <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[14px]">link</span>
+                        <Link size={14} />
                         {msg.content}
                     </a>
                 );
             case 'file':
                 return (
                     <div className="flex items-center gap-2 p-2 bg-black/5 rounded-lg border border-black/10">
-                        <span className="material-symbols-outlined">description</span>
+                        <FileText size={20} />
                         <div className="flex-1 overflow-hidden">
                             <p className="text-sm font-medium truncate">{msg.content}</p>
                             <a href={mediaUrl} target="_blank" download className="text-vic-green text-xs font-bold uppercase">Download</a>
@@ -1389,7 +1390,7 @@ export default function ChatConversation() {
                                             onClick={() => handleLogFood(parsed.foodAnalysis)}
                                             className="w-10 h-10 bg-vic-green text-white rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-vic-green/20"
                                         >
-                                            <span className="material-symbols-outlined text-lg">add</span>
+                                            <Plus size={18} />
                                         </button>
                                     </div>
 
@@ -1455,7 +1456,7 @@ export default function ChatConversation() {
                 {/* Header */}
                 <header className="shrink-0 h-[64px] bg-[#F0F2F5] dark:bg-[#202C33] border-b border-white/5 flex items-center px-4 gap-3 z-30 shadow-sm">
                     <button onClick={() => router.back()} className="p-2 -ml-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 dark:hover:bg-white/5 rounded-full">
-                        <span className="material-symbols-outlined">arrow_back</span>
+                        <ArrowLeft size={20} />
                     </button>
 
                     <div className="size-10 rounded-full bg-slate-200 overflow-hidden border border-black/5 dark:border-white/10 shrink-0 flex items-center justify-center">
@@ -1476,7 +1477,7 @@ export default function ChatConversation() {
                         {(!displayAvatar) && (
                             <div className="avatar-fallback size-full bg-vic-green flex items-center justify-center text-white text-sm font-bold">
                                 {isSelf ? (
-                                    <span className="material-symbols-outlined">bookmark</span>
+                                    <Bookmark size={16} />
                                 ) : (
                                     (displayName || '?').split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
                                 )}
@@ -1487,7 +1488,7 @@ export default function ChatConversation() {
                         {displayAvatar && (
                             <div className="avatar-fallback hidden size-full bg-vic-green flex items-center justify-center text-white text-sm font-bold">
                                 {isSelf ? (
-                                    <span className="material-symbols-outlined">bookmark</span>
+                                    <Bookmark size={16} />
                                 ) : (
                                     (displayName || '?').split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
                                 )}
@@ -1524,10 +1525,10 @@ export default function ChatConversation() {
                         {!isSelf && !isAI && (
                             <>
                                 <button onClick={() => handleStartCall('video')} className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full">
-                                    <span className="material-symbols-outlined text-[24px]">videocam</span>
+                                    <Video size={24} />
                                 </button>
                                 <button onClick={() => handleStartCall('voice')} className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full">
-                                    <span className="material-symbols-outlined text-[24px]">call</span>
+                                    <Phone size={24} />
                                 </button>
                                 <button
                                     onClick={async () => {
@@ -1543,12 +1544,12 @@ export default function ChatConversation() {
                                     }}
                                     className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full"
                                 >
-                                    <span className="material-symbols-outlined text-[24px]">delete</span>
+                                    <Trash2 size={24} />
                                 </button>
                             </>
                         )}
                         <button className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full">
-                            <span className="material-symbols-outlined text-[24px]">more_vert</span>
+                            <MoreVertical size={24} />
                         </button>
                     </div>
                 </header>
@@ -1592,9 +1593,7 @@ export default function ChatConversation() {
                                                             {formatMessageTime(msg.created_at)}
                                                         </span>
                                                         {isMe && (
-                                                            <span className={`material-symbols-outlined text-[15.5px] -ml-0.5 ${msg.read_at ? 'text-[#34B7F1]' : 'text-[#8696A0]'}`}>
-                                                                {msg.delivered_at || msg.is_delivered ? 'done_all' : 'done'}
-                                                            </span>
+                                                            <CheckCheck className={`-ml-0.5 ${msg.read_at ? 'text-[#34B7F1]' : 'text-[#8696A0]'}`} size={15} />
                                                         )}
                                                     </div>
                                                 </div>
@@ -1608,7 +1607,7 @@ export default function ChatConversation() {
                         <div className="flex flex-col items-center justify-start h-full pt-8 px-8 gap-4 text-center">
                             <div className="flex flex-col items-center gap-2 max-w-[450px]">
                                 <div className="p-2 bg-white/70 dark:bg-[#1f2c34]/70 backdrop-blur-md rounded-lg shadow-sm border border-slate-100 dark:border-slate-800 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-[14px] text-slate-500">lock</span>
+                                    <Lock className="text-slate-500" size={14} />
                                     <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                         End-to-end encrypted
                                     </p>
@@ -1648,7 +1647,7 @@ export default function ChatConversation() {
                                     onClick={() => setShowEmoji(!showEmoji)}
                                     className={`p-2 text-[#54656F] dark:text-[#8696A0] hover:text-[#111B21] dark:hover:text-[#D1D7DB] transition-colors rounded-full hover:bg-black/5 ${showEmoji ? 'text-[#00A884]' : ''}`}
                                 >
-                                    <span className="material-symbols-outlined text-[26px]">mood</span>
+                                    <Smile size={26} />
                                 </button>
 
                                 {/* Pin (Attachment) Button */}
@@ -1656,7 +1655,7 @@ export default function ChatConversation() {
                                     onClick={() => setShowAttachments(!showAttachments)}
                                     className={`p-2 text-[#54656F] dark:text-[#8696A0] hover:text-[#111B21] transition-colors rounded-full hover:bg-black/5 ${showAttachments ? 'text-[#00A884] bg-black/5' : ''}`}
                                 >
-                                    <span className="material-symbols-outlined text-[26px] rotate-45">attach_file</span>
+                                    <Paperclip className="rotate-45" size={26} />
                                 </button>
 
                                 {/* STT button */}
@@ -1665,7 +1664,7 @@ export default function ChatConversation() {
                                     className={`p-2 transition-colors rounded-full hover:bg-black/5 ${isDictating ? 'text-red-500 animate-pulse bg-red-50' : 'text-[#54656F] dark:text-[#8696A0] hover:text-[#111B21]'}`}
                                     title="Dictate"
                                 >
-                                    <span className="material-symbols-outlined text-[26px]">{isDictating ? 'mic' : 'keyboard_voice'}</span>
+                                    <Mic size={26} />
                                 </button>
 
                                 {/* Text Input */}
@@ -1700,7 +1699,7 @@ export default function ChatConversation() {
                                         className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
                                         title="Discard"
                                     >
-                                        <span className="material-symbols-outlined text-[24px]">delete</span>
+                                        <Trash2 size={24} />
                                     </button>
 
                                     <audio src={recordedAudio.url} controls className="flex-1 h-8 max-w-[200px] md:max-w-none" />
@@ -1710,7 +1709,7 @@ export default function ChatConversation() {
                                         className="size-[40px] bg-vic-green text-white rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
                                         title="Send Voice Message"
                                     >
-                                        <span className="material-symbols-outlined text-[20px]">send</span>
+                                        <Send size={20} />
                                     </button>
                                 </div>
                             )}
@@ -1769,9 +1768,11 @@ export default function ChatConversation() {
                                         transition: 'transform 0.1s ease-out'
                                     }}
                                 >
-                                    <span className="material-symbols-outlined text-[24px]">
-                                        {message.trim() ? 'send' : (recordingStatus === 'recording' ? 'stop' : (recordingStatus === 'preview' ? 'audiotrack' : 'mic'))}
-                                    </span>
+                                    {message.trim() ? <Send size={24} /> : (recordingStatus === 'recording'
+                                        ? <span className="text-[24px] leading-none">⏹</span>
+                                        : (recordingStatus === 'preview'
+                                            ? <span className="text-[24px] leading-none">🎵</span>
+                                            : <Mic size={24} />))}
                                 </button>
                             </div>
 
@@ -1786,7 +1787,7 @@ export default function ChatConversation() {
                                         <canvas ref={canvasRef} width={80} height={30} className="opacity-80" />
                                     </div>
                                     <div className="flex items-center gap-2 text-slate-500 font-medium animate-pulse whitespace-nowrap">
-                                        <span className="material-symbols-outlined">chevron_left</span>
+                                        <ChevronLeft size={20} />
                                         Slide to cancel
                                     </div>
                                 </div>
@@ -1801,13 +1802,13 @@ export default function ChatConversation() {
                                         opacity: Math.max(0.4, 1 - (recordingDragY / 120))
                                     }}
                                 >
-                                    <span className="material-symbols-outlined text-[18px]">lock</span>
+                                    <Lock size={18} />
                                 </div>
                             )}
 
                             {isRecordingLocked && (
                                 <div className="absolute -top-14 left-1/2 -translate-x-1/2 bg-[#00A884] p-1.5 rounded-full shadow-lg animate-pulse z-10">
-                                    <span className="material-symbols-outlined text-white text-[16px]">lock</span>
+                                    <Lock className="text-white" size={16} />
                                 </div>
                             )}
                         </div>
@@ -1921,7 +1922,7 @@ export default function ChatConversation() {
                                     input.click();
                                 }}>
                                     <div className="size-12 rounded-full bg-gradient-to-t from-[#5F66CD] to-[#7F66FF] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                        <span className="material-symbols-outlined text-white text-[22px]">description</span>
+                                        <FileText className="text-white" size={22} />
                                     </div>
                                     <span className="bg-white dark:bg-[#202C33] px-2 py-1 rounded-md text-sm font-medium shadow-md">Document</span>
                                 </div>
@@ -1932,7 +1933,7 @@ export default function ChatConversation() {
                                     setShowAttachments(false);
                                 }}>
                                     <div className="size-12 rounded-full bg-gradient-to-t from-[#1F9F5F] to-[#25D366] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                        <span className="material-symbols-outlined text-white text-[22px]">location_on</span>
+                                        <MapPin className="text-white" size={22} />
                                     </div>
                                     <span className="bg-white dark:bg-[#202C33] px-2 py-1 rounded-md text-sm font-medium shadow-md">Location</span>
                                 </div>
@@ -1940,7 +1941,7 @@ export default function ChatConversation() {
                                 {/* Gallery */}
                                 <label className="flex items-center gap-3 group cursor-pointer">
                                     <div className="size-12 rounded-full bg-gradient-to-t from-[#AC44CF] to-[#BF59CF] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                        <span className="material-symbols-outlined text-white text-[22px]">image</span>
+                                        <Image className="text-white" size={22} />
                                     </div>
                                     <span className="bg-white dark:bg-[#202C33] px-2 py-1 rounded-md text-sm font-medium shadow-md">Gallery</span>
                                     <input type="file" className="hidden" onChange={(e) => {
@@ -1952,7 +1953,7 @@ export default function ChatConversation() {
                                 {/* Audio */}
                                 <label className="flex items-center gap-3 group cursor-pointer">
                                     <div className="size-12 rounded-full bg-gradient-to-t from-[#F05522] to-[#F57143] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                        <span className="material-symbols-outlined text-white text-[22px]">headphones</span>
+                                        <Headphones className="text-white" size={22} />
                                     </div>
                                     <span className="bg-white dark:bg-[#202C33] px-2 py-1 rounded-md text-sm font-medium shadow-md">Audio</span>
                                     <input type="file" className="hidden" accept="audio/*" onChange={async (e) => {
@@ -1981,7 +1982,7 @@ export default function ChatConversation() {
                                     }
                                 }}>
                                     <div className="size-12 rounded-full bg-gradient-to-t from-[#009DE2] to-[#00B2FF] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                        <span className="material-symbols-outlined text-white text-[22px]">person</span>
+                                        <User className="text-white" size={22} />
                                     </div>
                                     <span className="bg-white dark:bg-[#202C33] px-2 py-1 rounded-md text-sm font-medium shadow-md">Contact</span>
                                 </div>
@@ -1997,7 +1998,7 @@ export default function ChatConversation() {
                                         }
                                     }}>
                                         <div className="size-[52px] rounded-full bg-gradient-to-t from-[#009688] to-[#1DE9B6] flex items-center justify-center shadow-lg group-active:scale-95 transition-transform">
-                                            <span className="material-symbols-outlined text-white text-[24px]">poll</span>
+                                            <BarChart className="text-white" size={24} />
                                         </div>
                                     </div>
                                 </div>

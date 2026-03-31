@@ -1,6 +1,7 @@
 "use client"
 import Link from "next/link";
 import { useTranslation } from "@/lib/api/translation";
+import { ArrowLeft } from "lucide-react";
 
 export default function PrivacyPolicy() {
     const { t } = useTranslation();
@@ -12,7 +13,7 @@ export default function PrivacyPolicy() {
                     href="/settings"
                     className="flex items-center gap-2 text-vic-deep-blue dark:text-vic-green font-bold hover:opacity-70 transition-opacity"
                 >
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={20} />
                 </Link>
                 <h1 className="text-xl font-bold flex-1 text-center">
                     {t('privacy_policy')}

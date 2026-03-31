@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { upsertMilestone, getMilestone } from '@/lib/api/progress';
 import { useTranslation } from '@/lib/api/translation';
 import { toast } from 'sonner';
+import { X, Scale, Dumbbell, Accessibility, Leaf } from 'lucide-react';
 
 interface MilestoneModalProps {
     isOpen: boolean;
@@ -73,7 +74,7 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({ isOpen, onClose,
                             <h2 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{hijriDateString}</h2>
                         </div>
                         <button onClick={onClose} className="p-2 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-                            <span className="material-symbols-outlined text-slate-500">close</span>
+                            <X className="text-slate-500" size={18} />
                         </button>
                     </div>
 
@@ -87,10 +88,10 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({ isOpen, onClose,
                                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">{t('update_objective')}</label>
                                 <div className="grid grid-cols-2 gap-3">
                                     {[
-                                        { id: 'lose_weight', label: t('lose_weight'), icon: 'monitor_weight' },
-                                        { id: 'gain_muscle', label: t('build_muscle'), icon: 'fitness_center' },
-                                        { id: 'maintain', label: t('maintain'), icon: 'accessibility_new' },
-                                        { id: 'healthy', label: t('eat_healthy'), icon: 'eco' }
+                                        { id: 'lose_weight', label: t('lose_weight'), icon: Scale },
+                                        { id: 'gain_muscle', label: t('build_muscle'), icon: Dumbbell },
+                                        { id: 'maintain', label: t('maintain'), icon: Accessibility },
+                                        { id: 'healthy', label: t('eat_healthy'), icon: Leaf }
                                     ].map((opt) => (
                                         <button
                                             key={opt.id}
@@ -100,7 +101,7 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({ isOpen, onClose,
                                                 : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:border-vic-green/50'
                                                 }`}
                                         >
-                                            <span className="material-symbols-outlined mb-1">{opt.icon}</span>
+                                            <opt.icon className="mb-1" size={20} />
                                             <span className="text-xs font-bold">{opt.label}</span>
                                         </button>
                                     ))}

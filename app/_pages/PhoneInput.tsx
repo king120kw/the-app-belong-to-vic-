@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowLeft, Smartphone, ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { sendPhoneVerification } from "@/lib/api/auth";
@@ -113,7 +114,7 @@ export default function PhoneInput() {
             {/* Header */}
             <header className="p-4 flex items-center justify-between sticky top-0 z-20 bg-white/80 dark:bg-[#0d1418]/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
                 <button onClick={() => router.back()} className="text-slate-600 dark:text-slate-400 p-2">
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={20} />
                 </button>
                 <h2 className="font-bold text-slate-800 dark:text-white uppercase tracking-widest text-xs">{t('verify_phone')}</h2>
                 <div className="w-10"></div>
@@ -121,7 +122,7 @@ export default function PhoneInput() {
 
             <main className="flex-1 flex flex-col items-center px-6 pt-12 max-w-md mx-auto w-full relative">
                 <div className="size-20 bg-vic-green/10 rounded-3xl flex items-center justify-center mb-8">
-                    <span className="material-symbols-outlined text-4xl text-vic-green">phone_iphone</span>
+                    <Smartphone className="text-vic-green" size={36} />
                 </div>
 
                 <h1 className="text-3xl font-black text-slate-900 dark:text-white text-center mb-4">
@@ -146,7 +147,7 @@ export default function PhoneInput() {
                                     <span className="font-bold text-slate-900 dark:text-white">
                                         {selectedCountry?.dialCode || '--'}
                                     </span>
-                                    <span className="material-symbols-outlined text-slate-400 text-sm">expand_more</span>
+                                    <ChevronDown className="text-slate-400" size={16} />
                                 </button>
 
                                 <AnimatePresence>

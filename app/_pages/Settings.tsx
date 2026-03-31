@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link"
 import { useRouter } from "next/navigation";
+import { ArrowLeft, X, Moon, Settings as SettingsIcon, ChevronRight, LogOut } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { getUserSettings, updateSettings } from "@/lib/api/settings";
@@ -120,7 +121,7 @@ export default function Settings() {
           href="/dashboard"
           className="flex items-center gap-2 text-vic-deep-blue dark:text-vic-green font-bold hover:opacity-70 transition-opacity"
         >
-          <span className="material-symbols-outlined">arrow_back</span>
+          <ArrowLeft size={20} />
         </Link>
         <h1 className="text-xl font-bold text-slate-900 dark:text-white flex-1 text-center">
           {t('account_settings')}
@@ -155,7 +156,7 @@ export default function Settings() {
             <div className="bg-white dark:bg-[#1f2c34] w-full max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
               <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-[#0d1418]">
                 <h2 className="text-lg font-bold">{t('language')}</h2>
-                <button onClick={() => setShowLanguageModal(false)} className="material-symbols-outlined">close</button>
+                <button onClick={() => setShowLanguageModal(false)}><X size={20} /></button>
               </div>
               <div className="max-h-[60vh] overflow-y-auto">
                 <button
@@ -169,7 +170,7 @@ export default function Settings() {
                     <span className="text-2xl">🌎</span>
                     <span>Auto Detect</span>
                   </div>
-                  {((settings as any)?.is_language_auto !== false) && <span className="material-symbols-outlined">check</span>}
+                  {((settings as any)?.is_language_auto !== false) && <span className="text-vic-green font-bold">✓</span>}
                 </button>
                 {languages.map((l) => (
                   <button
@@ -187,7 +188,7 @@ export default function Settings() {
                         <span className="text-xs text-slate-500 dark:text-slate-400">{l.native}</span>
                       </div>
                     </div>
-                    {((settings as any)?.is_language_auto === false && lang === l.code) && <span className="material-symbols-outlined">check</span>}
+                    {((settings as any)?.is_language_auto === false && lang === l.code) && <span className="text-vic-green font-bold">✓</span>}
                   </button>
                 ))}
               </div>
@@ -200,7 +201,7 @@ export default function Settings() {
             <div className="bg-white dark:bg-[#1f2c34] w-full max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
               <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-[#0d1418]">
                 <h2 className="text-lg font-bold">Currency & Region</h2>
-                <button onClick={() => setShowCurrencyModal(false)} className="material-symbols-outlined">close</button>
+                <button onClick={() => setShowCurrencyModal(false)}><X size={20} /></button>
               </div>
               <div className="max-h-[60vh] overflow-y-auto">
                 <button
@@ -233,7 +234,7 @@ export default function Settings() {
                         <span className="text-xs text-slate-500 dark:text-slate-400">({c.symbol})</span>
                       </div>
                     </div>
-                    {currencyCode === c.code && <span className="material-symbols-outlined">check</span>}
+                    {currencyCode === c.code && <span className="text-vic-green font-bold">✓</span>}
                   </button>
                 ))}
               </div>
@@ -245,9 +246,7 @@ export default function Settings() {
         <SettingGroup title={t('appearance')}>
           <div className="flex items-center justify-between p-4 bg-white dark:bg-[#1f2c34] border-b border-slate-200 dark:border-slate-800 last:border-0">
             <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-slate-600 dark:text-slate-400">
-                dark_mode
-              </span>
+              <Moon className="text-slate-600 dark:text-slate-400" size={20} />
               <span className="font-medium text-slate-900 dark:text-white">
                 {t('dark_mode')}
               </span>
@@ -269,9 +268,7 @@ export default function Settings() {
         <SettingGroup title={t('notifications_section')}>
           <div className="flex items-center justify-between p-4 bg-white dark:bg-[#1f2c34] border-b border-slate-200 dark:border-slate-800 last:border-0">
             <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-slate-600 dark:text-slate-400">
-                notifications
-              </span>
+              <SettingsIcon className="text-slate-600 dark:text-slate-400" size={20} />
               <span className="font-medium text-slate-900 dark:text-white">
                 {t('push_notifications')}
               </span>
@@ -326,7 +323,7 @@ export default function Settings() {
             onClick={handleSignOut}
             className="w-full px-6 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg font-bold hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors flex items-center justify-center gap-2"
           >
-            <span className="material-symbols-outlined">logout</span>
+            <LogOut size={18} />
             {t('sign_out')}
           </button>
         </div>
@@ -375,9 +372,6 @@ function SettingItem({
         }`}
     >
       <div className="flex items-center gap-3">
-        <span className="material-symbols-outlined text-slate-600 dark:text-slate-400">
-          {icon}
-        </span>
         <span className="font-medium text-slate-900 dark:text-white">
           {label}
         </span>
@@ -388,9 +382,7 @@ function SettingItem({
             {value}
           </span>
           {clickable && (
-            <span className="material-symbols-outlined text-slate-400">
-              chevron_right
-            </span>
+            <ChevronRight className="text-slate-400" size={18} />
           )}
         </div>
       )}

@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter, usePathname } from "next/navigation";
+import { AlertCircle, ArrowLeft, Volume2, Mic } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { getRecipeDetails, toggleFavoriteRecipe } from "@/lib/api/recipes";
@@ -113,7 +114,7 @@ export default function RecipeDetails() {
         return (
             <div className="flex flex-col items-center justify-center h-screen bg-[#FDFBF7] dark:bg-[#0d1418] p-8 text-center">
                 <div className="size-24 bg-vic-pink/10 rounded-full flex items-center justify-center mb-6">
-                    <span className="material-symbols-outlined text-5xl text-vic-pink">error</span>
+                    <AlertCircle className="text-vic-pink" size={44} />
                 </div>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Recipe not found</h2>
                 <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-xs">
@@ -145,7 +146,7 @@ export default function RecipeDetails() {
                     onClick={() => router.back()}
                     className="size-10 flex items-center justify-center bg-black/20 backdrop-blur-sm rounded-full text-white"
                 >
-                    <span className="material-symbols-outlined">arrow_back</span>
+                    <ArrowLeft size={20} />
                 </button>
                 <h1 className="text-sm font-bold tracking-widest uppercase text-[#8B4513] bg-[#FDFBF7]/90 px-4 py-1 rounded-full shadow-sm">
                     {recipe.title}
@@ -197,11 +198,11 @@ export default function RecipeDetails() {
                             <div key={idx} className="flex items-center gap-4">
                                 <div className="size-10 bg-[#A05C2B] rounded-full flex items-center justify-center shrink-0">
                                     {/* Simple icon logic based on name */}
-                                    <span className="material-symbols-outlined text-xl opacity-80">
-                                        {ing.item?.toLowerCase().includes('salt') ? 'grain' :
-                                            ing.item?.toLowerCase().includes('toast') || ing.item?.toLowerCase().includes('bread') ? 'bakery_dining' :
-                                                ing.item?.toLowerCase().includes('avocado') ? 'nutrition' :
-                                                    'kitchen'}
+                                    <span className="text-xl opacity-80">
+                                        {ing.item?.toLowerCase().includes('salt') ? '🧂' :
+                                            ing.item?.toLowerCase().includes('toast') || ing.item?.toLowerCase().includes('bread') ? '🍞' :
+                                                ing.item?.toLowerCase().includes('avocado') ? '🥑' :
+                                                    '🍽️'}
                                     </span>
                                 </div>
                                 <div className="flex-1">
@@ -236,7 +237,7 @@ export default function RecipeDetails() {
                                         onClick={() => speak(step)}
                                         className="mt-2 text-[#D4A373] text-sm flex items-center gap-1 hover:text-white"
                                     >
-                                        <span className="material-symbols-outlined text-base">volume_up</span>
+                                        <Volume2 size={16} />
                                         Listen
                                     </button>
                                 </div>
@@ -253,7 +254,7 @@ export default function RecipeDetails() {
             {/* Voice Command Footer (Optional/Floating) */}
             <div className="absolute bottom-8 right-8 z-20">
                 <div className="flex flex-col items-center gap-1">
-                    <span className="material-symbols-outlined text-4xl text-white drop-shadow-md animate-bounce">mic</span>
+                    <Mic className="text-white drop-shadow-md animate-bounce" size={36} />
                     <span className="text-[10px] text-white font-bold opacity-80 uppercase tracking-wider drop-shadow-md">Voice Commands</span>
                 </div>
             </div>

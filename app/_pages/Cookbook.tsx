@@ -16,6 +16,7 @@ export default function Cookbook() {
 
     const [searchQuery, setSearchQuery] = useState("");
     const [activeTab, setActiveTab] = useState<"all" | "favorites" | "suggested">(initialTab);
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const { t } = useTranslation();
 
     // Fetch daily suggestions (same as Dashboard)
@@ -32,13 +33,28 @@ export default function Cookbook() {
         enabled: searchQuery.length > 2
     });
 
+    // Fetch recipes by selected category
+    const { data: categoryRecipes, isLoading: categoryLoading } = useQuery({
+        queryKey: ['recipes-category', selectedCategory],
+        queryFn: async () => {
+            const res = await fetch('/api/search-recipes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: selectedCategory, number: 20 }),
+            });
+            const data = await res.json();
+            return data.results ?? [];
+        },
+        enabled: !!selectedCategory,
+    });
+
     const categories = [
-        { name: t('breakfast'), icon: Coffee },
-        { name: t('lunch'), icon: Sandwich },
-        { name: t('dinner'), icon: Utensils },
-        { name: t('snacks'), icon: Cookie },
-        { name: t('drinks'), icon: Wine },
-        { name: t('desserts'), icon: IceCreamCone },
+        { key: 'breakfast', name: t('breakfast'), icon: Coffee },
+        { key: 'lunch',     name: t('lunch'),     icon: Sandwich },
+        { key: 'dinner',    name: t('dinner'),    icon: Utensils },
+        { key: 'snacks',    name: t('snacks'),    icon: Cookie },
+        { key: 'drinks',    name: t('drinks'),    icon: Wine },
+        { key: 'desserts',  name: t('desserts'),  icon: IceCreamCone },
     ];
 
     return (
@@ -60,7 +76,7 @@ export default function Cookbook() {
                         type="text"
                         placeholder={t('search_placeholder')}
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => { setSearchQuery(e.target.value); setSelectedCategory(null); }}
                         className="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-[#1f2c34] rounded-xl border-none focus:ring-2 focus:ring-vic-green text-slate-900 dark:text-white"
                     />
                 </div>
@@ -74,8 +90,9 @@ export default function Cookbook() {
                         <div className="grid grid-cols-3 gap-4">
                             {categories.map((cat) => (
                                 <button
-                                    key={cat.name}
-                                    className="flex flex-col items-center p-4 bg-slate-50 dark:bg-[#1f2c34] rounded-2xl hover:bg-vic-green/10 transition-colors"
+                                    key={cat.key}
+                                    onClick={() => setSelectedCategory(cat.key)}
+                                    className={`flex flex-col items-center p-4 rounded-2xl transition-colors ${selectedCategory === cat.key ? 'bg-vic-green/20 ring-2 ring-vic-green' : 'bg-slate-50 dark:bg-[#1f2c34] hover:bg-vic-green/10'}`}
                                 >
                                     <cat.icon className="text-vic-green mb-2" size={22} />
                                     <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{cat.name}</span>
@@ -88,19 +105,19 @@ export default function Cookbook() {
                 {/* Tabs */}
                 <div className="flex gap-4 mb-6 border-b border-slate-100 dark:border-slate-800">
                     <button
-                        onClick={() => setActiveTab("all")}
+                        onClick={() => { setActiveTab("all"); setSelectedCategory(null); }}
                         className={`pb-2 text-sm font-bold transition-colors ${activeTab === "all" ? "text-vic-green border-b-2 border-vic-green" : "text-slate-400"}`}
                     >
                         {t('all_recipes')}
                     </button>
                     <button
-                        onClick={() => setActiveTab("suggested")}
+                        onClick={() => { setActiveTab("suggested"); setSelectedCategory(null); }}
                         className={`pb-2 text-sm font-bold transition-colors ${activeTab === "suggested" ? "text-vic-green border-b-2 border-vic-green" : "text-slate-400"}`}
                     >
                         {t('for_you')}
                     </button>
                     <button
-                        onClick={() => setActiveTab("favorites")}
+                        onClick={() => { setActiveTab("favorites"); setSelectedCategory(null); }}
                         className={`pb-2 text-sm font-bold transition-colors ${activeTab === "favorites" ? "text-vic-green border-b-2 border-vic-green" : "text-slate-400"}`}
                     >
                         {t('favorites')}
@@ -113,6 +130,18 @@ export default function Cookbook() {
                         searchResults?.map((recipe: any) => (
                             <CookbookCard key={recipe.id} item={recipe} type="recipe" />
                         ))
+                    ) : selectedCategory ? (
+                        categoryLoading ? (
+                            <div className="text-center py-12 text-slate-500">{t('loading') || 'Loading...'}</div>
+                        ) : categoryRecipes?.length > 0 ? (
+                            categoryRecipes.map((recipe: any) => (
+                                <CookbookCard key={recipe.id} item={recipe} type="recipe" />
+                            ))
+                        ) : (
+                            <div className="text-center py-12 text-slate-500">
+                                <p>{t('no_results') || 'No results found.'}</p>
+                            </div>
+                        )
                     ) : activeTab === "suggested" ? (
                         // Flatten breakfast, lunch, dinner arrays into one
                         [...(suggestions?.breakfast || []), ...(suggestions?.lunch || []), ...(suggestions?.dinner || [])].map((meal: any, index: number) => (

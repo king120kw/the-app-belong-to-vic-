@@ -1,27 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+const BASE = 'https://www.themealdb.com/api/json/v1/1'
+
+function resolveCategory(type: string, diet: string): string {
+  switch (diet) {
+    case 'Vegetarian': return 'Vegetarian'
+    case 'Vegan': return 'Vegan'
+  }
+
+  switch (type) {
+    case 'breakfast': return 'Breakfast'
+    case 'dessert':
+    case 'desserts': return 'Dessert'
+    case 'starter':
+    case 'side dish': return 'Starter'
+    case 'snacks': return 'Side'
+    default: {
+      const mains = ['Chicken', 'Beef', 'Seafood', 'Pasta', 'Lamb']
+      return mains[Math.floor(Math.random() * mains.length)]
+    }
+  }
+}
+
+function buildUrl(type: string, diet: string, query: string): string {
+  if (query?.trim().length > 0) {
+    return `${BASE}/search.php?s=${encodeURIComponent(query)}`
+  }
+  if (type === 'drinks') {
+    return `${BASE}/search.php?s=smoothie`
+  }
+  return `${BASE}/filter.php?c=${resolveCategory(type, diet)}`
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { type, diet, number = 10, query } = await req.json()
 
-    let url: string
-
-    if (query && query.trim().length > 0) {
-      url = `https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(query)}`
-    } else {
-      let category = 'Chicken'
-      if (type === 'breakfast') category = 'Breakfast'
-      else if (diet === 'Vegetarian') category = 'Vegetarian'
-      else if (diet === 'Vegan') category = 'Vegan'
-      else if (type === 'dessert') category = 'Dessert'
-      else if (type === 'starter' || type === 'side dish') category = 'Starter'
-      else {
-        const mains = ['Chicken', 'Beef', 'Seafood', 'Pasta', 'Lamb']
-        category = mains[Math.floor(Math.random() * mains.length)]
-      }
-      url = `https://www.themealdb.com/api/json/v1/1/filter.php?c=${category}`
-    }
-
+    const url = buildUrl(type, diet, query)
     const response = await fetch(url)
     const data = await response.json()
 

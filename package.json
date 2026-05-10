@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:client": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "format.fix": "prettier --write ."

@@ -46,7 +46,7 @@ export default function Onboarding() {
       title: t('whats_your_name'),
       type: "text",
       imageAnimation: "left",
-      imageSrc: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=1200&h=800&fit=crop",
+      imageSrc: "/what is your name.jpg",
     },
     {
       id: 1,
@@ -54,7 +54,7 @@ export default function Onboarding() {
       title: t('how_old'),
       type: "age",
       imageAnimation: "left",
-      imageSrc: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=1200&h=800&fit=crop",
+      imageSrc: "/how old are you.jpg",
     },
     {
       id: 2,
@@ -62,7 +62,7 @@ export default function Onboarding() {
       title: t('whats_gender'),
       type: "gender",
       imageAnimation: "right",
-      imageSrc: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=1200&h=800&fit=crop",
+      imageSrc: "/gender.jpg",
       options: [t('male'), t('female')],
     },
     {
@@ -71,7 +71,7 @@ export default function Onboarding() {
       title: t('whats_height'),
       type: "height",
       imageAnimation: "bottom",
-      imageSrc: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=1200&h=800&fit=crop",
+      imageSrc: "/height.jpg",
       min: 140,
       max: 220,
       unit: "cm",
@@ -82,7 +82,7 @@ export default function Onboarding() {
       title: t('whats_weight'),
       type: "weight",
       imageAnimation: "top",
-      imageSrc: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&h=800&fit=crop",
+      imageSrc: "/what is your weight.jpg",
       min: 30,
       max: 150,
       unit: "kg",
@@ -93,7 +93,7 @@ export default function Onboarding() {
       title: t('primary_goal'),
       type: "radio",
       imageAnimation: "left",
-      imageSrc: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=1200&h=800&fit=crop",
+      imageSrc: "/what is your primary goal.jpg",
       options: [t('lose_weight_opt'), t('maintain_weight_opt'), t('gain_weight_opt')],
     },
     {
@@ -102,7 +102,7 @@ export default function Onboarding() {
       title: t('activity_level_q'),
       type: "radio",
       imageAnimation: "top",
-      imageSrc: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1200&h=800&fit=crop",
+      imageSrc: "/Activity Level.jpg",
       options: [
         t('sedentary'),
         t('lightly_active'),
@@ -117,7 +117,7 @@ export default function Onboarding() {
       title: t('sleep_duration_q'),
       type: "slider",
       imageAnimation: "right",
-      imageSrc: "https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=1200&h=800&fit=crop",
+      imageSrc: "/Sleep duration.jpg",
       min: 4,
       max: 12,
       step: 0.5,
@@ -129,7 +129,7 @@ export default function Onboarding() {
       title: t('sleep_quality_q'),
       type: "radio",
       imageAnimation: "bottom",
-      imageSrc: "https://images.unsplash.com/photo-1495360010541-f48722b34f7d?w=1200&h=800&fit=crop",
+      imageSrc: "/Rate your sleep quality.jpg",
       options: [t('poor'), t('fair'), t('good'), t('excellent')],
     },
     {
@@ -138,7 +138,7 @@ export default function Onboarding() {
       title: t('stress_level_q'),
       type: "radio",
       imageAnimation: "top",
-      imageSrc: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=1200&h=800&fit=crop",
+      imageSrc: "/Daily stress level.jpg",
       options: [t('low'), t('moderate'), t('high'), t('very_high')],
     },
     {
@@ -147,7 +147,7 @@ export default function Onboarding() {
       title: t('dietary_preference_q'),
       type: "radio",
       imageAnimation: "left",
-      imageSrc: "https://images.unsplash.com/photo-1490818387583-1baba5e638af?w=1200&h=800&fit=crop",
+      imageSrc: "/Dietary Preference.jpg",
       options: [t('vegan'), t('keto'), t('low_carb'), t('high_protein'), t('none')],
     },
     {
@@ -156,7 +156,7 @@ export default function Onboarding() {
       title: t('dietary_lifestyle_q'),
       type: "checkbox",
       imageAnimation: "right",
-      imageSrc: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1200&h=800&fit=crop",
+      imageSrc: "/Specific dietary lifestyle.jpg",
       options: [
         t('halal'),
         t('vegetarian'),
@@ -171,7 +171,7 @@ export default function Onboarding() {
       title: t('health_conditions_q'),
       type: "text",
       imageAnimation: "bottom",
-      imageSrc: "https://images.unsplash.com/photo-1505751172107-573220004502?w=1200&h=800&fit=crop",
+      imageSrc: "/Any medical conditions.jpg",
     },
     {
       id: 13,
@@ -179,7 +179,7 @@ export default function Onboarding() {
       title: t('allergies_q'),
       type: "text",
       imageAnimation: "top",
-      imageSrc: "https://images.unsplash.com/photo-1535914223966-332aef5f1c04?w=1200&h=800&fit=crop",
+      imageSrc: "/Any food allergies.jpg",
     },
     {
       id: 14,
@@ -187,7 +187,7 @@ export default function Onboarding() {
       title: t('meal_prep_time'),
       type: "radio",
       imageAnimation: "left",
-      imageSrc: "https://images.unsplash.com/photo-1556909212-d5b604d0c90d?w=1200&h=800&fit=crop",
+      imageSrc: "/Preparation Time.jpg",
       options: [
         t('less_15m'),
         t('15_30m'),
@@ -201,7 +201,7 @@ export default function Onboarding() {
       title: t('cooking_skill'),
       type: "radio",
       imageAnimation: "right",
-      imageSrc: "https://images.unsplash.com/photo-1556912167-f556f1f39fdf?w=1200&h=800&fit=crop",
+      imageSrc: "/Cooking Skill.jpg",
       options: [t('beginner'), t('intermediate'), t('advanced')],
     },
     {
@@ -210,7 +210,7 @@ export default function Onboarding() {
       title: t('weekly_budget_q'),
       type: "slider",
       imageAnimation: "bottom",
-      imageSrc: "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=1200&h=800&fit=crop",
+      imageSrc: "/Weekly Budget.jpg",
       min: 20,
       max: 500,
       unit: currencySymbol,
@@ -221,7 +221,7 @@ export default function Onboarding() {
       title: t('daily_reminders_q'),
       type: "radio",
       imageAnimation: "top",
-      imageSrc: "https://images.unsplash.com/photo-1512428559087-560ad5ceab42?w=1200&h=800&fit=crop",
+      imageSrc: "/Daily Reminders.jpg",
       options: [t('yes'), t('no')],
     },
   ], [t, currencySymbol]);

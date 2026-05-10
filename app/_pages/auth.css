@@ -86,22 +86,30 @@
 .main-container {
   position: relative;
   width: 100%;
-  max-width: 768px;
-  min-height: 480px;
+  max-width: 900px;
+  min-height: 520px;
   border-radius: 30px;
   overflow: hidden;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+}
+
+@media (min-width: 1200px) {
+  .main-container {
+    max-width: 1050px;
+    min-height: 600px;
+  }
 }
 
 .form-card {
-  backdrop-filter: blur(6px);
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 @media (max-width: 768px) {
   .main-container {
-    min-height: 100vh;
+    height: 100dvh;
+    min-height: 100dvh;
     border-radius: 0;
     max-width: 100%;
   }

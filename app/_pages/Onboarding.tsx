@@ -361,9 +361,9 @@ export default function Onboarding() {
       {/* Question Content */}
       <div className="flex flex-col flex-1">
         {/* Image Section */}
-        <div className="relative w-full flex-shrink-0">
+        <div className="relative w-full flex-shrink-0 flex justify-center">
           <div
-            className={`${animationClass} w-full bg-center bg-no-repeat bg-cover h-[45vh]`}
+            className={`${animationClass} w-full max-w-5xl bg-center bg-no-repeat bg-cover h-[45vh] md:h-[55vh] lg:h-[65vh] transition-all duration-700`}
             style={{ backgroundImage: `url("${currentQuestion.imageSrc}")` }}
           >
             <div className="absolute inset-0 image-fade-overlay" />
@@ -387,7 +387,7 @@ export default function Onboarding() {
         </div>
 
         {/* Form Content */}
-        <div className="flex flex-col flex-1 px-6 pt-8 pb-6">
+        <div className="flex flex-col flex-1 px-6 pt-8 pb-10 md:pb-12">
           <h1 className={`${textAnimationClass} text-vic-blue tracking-tight text-3xl font-bold leading-tight text-center pb-8`}>
             {currentQuestion.title}
           </h1>
@@ -412,10 +412,10 @@ export default function Onboarding() {
               </div>
             )}
             {currentQuestion.type === "age" && (
-              <AgeSelector value={responses[currentQuestion.key]} yearsLabel={t('years')} onChange={(val) => updateResponse(currentQuestion.key, val)} />
+              <AgeSelector value={responses[currentQuestion.key]} yearsLabel={t('years')} onChange={(val) => { updateResponse(currentQuestion.key, val); setTimeout(handleContinue, 400); }} />
             )}
             {currentQuestion.type === "gender" && (
-              <RadioOptions options={currentQuestion.options || []} value={responses[currentQuestion.key]} onChange={(val) => updateResponse(currentQuestion.key, val)} />
+              <RadioOptions options={currentQuestion.options || []} value={responses[currentQuestion.key]} onChange={(val) => { updateResponse(currentQuestion.key, val); setTimeout(handleContinue, 400); }} />
             )}
             {currentQuestion.type === "height" && (
               <NumberSlider
@@ -438,7 +438,7 @@ export default function Onboarding() {
               />
             )}
             {currentQuestion.type === "radio" && (
-              <RadioOptions options={currentQuestion.options || []} value={responses[currentQuestion.key]} onChange={(val) => updateResponse(currentQuestion.key, val)} />
+              <RadioOptions options={currentQuestion.options || []} value={responses[currentQuestion.key]} onChange={(val) => { updateResponse(currentQuestion.key, val); setTimeout(handleContinue, 400); }} />
             )}
             {currentQuestion.type === "checkbox" && (
               <CheckboxOptions options={currentQuestion.options || []} value={responses[currentQuestion.key]} onChange={(val) => updateResponse(currentQuestion.key, val)} />
@@ -469,15 +469,18 @@ export default function Onboarding() {
 
           {/* Action buttons */}
           <div className="mt-auto space-y-4 flex flex-col items-center w-full">
-            <button
-              onClick={handleContinue}
-              disabled={saveMutation.isPending}
-              className="continue-btn flex cursor-pointer items-center justify-center overflow-hidden rounded-xl h-14 px-5 w-full max-w-[480px] bg-white text-vic-blue text-base font-bold leading-normal tracking-[0.015em] shadow-md hover:shadow-lg transition-all active:translate-y-1 disabled:opacity-50 mx-auto"
-            >
-              <span className="truncate">
-                {saveMutation.isPending ? "..." : currentStep === questions.length - 1 ? t('finish') : t('continue')}
-              </span>
-            </button>
+            {/* Hide Continue button for auto-advancing types */}
+            {!['radio', 'gender', 'age'].includes(currentQuestion.type) && (
+              <button
+                onClick={handleContinue}
+                disabled={saveMutation.isPending}
+                className="continue-btn flex cursor-pointer items-center justify-center overflow-hidden rounded-xl h-14 px-5 w-full max-w-[480px] bg-white text-vic-blue text-base font-bold leading-normal tracking-[0.015em] shadow-md hover:shadow-lg transition-all active:translate-y-1 disabled:opacity-50 mx-auto"
+              >
+                <span className="truncate">
+                  {saveMutation.isPending ? "..." : currentStep === questions.length - 1 ? t('finish') : t('continue')}
+                </span>
+              </button>
+            )}
             <p
               onClick={handleContinue}
               className="skip-btn text-vic-blue/80 text-sm font-normal leading-normal text-center underline cursor-pointer hover:text-vic-blue transition-colors mx-auto"
@@ -684,19 +687,16 @@ function SliderInput({
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full h-2 bg-white rounded-lg appearance-none cursor-pointer accent-vic-blue"
       />
-      <div className="flex justify-between text-vic-blue text-sm font-medium w-full">
+      <div className="flex justify-between text-vic-blue text-sm font-medium w-full px-2">
         <span>
-          {unit}
-          {min}
+          {min} {unit}
         </span>
         <span>
-          {unit}
-          {max}+
+          {max}+ {unit}
         </span>
       </div>
       <div className="text-vic-blue text-2xl font-bold">
-        {unit}
-        {val}
+        {val} {unit}
       </div>
     </div>
   );

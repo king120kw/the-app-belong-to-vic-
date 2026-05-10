@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { syncUserWithSupabase } from "@/lib/api/auth";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/api/translation";
+import { Mail, Github, Chrome, Facebook, Phone, Apple } from "lucide-react";
 import "./auth.css";
 
 export default function Auth() {
@@ -13,12 +14,30 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { t } = useTranslation();
+
+  const handleSocialAuth = async (provider: 'google' | 'facebook') => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
+  const handlePhoneAuth = () => {
+    // Redirect to phone input or switch mode if implemented
+    router.push("/phone-input");
+  };
 
   // Redirect if already logged in
   useEffect(() => {
@@ -117,7 +136,7 @@ export default function Auth() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4 bg-gradient-to-r from-vic-green-start to-vic-green-end">
+    <div className="flex items-center justify-center min-h-[100dvh] w-full overflow-hidden p-4 bg-gradient-to-r from-vic-green-start to-vic-green-end">
       <div className={`main-container container ${isSignUp ? "active" : ""}`}>
         {/* Sign In Background */}
         <div className="bg-container sign-in-bg">
@@ -177,6 +196,36 @@ export default function Auth() {
                   </button>
                 </form>
 
+                <div className="relative my-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-white/20"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-transparent text-gray-400 uppercase tracking-widest text-[10px] font-bold">Or continue with</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => handleSocialAuth('google')}
+                    className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                  >
+                    <Chrome size={20} className="text-white" />
+                  </button>
+                  <button
+                    onClick={() => handleSocialAuth('facebook')}
+                    className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                  >
+                    <Facebook size={20} className="text-white" />
+                  </button>
+                  <button
+                    onClick={handlePhoneAuth}
+                    className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                  >
+                    <Phone size={20} className="text-white" />
+                  </button>
+                </div>
+
                 <div className="text-gray-200 text-sm mt-4 font-medium">
                   {t('new_here')}
                   <button
@@ -210,31 +259,63 @@ export default function Auth() {
 
               <div className="space-y-4">
                 {!verificationSent ? (
-                  <form onSubmit={handleAuth} className="flex w-full flex-col items-center space-y-4">
-                    <input
-                      type="email"
-                      placeholder="Email address"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-vic-green"
-                      required
-                    />
-                    <input
-                      type="password"
-                      placeholder="Password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-vic-green"
-                      required
-                    />
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="w-full rounded-full bg-vic-green px-5 py-3 text-base font-semibold text-slate-800 hover:opacity-90 transition-opacity disabled:opacity-50"
-                    >
-                      {loading ? t('creating_account') : t('create_account')}
-                    </button>
-                  </form>
+                  <>
+                    <form onSubmit={handleAuth} className="flex w-full flex-col items-center space-y-4">
+                      <input
+                        type="email"
+                        placeholder="Email address"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-vic-green"
+                        required
+                      />
+                      <input
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-vic-green"
+                        required
+                      />
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full rounded-full bg-vic-green px-5 py-3 text-base font-semibold text-slate-800 hover:opacity-90 transition-opacity disabled:opacity-50"
+                      >
+                        {loading ? t('creating_account') : t('create_account')}
+                      </button>
+                    </form>
+
+                    <div className="relative my-6">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-white/20"></div>
+                      </div>
+                      <div className="relative flex justify-center text-sm">
+                        <span className="px-2 bg-transparent text-gray-400 uppercase tracking-widest text-[10px] font-bold">Or continue with</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <button
+                        onClick={() => handleSocialAuth('google')}
+                        className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                      >
+                        <Chrome size={20} className="text-white" />
+                      </button>
+                      <button
+                        onClick={() => handleSocialAuth('facebook')}
+                        className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                      >
+                        <Facebook size={20} className="text-white" />
+                      </button>
+                      <button
+                        onClick={handlePhoneAuth}
+                        className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                      >
+                        <Phone size={20} className="text-white" />
+                      </button>
+                    </div>
+                  </>
                 ) : (
                   <button
                     onClick={() => setVerificationSent(false)}

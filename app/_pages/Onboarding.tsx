@@ -54,8 +54,7 @@ export default function Onboarding() {
       title: t('how_old'),
       type: "age",
       imageAnimation: "left",
-      imageSrc:
-        "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=1200&h=800&fit=crop",
+      imageSrc: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=1200&h=800&fit=crop",
     },
     {
       id: 2,
@@ -63,8 +62,7 @@ export default function Onboarding() {
       title: t('whats_gender'),
       type: "gender",
       imageAnimation: "right",
-      imageSrc:
-        "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=1200&h=800&fit=crop",
+      imageSrc: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=1200&h=800&fit=crop",
       options: [t('male'), t('female')],
     },
     {
@@ -73,8 +71,7 @@ export default function Onboarding() {
       title: t('whats_height'),
       type: "height",
       imageAnimation: "bottom",
-      imageSrc:
-        "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=1200&h=800&fit=crop",
+      imageSrc: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=1200&h=800&fit=crop",
       min: 140,
       max: 220,
       unit: "cm",
@@ -85,8 +82,7 @@ export default function Onboarding() {
       title: t('whats_weight'),
       type: "weight",
       imageAnimation: "top",
-      imageSrc:
-        "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&h=800&fit=crop",
+      imageSrc: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&h=800&fit=crop",
       min: 30,
       max: 150,
       unit: "kg",
@@ -97,149 +93,11 @@ export default function Onboarding() {
       title: t('primary_goal'),
       type: "radio",
       imageAnimation: "left",
-      imageSrc:
-        "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=1200&h=800&fit=crop",
+      imageSrc: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=1200&h=800&fit=crop",
       options: [t('lose_weight_opt'), t('maintain_weight_opt'), t('gain_weight_opt')],
     },
     {
       id: 6,
-      key: "budget",
-      title: t('monthly_budget'),
-      type: "slider",
-      imageAnimation: "right",
-      imageSrc:
-        "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=1200&h=800&fit=crop",
-      min: 50,
-      max: 1000,
-      unit: currencySymbol,
-    },
-    {
-      id: 7,
-      key: "preferences",
-      title: t('eating_style'),
-      type: "checkbox",
-      imageAnimation: "bottom",
-      imageSrc: "https://images.unsplash.com/photo-1556912167-f556f1f39fdf?w=1200&h=800&fit=crop",
-      options: [
-        t('home_cooking'),
-        t('eating_out'),
-        t('quick_meals'),
-        t('snacking'),
-        t('mixed'),
-      ],
-    },
-    {
-      id: 8,
-      key: "daily_meal_frequency",
-      title: t('meal_frequency'),
-      type: "radio",
-      imageAnimation: "top",
-      imageSrc:
-        "https://images.unsplash.com/photo-1547592180-85f173990554?w=1200&h=800&fit=crop",
-      options: [t('two_meals'), t('three_meals'), t('four_five_meals')],
-    },
-    {
-      id: 9,
-      key: "liked_foods",
-      title: t('liked_foods'),
-      type: "checkbox",
-      imageAnimation: "left",
-      imageSrc:
-        "https://images.unsplash.com/photo-1490818387583-1baba5e638af?w=1200&h=800&fit=crop",
-      options: [
-        t('rice'),
-        t('chicken'),
-        t('beef'),
-        t('fish'),
-        t('vegetables'),
-        t('fruits'),
-        t('dairy'),
-        t('bread'),
-        t('oats'),
-        t('pasta'),
-      ],
-    },
-    {
-      id: 10,
-      key: "restrictions",
-      title: t('restrictions'),
-      type: "checkbox",
-      imageAnimation: "right",
-      imageSrc: "https://images.unsplash.com/photo-1546421845-6471bdcf6edf?w=1200&h=800&fit=crop",
-      options: [t('lactose'), t('gluten'), t('seafood'), t('nuts'), t('eggs'), t('pork'), t('none')],
-    },
-    {
-      id: 11,
-      key: "cooking_skill",
-      title: t('cooking_skill'),
-      type: "radio",
-      imageAnimation: "bottom",
-      imageSrc:
-        "https://images.unsplash.com/photo-1556912167-f556f1f39fdf?w=1200&h=800&fit=crop",
-      options: [t('beginner'), t('intermediate'), t('advanced')],
-    },
-    {
-      id: 12,
-      key: "meal_prep_time",
-      title: t('meal_prep_time'),
-      type: "radio",
-      imageAnimation: "top",
-      imageSrc:
-        "https://images.unsplash.com/photo-1556909212-d5b604d0c90d?w=1200&h=800&fit=crop",
-      options: [
-        t('less_15m'),
-        t('15_30m'),
-        t('30_60m'),
-        t('1h_plus'),
-      ],
-    },
-    {
-      id: 13,
-      key: "target",
-      title: t('weight_change_target'),
-      type: "range",
-      imageAnimation: "left",
-      imageSrc:
-        "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=1200&h=800&fit=crop",
-      min: -5,
-      max: 5,
-      step: 0.5,
-      unit: t('kg_month'),
-    },
-    {
-      id: 14,
-      key: "dietary_lifestyle",
-      title: t('dietary_lifestyle_q'),
-      type: "checkbox",
-      imageAnimation: "right",
-      imageSrc:
-        "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1200&h=800&fit=crop",
-      options: [
-        t('halal'),
-        t('vegetarian'),
-        t('vegan'),
-        t('high_protein'),
-        t('low_carb'),
-        t('balanced'),
-        t('none'),
-      ],
-    },
-    {
-      id: 15,
-      key: "calorie_flexibility",
-      title: t('calorie_flexibility'),
-      type: "radio",
-      imageAnimation: "bottom",
-      imageSrc:
-        "https://images.unsplash.com/photo-1505576399279-565b52d4ac71?w=1200&h=800&fit=crop",
-      options: [
-        t('strict'),
-        t('moderate_opt'),
-        t('flexible'),
-      ],
-    },
-    {
-      id: 16,
       key: "activity_level",
       title: t('activity_level_q'),
       type: "radio",
@@ -253,7 +111,120 @@ export default function Onboarding() {
         t('extra_active')
       ],
     },
-  ], [t]);
+    {
+      id: 7,
+      key: "sleep_duration",
+      title: t('sleep_duration_q'),
+      type: "slider",
+      imageAnimation: "right",
+      imageSrc: "https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=1200&h=800&fit=crop",
+      min: 4,
+      max: 12,
+      step: 0.5,
+      unit: t('hours'),
+    },
+    {
+      id: 8,
+      key: "sleep_quality",
+      title: t('sleep_quality_q'),
+      type: "radio",
+      imageAnimation: "bottom",
+      imageSrc: "https://images.unsplash.com/photo-1495360010541-f48722b34f7d?w=1200&h=800&fit=crop",
+      options: [t('poor'), t('fair'), t('good'), t('excellent')],
+    },
+    {
+      id: 9,
+      key: "stress_level",
+      title: t('stress_level_q'),
+      type: "radio",
+      imageAnimation: "top",
+      imageSrc: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=1200&h=800&fit=crop",
+      options: [t('low'), t('moderate'), t('high'), t('very_high')],
+    },
+    {
+      id: 10,
+      key: "dietary_preference",
+      title: t('dietary_preference_q'),
+      type: "radio",
+      imageAnimation: "left",
+      imageSrc: "https://images.unsplash.com/photo-1490818387583-1baba5e638af?w=1200&h=800&fit=crop",
+      options: [t('vegan'), t('keto'), t('low_carb'), t('high_protein'), t('none')],
+    },
+    {
+      id: 11,
+      key: "dietary_lifestyle",
+      title: t('dietary_lifestyle_q'),
+      type: "checkbox",
+      imageAnimation: "right",
+      imageSrc: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1200&h=800&fit=crop",
+      options: [
+        t('halal'),
+        t('vegetarian'),
+        t('vegan'),
+        t('balanced'),
+        t('none'),
+      ],
+    },
+    {
+      id: 12,
+      key: "medical_conditions",
+      title: t('health_conditions_q'),
+      type: "text",
+      imageAnimation: "bottom",
+      imageSrc: "https://images.unsplash.com/photo-1505751172107-573220004502?w=1200&h=800&fit=crop",
+    },
+    {
+      id: 13,
+      key: "allergies",
+      title: t('allergies_q'),
+      type: "text",
+      imageAnimation: "top",
+      imageSrc: "https://images.unsplash.com/photo-1535914223966-332aef5f1c04?w=1200&h=800&fit=crop",
+    },
+    {
+      id: 14,
+      key: "meal_prep_time",
+      title: t('meal_prep_time'),
+      type: "radio",
+      imageAnimation: "left",
+      imageSrc: "https://images.unsplash.com/photo-1556909212-d5b604d0c90d?w=1200&h=800&fit=crop",
+      options: [
+        t('less_15m'),
+        t('15_30m'),
+        t('30_60m'),
+        t('1h_plus'),
+      ],
+    },
+    {
+      id: 15,
+      key: "cooking_skill",
+      title: t('cooking_skill'),
+      type: "radio",
+      imageAnimation: "right",
+      imageSrc: "https://images.unsplash.com/photo-1556912167-f556f1f39fdf?w=1200&h=800&fit=crop",
+      options: [t('beginner'), t('intermediate'), t('advanced')],
+    },
+    {
+      id: 16,
+      key: "weekly_budget",
+      title: t('weekly_budget_q'),
+      type: "slider",
+      imageAnimation: "bottom",
+      imageSrc: "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=1200&h=800&fit=crop",
+      min: 20,
+      max: 500,
+      unit: currencySymbol,
+    },
+    {
+      id: 17,
+      key: "daily_reminders",
+      title: t('daily_reminders_q'),
+      type: "radio",
+      imageAnimation: "top",
+      imageSrc: "https://images.unsplash.com/photo-1512428559087-560ad5ceab42?w=1200&h=800&fit=crop",
+      options: [t('yes'), t('no')],
+    },
+  ], [t, currencySymbol]);
 
   // Pre-load all onboarding images
   useEffect(() => {
@@ -429,7 +400,12 @@ export default function Onboarding() {
                   type="text"
                   value={responses[currentQuestion.key] || ""}
                   onChange={(e) => updateResponse(currentQuestion.key, e.target.value)}
-                  placeholder={t('enter_name')}
+                  placeholder={
+                    currentQuestion.key === "full_name" ? t('enter_name') :
+                    currentQuestion.key === "medical_conditions" ? t('health_conditions_placeholder') :
+                    currentQuestion.key === "allergies" ? t('allergies_placeholder') :
+                    t('enter_name')
+                  }
                   className="w-full h-14 px-4 rounded-xl border-2 border-vic-blue/20 focus:border-vic-blue focus:outline-none text-vic-blue text-lg font-medium bg-white shadow-sm transition-all"
                   autoFocus
                 />
@@ -600,7 +576,7 @@ function NumberSlider({
   label,
   min,
   max,
-  unit,
+  unit: defaultUnit,
   value,
   onChange
 }: {
@@ -611,24 +587,71 @@ function NumberSlider({
   value?: number;
   onChange: (val: number) => void;
 }) {
-  const val = value || (min + max) / 2;
+  const [unit, setUnit] = useState(defaultUnit || "kg");
+  const isWeight = defaultUnit === "kg";
+  const isHeight = defaultUnit === "cm";
+
+  const displayValue = useMemo(() => {
+    const val = value || (min + max) / 2;
+    if (unit === "lbs" && isWeight) return Math.round(val * 2.20462);
+    if (unit === "inches" && isHeight) return Math.round(val / 2.54);
+    return Math.round(val);
+  }, [value, unit, min, max, isWeight, isHeight]);
+
+  const handleSliderChange = (newVal: number) => {
+    onChange(newVal);
+  };
 
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-xs space-y-6">
+      {/* Unit Toggle */}
+      <div className="flex bg-white/20 p-1 rounded-lg self-end mb-2">
+        {isWeight && (
+          <>
+            <button
+              onClick={() => setUnit("kg")}
+              className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${unit === "kg" ? "bg-vic-blue text-white shadow-md" : "text-vic-blue"}`}
+            >
+              KG
+            </button>
+            <button
+              onClick={() => setUnit("lbs")}
+              className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${unit === "lbs" ? "bg-vic-blue text-white shadow-md" : "text-vic-blue"}`}
+            >
+              LBS
+            </button>
+          </>
+        )}
+        {isHeight && (
+          <>
+            <button
+              onClick={() => setUnit("cm")}
+              className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${unit === "cm" ? "bg-vic-blue text-white shadow-md" : "text-vic-blue"}`}
+            >
+              CM
+            </button>
+            <button
+              onClick={() => setUnit("inches")}
+              className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${unit === "inches" ? "bg-vic-blue text-white shadow-md" : "text-vic-blue"}`}
+            >
+              IN
+            </button>
+          </>
+        )}
+      </div>
+
       <input
         type="range"
         min={min}
         max={max}
-        value={val}
-        onChange={(e) => onChange(Number(e.target.value))}
+        value={value || (min + max) / 2}
+        onChange={(e) => handleSliderChange(Number(e.target.value))}
         className="w-full h-2 bg-white rounded-lg appearance-none cursor-pointer accent-vic-blue"
       />
-      <div className="flex justify-between text-vic-blue text-sm font-medium w-full">
-        <span>{min}</span>
-        <span>{max}</span>
-      </div>
-      <div className="text-vic-blue text-2xl font-bold">
-        {val} {unit}
+
+      <div className="text-vic-blue text-4xl font-bold flex items-baseline gap-2">
+        {displayValue}
+        <span className="text-lg opacity-80">{unit}</span>
       </div>
     </div>
   );

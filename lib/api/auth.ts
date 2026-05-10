@@ -198,7 +198,9 @@ export const saveOnboardingResponses = async (userId: string, responses: any) =>
         'goal', 'budget', 'preferences', 'daily_meal_frequency',
         'liked_foods', 'restrictions', 'cooking_skill', 'meal_prep_time',
         'target', 'dietary_lifestyle', 'calorie_flexibility', 'activity_level',
-        'preferred_cuisines'
+        'preferred_cuisines', 'sleep_duration', 'sleep_quality', 'stress_level',
+        'dietary_preference', 'medical_conditions', 'allergies', 'weekly_budget',
+        'daily_reminders'
     ];
 
     const filteredResponses: any = {};

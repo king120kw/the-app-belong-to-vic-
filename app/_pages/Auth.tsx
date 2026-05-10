@@ -56,10 +56,6 @@ export default function Auth() {
           email: normalizedEmail,
           password: password,
           options: {
-            data: {
-              full_name: name,
-              first_name: name.split(" ")[0],
-            },
             emailRedirectTo: window.location.origin,
           },
         });
@@ -204,13 +200,6 @@ export default function Auth() {
               <div className="space-y-4">
                 {!verificationSent ? (
                   <form onSubmit={handleAuth} className="flex w-full flex-col items-center space-y-4">
-                    <input
-                      type="text"
-                      placeholder={t('full_name_label')}
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-vic-green"
-                    />
                     <input
                       type="email"
                       placeholder="Email address"

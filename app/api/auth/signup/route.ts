@@ -26,8 +26,9 @@ export async function POST(request: Request) {
         console.log('User already exists, attempting to force-confirm...');
         
         // Find user by email
-        const { data: userData, error: getError } = await supabaseAdmin.auth.admin.listUsers();
-        const existingUser = userData?.users.find(u => u.email === email);
+        const { data: userData } = await supabaseAdmin.auth.admin.listUsers();
+        const users = userData?.users || [];
+        const existingUser = users.find((u: any) => u.email === email);
         
         if (existingUser) {
           const { error: confirmError } = await supabaseAdmin.auth.admin.updateUserById(

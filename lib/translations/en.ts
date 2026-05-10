@@ -231,6 +231,7 @@ export const en = {
     full_name_label: "Full Name",
     creating_account: "Creating...",
     back_to_sign_up: "Back to Sign Up",
+    rate_limit_exceeded: "Too many attempts. Please wait a few minutes before trying again.",
     enter_code_title: "Enter Code",
     elite_progress: "Elite Progress",
     analysis_unavailable: "Analysis unavailable",

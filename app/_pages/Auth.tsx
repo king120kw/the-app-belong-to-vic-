@@ -52,24 +52,31 @@ export default function Auth() {
       setLoading(true);
 
       if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({
-          email: normalizedEmail,
-          password: password,
-          options: {
-            emailRedirectTo: window.location.origin,
-          },
+        const response = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: normalizedEmail, password }),
         });
 
-        if (error) throw error;
+        const result = await response.json();
+        if (!response.ok) {
+          if (result.error?.includes("rate limit")) {
+            throw new Error(t('rate_limit_exceeded'));
+          }
+          throw new Error(result.error || 'Signup failed');
+        }
 
-        if (data.user && data.session) {
-          // Instant sign in (if confirmation is disabled in Supabase)
+        // Automatically sign in since the email is already confirmed by the admin API
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password: password,
+        });
+
+        if (signInError) throw signInError;
+
+        if (signInData.user) {
           toast.success(t('account_created_msg'));
-          await syncAndNavigate();
-        } else {
-          // Confirmation required
-          setVerificationSent(true);
-          toast.success(t('check_email_msg'));
+          // Navigation happens via useEffect and syncAndNavigate
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -93,8 +100,12 @@ export default function Auth() {
       console.error("Auth Error:", error);
       let errorMessage = error.message || t('auth_error');
 
+      // Specific handling for Rate Limits (429)
+      if (error.status === 429 || errorMessage.toLowerCase().includes("rate limit")) {
+        errorMessage = t('rate_limit_exceeded');
+      } 
       // Prevent technical API key errors from being shown to users
-      if (errorMessage.includes("Invalid API key") || errorMessage.includes("apiKey")) {
+      else if (errorMessage.includes("Invalid API key") || errorMessage.includes("apiKey")) {
         errorMessage = t('auth_error') || "Authentication service error. Please try again later.";
       }
 

@@ -1,37 +1,41 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { email, password, full_name } = await req.json()
+    const { email, password } = await request.json();
 
     if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Email and password are required' },
+        { status: 400 }
+      );
     }
 
-    // Create the user with administrative privileges and automatically confirm their email.
-    // This bypasses the need for the user to wait for a verification email.
+    // Create user using Admin API which allows auto-confirming email
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      email_confirm: true,
+      email_confirm: true, // AUTO-CONFIRM EMAIL
       user_metadata: {
-        full_name,
-        first_name: full_name ? full_name.split(' ')[0] : 'User'
+        onboarding_completed: false
       }
-    })
+    });
 
     if (error) {
-      console.error('Admin Signup Error:', error)
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      console.error('Admin Signup Error:', error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     return NextResponse.json({ 
       user: data.user,
-      message: 'User created and auto-confirmed successfully' 
-    })
+      message: 'User created and confirmed successfully' 
+    });
   } catch (error: any) {
-    console.error('Signup API Error:', error)
-    return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 })
+    console.error('API Error:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error' },
+      { status: 500 }
+    );
   }
 }

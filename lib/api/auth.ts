@@ -238,36 +238,40 @@ export const saveOnboardingResponses = async (userId: string, responses: any) =>
 
     const data = dataRows && dataRows.length > 0 ? dataRows[0] : null;
 
-    // Mark onboarding as complete in profile and update the goal
+    // Mark onboarding as complete in profile and update the goal and full_name
     await updateUserProfile(userId, {
+        full_name: filteredResponses.full_name || undefined,
         onboarding_completed: true,
         goal_calories: dailyCalorieGoal
     });
 
-    const today = new Date().toISOString().split('T')[0];
-    await supabase.from('daily_progress').upsert({
-        user_id: userId,
-        progress_date: today,
-        calories_goal: dailyCalorieGoal,
-        calories_consumed: 0,
-        meals_logged: 0,
-        recipes_cooked: 0,
-        budget_spent: 0
-    }, { onConflict: 'user_id,progress_date' });
+    // Initialize daily progress and user settings in the background to avoid blocking the user redirect
+    (async () => {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            
+            // 1. Initialize daily progress (Fixed: removed non-existent columns causing 400 error)
+            await supabase.from('daily_progress').upsert({
+                user_id: userId,
+                progress_date: today,
+                calories_goal: dailyCalorieGoal,
+                calories_consumed: 0,
+                meals_logged: 0
+            }, { onConflict: 'user_id,progress_date' });
 
-    // Detect location to save settings if not already done
-    try {
-        const loc = await detectLocation();
-        await supabase.from('user_settings').upsert({
-            user_id: userId,
-            language: loc.language,
-            currency: loc.currency,
-            timezone: loc.timezone,
-            updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' });
-    } catch (err) {
-        console.error("Failed to update location settings during onboarding:", err);
-    }
+            // 2. Detect location to save settings
+            const loc = await detectLocation();
+            await supabase.from('user_settings').upsert({
+                user_id: userId,
+                language: loc.language,
+                currency: loc.currency,
+                timezone: loc.timezone,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id' });
+        } catch (err) {
+            console.warn("Non-critical background post-onboarding tasks failed:", err);
+        }
+    })();
 
     return data
 

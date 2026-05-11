@@ -136,7 +136,10 @@ export default function Auth() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-[100dvh] w-full overflow-hidden p-4 bg-gradient-to-r from-vic-green-start to-vic-green-end">
+    <div className="relative flex items-center justify-center min-h-screen w-full overflow-hidden p-0 sm:p-4">
+      {/* Full screen background gradient */}
+      <div className="fixed inset-0 bg-gradient-to-br from-vic-green-start via-vic-green-start to-vic-green-end -z-10" />
+      
       <div className={`main-container container ${isSignUp ? "active" : ""}`}>
         {/* Sign In Background */}
         <div className="bg-container sign-in-bg">
@@ -161,7 +164,7 @@ export default function Auth() {
         {/* Sign In Form */}
         <div className="form-container sign-in-container">
           <div className="flex w-full h-full items-center justify-center p-4 sm:p-8">
-            <div className="w-full rounded-xl form-card p-6 sm:p-8 text-center max-w-sm mx-auto">
+            <div className="w-full rounded-2xl form-card p-8 sm:p-10 text-center max-w-[400px] mx-auto shadow-2xl backdrop-blur-xl bg-white/10 border border-white/20">
               <h1 className="text-white text-3xl font-bold tracking-tight">
                 {t('welcome_back')}
               </h1>

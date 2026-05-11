@@ -110,10 +110,11 @@
   body {
     @apply bg-background text-foreground;
     font-family: "Epilogue", "Inter", sans-serif;
-    /* Ensure no white gaps on transition/overscroll */
-    background-color: hsl(var(--background));
+    /* Match the theme start color to prevent white gaps */
+    background-color: #D9F7C4;
     min-height: 100vh;
     margin: 0;
+    overflow-x: hidden;
   }
 
   :where(p, span, li, h1, h2, h3, h4, h5, h6, a, button, label, td, th) {

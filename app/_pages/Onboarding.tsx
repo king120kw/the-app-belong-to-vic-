@@ -333,7 +333,9 @@ export default function Onboarding() {
   }
 
   return (
-    <div className="relative flex h-auto min-h-screen w-full flex-col font-display overflow-x-hidden bg-gradient-to-b from-vic-green-start to-vic-green-end">
+    <div className="relative flex h-auto min-h-screen w-full flex-col font-display overflow-x-hidden">
+      {/* Full screen background gradient */}
+      <div className="fixed inset-0 bg-gradient-to-b from-vic-green-start to-vic-green-end -z-10" />
       {/* Progress Bar */}
       <div className="w-full px-6 pt-4 sticky top-0 z-20 bg-gradient-to-b from-vic-green-start to-vic-green-end">
         <div className="flex justify-between items-center mb-2">
@@ -387,15 +389,15 @@ export default function Onboarding() {
         </div>
 
         {/* Form Content */}
-        <div className="flex flex-col flex-1 px-6 pt-8 pb-10 md:pb-12">
-          <h1 className={`${textAnimationClass} text-vic-blue tracking-tight text-3xl font-bold leading-tight text-center pb-8`}>
+        <div className="flex flex-col flex-1 px-8 pt-10 pb-12 md:pb-16 max-w-2xl mx-auto w-full">
+          <h1 className={`${textAnimationClass} text-vic-blue tracking-tight text-3xl sm:text-4xl font-bold leading-tight text-center pb-10 sm:pb-14`}>
             {currentQuestion.title}
           </h1>
 
           {/* Input section */}
           <div className="flex-1 flex flex-col items-center justify-center">
             {currentQuestion.type === "text" && (
-              <div className="w-full max-w-xs">
+              <div className="w-full max-w-md px-4">
                 <input
                   type="text"
                   value={responses[currentQuestion.key] || ""}
@@ -406,7 +408,7 @@ export default function Onboarding() {
                     currentQuestion.key === "allergies" ? t('allergies_placeholder') :
                     t('enter_name')
                   }
-                  className="w-full h-14 px-4 rounded-xl border-2 border-vic-blue/20 focus:border-vic-blue focus:outline-none text-vic-blue text-lg font-medium bg-white shadow-sm transition-all"
+                  className="w-full h-16 px-6 rounded-2xl border-2 border-vic-blue/15 focus:border-vic-blue focus:ring-4 focus:ring-vic-blue/5 focus:outline-none text-vic-blue text-xl font-medium bg-white/90 backdrop-blur-sm shadow-sm transition-all text-center"
                   autoFocus
                 />
               </div>
@@ -468,13 +470,13 @@ export default function Onboarding() {
           </div>
 
           {/* Action buttons */}
-          <div className="mt-auto space-y-4 flex flex-col items-center w-full">
+          <div className="mt-12 sm:mt-16 space-y-6 flex flex-col items-center w-full">
             {/* Hide Continue button for auto-advancing types */}
             {!['radio', 'gender', 'age'].includes(currentQuestion.type) && (
               <button
                 onClick={handleContinue}
                 disabled={saveMutation.isPending}
-                className="continue-btn flex cursor-pointer items-center justify-center overflow-hidden rounded-xl h-14 px-5 w-full max-w-[480px] bg-white text-vic-blue text-base font-bold leading-normal tracking-[0.015em] shadow-md hover:shadow-lg transition-all active:translate-y-1 disabled:opacity-50 mx-auto"
+                className="continue-btn flex cursor-pointer items-center justify-center overflow-hidden rounded-2xl h-16 px-8 w-full max-w-md bg-white text-vic-blue text-lg font-bold leading-normal tracking-[0.015em] shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all active:translate-y-0.5 disabled:opacity-50 mx-auto"
               >
                 <span className="truncate">
                   {saveMutation.isPending ? "..." : currentStep === questions.length - 1 ? t('finish') : t('continue')}
@@ -483,7 +485,7 @@ export default function Onboarding() {
             )}
             <p
               onClick={handleContinue}
-              className="skip-btn text-vic-blue/80 text-sm font-normal leading-normal text-center underline cursor-pointer hover:text-vic-blue transition-colors mx-auto"
+              className="skip-btn text-vic-blue/60 text-sm font-semibold leading-normal text-center underline decoration-2 underline-offset-4 cursor-pointer hover:text-vic-blue transition-colors mx-auto py-2"
             >
               {t('skip')}
             </p>

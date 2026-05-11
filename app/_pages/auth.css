@@ -109,9 +109,10 @@
 @media (max-width: 768px) {
   .main-container {
     height: 100dvh;
-    min-height: 100dvh;
+    min-height: -webkit-fill-available;
     border-radius: 0;
     max-width: 100%;
+    box-shadow: none;
   }
 
   .form-container {

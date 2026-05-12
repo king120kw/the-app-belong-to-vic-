@@ -488,7 +488,7 @@ export default function Chat() {
               <Link href={`/chat/${coachConv.id}`}
                 className={`flex gap-4 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors ${isActuallyUnread(coachConv) ? 'bg-vic-green/5' : ''}`}>
                 <div className="size-14 rounded-full overflow-hidden shrink-0 border-2 border-vic-green/30">
-                  <AvatarImg src="/APP%20LOGO.jpg" name="Health Coach" />
+                  <AvatarImg src="/app logo.png" name="Health Coach" />
                 </div>
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
                   <div className="flex justify-between items-center mb-0.5">

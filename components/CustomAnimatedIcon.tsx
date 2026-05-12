@@ -17,30 +17,83 @@ export const CustomAnimatedIcon: React.FC<CustomAnimatedIconProps> = ({
     loop = false
 }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const playPromiseRef = useRef<Promise<void> | null>(null);
+    const isMounted = useRef(true);
+
+    React.useEffect(() => {
+        isMounted.current = true;
+        return () => {
+            isMounted.current = false;
+            if (videoRef.current) {
+                videoRef.current.pause();
+            }
+        };
+    }, []);
 
     // Initial play if loop is true
     React.useEffect(() => {
-        if (loop && videoRef.current) {
-            videoRef.current.playbackRate = playbackRate;
-            videoRef.current.play().catch(() => { }); // Ignore play errors
-        } else if (!loop && videoRef.current) {
-            videoRef.current.pause();
-            videoRef.current.currentTime = 0;
+        const video = videoRef.current;
+        if (!video) return;
+
+        if (loop) {
+            video.playbackRate = playbackRate;
+            playPromiseRef.current = video.play();
+            if (playPromiseRef.current !== undefined) {
+                playPromiseRef.current.catch(() => { /* Ignore interruption errors */ });
+            }
+        } else {
+            video.pause();
+            video.currentTime = 0;
         }
     }, [loop, playbackRate]);
 
     const handleMouseEnter = () => {
-        if (!loop && videoRef.current) {
-            videoRef.current.currentTime = 0;
-            videoRef.current.playbackRate = playbackRate;
-            videoRef.current.play().catch(err => console.error("Video play failed:", err));
+        const video = videoRef.current;
+        if (!loop && video) {
+            // Prevent multiple simultaneous play requests
+            if (playPromiseRef.current) return;
+
+            video.currentTime = 0;
+            video.playbackRate = playbackRate;
+            
+            const playPromise = video.play();
+            if (playPromise !== undefined) {
+                playPromiseRef.current = playPromise;
+                playPromise
+                    .catch((err) => {
+                        if (err.name !== 'AbortError') {
+                            console.error("Video play failed:", err);
+                        }
+                    })
+                    .finally(() => {
+                        // We don't clear playPromiseRef here if we want to pause it later
+                        // but we need a way to know it's done.
+                    });
+            }
         }
     };
 
     const handleMouseLeave = () => {
-        if (!loop && videoRef.current) {
-            videoRef.current.pause();
-            videoRef.current.currentTime = 0;
+        const video = videoRef.current;
+        if (!loop && video) {
+            const pauseVideo = () => {
+                if (isMounted.current && video) {
+                    video.pause();
+                    video.currentTime = 0;
+                }
+                playPromiseRef.current = null;
+            };
+
+            if (playPromiseRef.current) {
+                playPromiseRef.current
+                    .then(pauseVideo)
+                    .catch(() => {
+                        // If play was aborted, ensure it's paused
+                        pauseVideo();
+                    });
+            } else {
+                pauseVideo();
+            }
         }
     };
 

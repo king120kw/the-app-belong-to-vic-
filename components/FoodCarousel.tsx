@@ -153,11 +153,27 @@ export default function FoodCarousel({
                                                     }
                                                 }}
                                             />
+                                            {/* Gradient Overlay for Text Readability */}
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
                                         </div>
-                                        <header className="product-head">
-                                            <h2 className="product-name">{meal.name}</h2>
-                                            <p className="product-calories font-black text-vic-green">{meal.calories} CAL</p>
-                                        </header>
+                                        <div className="product-info-overlay">
+                                            <div className="flex justify-between items-end mb-1">
+                                                <h2 className="product-name">{meal.name}</h2>
+                                                <div className="product-calories-badge">
+                                                    {meal.calories} <span className="text-[8px] opacity-70">KCAL</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-[10px] text-white/60 font-bold uppercase tracking-wider">
+                                                <div className="flex items-center gap-1">
+                                                    <Sunrise size={10} className="text-vic-green" />
+                                                    {meal.subtitle || mealLabels[selectedTab].title}
+                                                </div>
+                                                <div className="w-1 h-1 bg-white/20 rounded-full" />
+                                                <div className="flex items-center gap-1">
+                                                    {mealLabels[selectedTab].time.split(' - ')[0]}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
                             </div>

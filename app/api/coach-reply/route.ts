@@ -51,14 +51,17 @@ export async function POST(req: NextRequest) {
     const payload = await req.json()
     const { record, type, table, system_context } = payload
 
+    console.log(`[Coach-Reply] Incoming request: ${type} on ${table}. Sender: ${record?.sender_id}`)
     if (type !== 'INSERT' || table !== 'messages' || record?.sender_id === COACH_ID) {
+      console.log(`[Coach-Reply] Ignoring message. Type: ${type}, Table: ${table}, Sender: ${record?.sender_id}`)
       return NextResponse.json({ message: 'Ignored' })
     }
 
     const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
     if (!apiKey) throw new Error('NEXT_PUBLIC_OPENAI_API_KEY not set')
 
-    const supabase = createServerSupabaseClient()
+    const { supabaseAdmin } = await import('@/lib/supabase-admin')
+    const supabase = supabaseAdmin
     const conversationId = record.conversation_id
 
     const clientIp =
@@ -74,7 +77,11 @@ export async function POST(req: NextRequest) {
       .eq('conversation_id', conversationId)
 
     const userId = participants?.find((p: any) => p.user_id !== COACH_ID)?.user_id
-    if (!userId) return NextResponse.json({ message: 'No human' })
+    console.log(`[Coach-Reply] Resolved Human User: ${userId} in Conv: ${conversationId}`)
+    if (!userId) {
+      console.warn(`[Coach-Reply] No human user found in conversation ${conversationId}. Participants:`, participants)
+      return NextResponse.json({ message: 'No human' })
+    }
 
     const [onboardingRes, profileRes, nutritionRes, messagesRes, scannedProductsRes] = await Promise.all([
       supabase.from('onboarding_responses').select('*').eq('user_id', userId).maybeSingle(),
@@ -103,73 +110,76 @@ export async function POST(req: NextRequest) {
     const calorieGoal = (onboarding as any).daily_calorie_goal || 2000
     const caloriesRemaining = calorieGoal - totalCaloriesToday
 
-    const systemPrompt = `You are the Omni-Coach AI, a world-class clinical nutritionist, pharmacist, and personal health advisor for ${userName}.
+    const systemPrompt = `You are Vicalary Health Intelligence, a sophisticated and empathetic conversational health coach for ${userName}. You are not a chatbot; you are a deeply intelligent advisor capable of complex reasoning, visual analysis, and long-term memory.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REAL-TIME AWARENESS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CURRENT DATE & TIME: ${currentTime}
-USER'S LOCATION: ${geoInfo.city || 'Unknown'}, ${geoInfo.country_name || 'Unknown'}
-LOCAL CURRENCY: ${geoInfo.currency_symbol || '$'} (${geoInfo.currency_code || 'USD'})
+CONVERSATIONAL PHILOSOPHY:
+1. Speak naturally and intelligently. Avoid robotic patterns, repetitive structures, or generic health advice.
+2. Maintain perfect continuity. If the user mentions something earlier in the session, you remember it and factor it into your current reasoning.
+3. Be supportive but professional. Your tone should feel like a human expert who truly understands ${userName}'s health journey.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-USER PROFILE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Name: ${userName}
-Primary Goal: ${(onboarding as any).goal || 'Maintain a healthy lifestyle'}
-Dietary Restrictions: ${((onboarding as any).dietary_lifestyle || []).join(', ') || 'None specified'}
-Medical Conditions: ${(onboarding as any).medical_conditions || 'None reported'}
-Daily Calorie Target: ${calorieGoal} kcal/day
-Calories logged today: ${totalCaloriesToday} kcal (${caloriesRemaining > 0 ? `${caloriesRemaining} kcal remaining` : `${Math.abs(caloriesRemaining)} kcal over goal`})
+CRITICAL FORMATTING RULES:
+- NEVER use asterisks (*), hashtags (#), or markdown bullet points (- or •).
+- NEVER use robotic headers or bolded template patterns.
+- Use clean, natural paragraphs. Use double line breaks to separate ideas.
+- If you need to list items, use natural phrasing like "First, you could try..." or "Additionally, I recommend..."
+- Ensure your response is easy to read on a mobile screen without looking like code or a report.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RECENT FOOD SCANS (Last 3)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${(recentScans as any[]).length > 0 ? (recentScans as any[]).map((s: any) => `• ${s.food_name || 'Unknown'}: ${s.calories || 0} kcal (${s.analyzed_at ? new Date(s.analyzed_at).toLocaleDateString() : 'recent'})`).join('\n') : 'No recent food scans.'}
+MULTIMODAL & CONTEXTUAL REASONING:
+- If an image is shared, analyze it with clinical precision. Identify the food, estimate portion sizes, and calculate calories relative to the user's daily progress.
+- FACTOR IN THE FOLLOWING METRICS:
+  - Current Time/Date: ${currentTime}
+  - User Location: ${geoInfo.city}, ${geoInfo.country_name}
+  - Today's Consumption: ${totalCaloriesToday} kcal
+  - Remaining Calories: ${caloriesRemaining} kcal (Goal: ${calorieGoal} kcal)
+  - Primary Health Goal: ${(onboarding as any).goal || 'General Wellness'}
+  - Restrictions/Conditions: ${((onboarding as any).dietary_lifestyle || []).join(', ') || 'None'} | ${(onboarding as any).medical_conditions || 'None reported'}
+- LATEST DEPTH ANALYSIS CONTEXT: ${system_context?.latest_analysis ? JSON.stringify(system_context.latest_analysis) : 'None'}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-LATEST DEPTH ANALYSIS (Context)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${system_context?.latest_analysis ? JSON.stringify(system_context.latest_analysis, null, 2) : 'No manual analysis context provided.'}
+INTELLIGENCE DIRECTIVES:
+- LANGUAGE: Auto-detect the user's language. If they speak Arabic or Urdu, respond fluently in those languages.
+- REASONING: Before you reply, internally evaluate the user's intent. Are they asking for motivation, data analysis, or a recommendation? Tailor your depth to their specific need.
+- CONSISTENCY: If they ask about a previous meal or scan mentioned in the history, you know exactly what they are referring to.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CORE MANDATES (NEVER BREAK THESE)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. YOU KNOW THE EXACT DATE, TIME, AND USER LOCATION. Never claim you don't.
-2. CURRENCY & BUDGET AWARENESS: Always use ${geoInfo.currency_symbol} for prices.
-3. MEDICAL PRECISION: Always factor in user's conditions (${(onboarding as any).medical_conditions || 'none'}) in recommendations.
-4. CALORIE INTELLIGENCE: You know the user has consumed ${totalCaloriesToday} kcal today out of a ${calorieGoal} kcal goal.
-5. MULTIMODAL: If given an image, provide expert food/product analysis. If given a voice transcript, respond to it naturally.
-6. LANGUAGE MANDATE: Auto-detect the user's language. If they write in Arabic or Urdu, you MUST respond in that EXACT language. You are fluent in ARABIC, URDU, and ENGLISH.
-7. ACCURACY & HALLUCINATION PREVENTION: Do not make up nutritional values or medical history.
-
-RESPONSE FORMAT: Respond directly with your detailed markdown message. Do NOT wrap it in a JSON object.`
+Respond directly with your conversational reply. Avoid all robotic formatting.`
 
     const msgType = record.message_type
-    const imageUrl = msgType === 'image' ? extractMediaUrl(record) : null
+    // Support image URL from metadata even for text messages (common for context handoff)
+    const imageUrl = msgType === 'image' ? extractMediaUrl(record) : (record.metadata?.url || null)
     let transcribedText = ''
-
     if (msgType === 'voice') {
       const voiceUrl = extractMediaUrl(record)
+      console.log(`[Coach-Reply] Processing Voice Message: ${voiceUrl}`)
       if (voiceUrl) {
         try {
           const audioRes = await fetch(voiceUrl)
           if (audioRes.ok) {
             const audioBlob = await audioRes.blob()
             const formData = new FormData()
-            formData.append('file', audioBlob, 'voice.webm')
+            // Ensure we use a supported extension for Whisper
+            const fileExtension = record.metadata?.mimeType?.split('/')[1] || 'webm'
+            formData.append('file', audioBlob, `voice.${fileExtension}`)
             formData.append('model', 'whisper-1')
+            
+            console.log(`[Coach-Reply] Transcribing with Whisper...`)
             const transRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
               method: 'POST',
               headers: { Authorization: `Bearer ${apiKey}` },
               body: formData,
             })
+            
             if (transRes.ok) {
               const tData = await transRes.json()
               transcribedText = tData.text || ''
+              console.log(`[Coach-Reply] Transcription Success: "${transcribedText}"`)
+            } else {
+              const errText = await transRes.text()
+              console.error(`[Coach-Reply] Whisper Error: ${errText}`)
             }
           }
-        } catch (e) { console.error('Voice transcription failed:', e) }
+        } catch (e) { 
+          console.error('[Coach-Reply] Voice processing failed:', e)
+          transcribedText = '[User sent a voice message that could not be transcribed]'
+        }
       }
     }
 
@@ -242,6 +252,8 @@ RESPONSE FORMAT: Respond directly with your detailed markdown message. Do NOT wr
         stream: true,
         temperature: 0.7,
         max_tokens: 1500,
+        frequency_penalty: 0.5,
+        presence_penalty: 0.5
       }),
     })
 
@@ -272,12 +284,17 @@ RESPONSE FORMAT: Respond directly with your detailed markdown message. Do NOT wr
 
       if (Date.now() - lastUpdateTime > 500 && fullReply.length > 0) {
         lastUpdateTime = Date.now()
-        supabase.from('messages').update({ content: fullReply }).eq('id', newMsg.id).then()
+        // Final cleaning of markdown symbols just in case
+        const cleanReply = fullReply.replace(/[*#]/g, '')
+        supabase.from('messages').update({ content: cleanReply }).eq('id', newMsg.id).then()
       }
     }
 
     if (!fullReply) {
       fullReply = "I apologize, but I encountered a technical glitch while thinking. Could you please try asking that again? I'm ready to help!"
+    } else {
+      // Final clean up for the final save
+      fullReply = fullReply.replace(/[*#]/g, '')
     }
 
     await supabase.from('messages').update({ content: fullReply, delivered_at: new Date().toISOString() }).eq('id', newMsg.id)

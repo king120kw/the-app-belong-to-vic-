@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { logInfo, logError } from './logging'
 // Removed gemini import
 
 // ============================================================================
@@ -154,23 +155,30 @@ export const getCalendarData = async (userId: string, year: number, month: numbe
 export const logMeal = async (userId: string, mealData: any) => {
     const today = new Date().toISOString().split('T')[0];
 
-    // 1. Log to food analysis history
-    const { data: analysisRows, error: analysisError } = await supabase
-        .from('food_analysis_history')
-        .insert({
-            user_id: userId,
-            image_url: mealData.mealImage,
-            calories_consumed: Number(mealData.totalCalories || 0),
-            notes: typeof mealData.analysis === 'string' ? mealData.analysis : JSON.stringify(mealData.analysis || mealData)
-        })
-        .select();
+    let analysis = null;
 
-    if (analysisError) throw analysisError;
+    if (!mealData.alreadySaved) {
+        // 1. Log to food analysis history
+        const { data: analysisRows, error: analysisError } = await supabase
+            .from('food_analysis_history')
+            .insert({
+                user_id: userId,
+                image_url: mealData.mealImage,
+                calories_consumed: Number(mealData.totalCalories || 0),
+                notes: typeof mealData.analysis === 'string' ? mealData.analysis : JSON.stringify(mealData.analysis || mealData)
+            })
+            .select();
 
-    const analysis = analysisRows && analysisRows.length > 0 ? analysisRows[0] : null;
+        if (analysisError) {
+            logError(userId, 'meal_history_save_failed', { error: analysisError });
+            throw analysisError;
+        }
+        analysis = analysisRows && analysisRows.length > 0 ? analysisRows[0] : null;
+    }
 
-    // 2. Add detailed food items
-    if (mealData.foodItems && mealData.foodItems.length > 0) {
+    // 2. Add detailed food items (only if not already saved)
+    if (!mealData.alreadySaved && mealData.foodItems && mealData.foodItems.length > 0) {
+        // ... (rest of the logic remains same)
         const itemsToInsert = mealData.foodItems.map((item: any) => {
             // Map healthStatus string to health_rating number (1-10)
             let healthRating = 5;
@@ -189,7 +197,8 @@ export const logMeal = async (userId: string, mealData: any) => {
                 description: item.description,
                 image_url: item.image || item.image_url || mealData.mealImage,
                 barcode: item.barcode || mealData.barcode,
-                serving_size: item.serving_size || '1 serving'
+                serving_size: item.serving_size || '1 serving',
+                user_id: userId // Added user_id
             };
         });
 
@@ -197,7 +206,10 @@ export const logMeal = async (userId: string, mealData: any) => {
             .from('food_items')
             .insert(itemsToInsert);
 
-        if (itemsError) throw itemsError;
+        if (itemsError) {
+            logError(userId, 'food_items_save_failed', { error: itemsError });
+            throw itemsError;
+        }
     }
 
     // 3. Update daily progress
@@ -269,6 +281,8 @@ export const logMeal = async (userId: string, mealData: any) => {
                 sugar_goal: onboarding?.sugar_goal || 50
             });
     }
+
+    logInfo(userId, 'meal_logged', { calories: totalMealCalories, macros: mealMacros });
 
     return analysis;
 };

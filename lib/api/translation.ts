@@ -86,10 +86,13 @@ export const useTranslation = () => {
 
     useEffect(() => {
         if (user && detectedLoc && isAuto) {
-            const sessionStorageKey = `location_synced_${user.id}`;
-            const hasSyncedThisSession = sessionStorage.getItem(sessionStorageKey);
-
-            if (hasSyncedThisSession) return;
+            const syncKey = `location_synced_${user.id}`;
+            const toastKey = `location_toasted_${user.id}`;
+            
+            // If already synced this day, skip to avoid spamming Supabase
+            const lastSync = localStorage.getItem(syncKey);
+            const todayStr = new Date().toISOString().split('T')[0];
+            if (lastSync === todayStr) return;
 
             const s = settings as any;
             // Sync if any core location attribute is missing or different
@@ -97,7 +100,7 @@ export const useTranslation = () => {
                 s.language !== detectedLoc.language ||
                 s.country_code !== detectedLoc.country_code ||
                 s.currency !== detectedLoc.currency ||
-                (s.timezone !== detectedLoc.timezone && s.timezone === 'UTC'); // Only auto-update if it was UTC
+                (s.timezone !== detectedLoc.timezone);
 
             if (needsSync) {
                 updateSettings(user.id, {
@@ -109,26 +112,20 @@ export const useTranslation = () => {
                 }).then(() => {
                     queryClient.invalidateQueries({ queryKey: ['settings', user.id] });
 
-                    // Use a separate flag for the toast to ensure it only shows once
-                    const toastKey = `location_toasted_${user.id}`;
-                    if (!sessionStorage.getItem(toastKey)) {
-                        // Only toast if it's a significant change
-                        if (s && s.country_code !== detectedLoc.country_code) {
-                            toast.success(t('location_updated_toast').replace('%s', detectedLoc.country), {
-                                icon: '🌎',
-                                duration: 5000
-                            });
-                            sessionStorage.setItem(toastKey, 'true');
-                        }
+                    // Only toast if it's a significant change and we haven't toasted recently
+                    if (s && s.country_code !== detectedLoc.country_code && !localStorage.getItem(toastKey)) {
+                        toast.success(t('location_updated_toast').replace('%s', detectedLoc.country), {
+                            icon: '🌎',
+                            duration: 5000
+                        });
+                        localStorage.setItem(toastKey, todayStr);
                     }
-
-                    sessionStorage.setItem(sessionStorageKey, 'true');
+                    localStorage.setItem(syncKey, todayStr);
                 }).catch(err => {
                     console.error("Failed to sync location settings:", err);
                 });
             } else {
-                // If it doesn't need sync, we can still mark it as "checked" for this session
-                sessionStorage.setItem(sessionStorageKey, 'true');
+                localStorage.setItem(syncKey, todayStr);
             }
         }
     }, [detectedLoc, isAuto, user, settings, queryClient]);

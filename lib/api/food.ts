@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { logInfo, logError, logWarn } from './logging'
 // Removed gemini import as it is now strictly backend-driven via Edge Functions
 
 // ============================================================================
@@ -100,16 +101,19 @@ export const analyzeFoodImage = async (userId: string, file: File, options?: any
         const data = await res.json();
 
         if (data && data.error) {
+            logWarn(userId, 'food_analysis_ai_error', { error: data.error, imageUrl: publicUrl });
             console.warn('analyze-food-image returned error:', data.error);
             return { ...data, image_url: publicUrl };
         }
 
         if (data && data.name) {
+            logInfo(userId, 'food_analysis_success', { productName: data.name, imageUrl: publicUrl });
             return { ...data, image_url: publicUrl };
         }
 
         throw new Error("Invalid response from AI analysis");
-    } catch (error) {
+    } catch (error: any) {
+        logError(userId, 'food_analysis_failed', { error: error.message || error });
         console.error("AI analysis failed:", error);
         throw error;
     }
@@ -136,6 +140,7 @@ export const scanProduct = async (userId: string, barcode: string, options?: any
 
     if (!res.ok) throw new Error('analyze-product-barcode failed')
     const data = await res.json()
+    logInfo(userId, 'barcode_scan_success', { barcode, productName: data.name });
 
     // Save to cache
     productCache.set(barcode, { data, timestamp: Date.now() });

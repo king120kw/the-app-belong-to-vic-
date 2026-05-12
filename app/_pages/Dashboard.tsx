@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useRef } from "react";
-import { X, SwitchCamera, Images, Camera, Sun, Moon } from "lucide-react";
+import { X, SwitchCamera, Images, Camera, Sun, Moon, RefreshCw } from "lucide-react";
 import Link from "next/link"
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -85,10 +85,12 @@ export default function Dashboard() {
   });
 
   // Fetch daily progress
-  const { data: dailyProgress } = useQuery({
-    queryKey: ['daily-progress', user?.id],
-    queryFn: () => getDailyProgress(user!.id, new Date().toISOString().split('T')[0]),
-    enabled: !!user?.id
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data: dailyProgress, isLoading: loadingProgress } = useQuery({
+    queryKey: ['daily-progress', user?.id, today],
+    queryFn: () => getDailyProgress(user?.id || '', today),
+    enabled: !!user?.id,
   });
 
   // Fetch onboarding info for calorie goals
@@ -107,15 +109,15 @@ export default function Dashboard() {
   });
 
   const { data: dailySummary } = useQuery({
-    queryKey: ['daily-summary', user?.id],
-    queryFn: () => getDailySummary(user!.id),
+    queryKey: ['daily-summary', user?.id, today],
+    queryFn: () => getDailySummary(user?.id || ''),
     enabled: !!user?.id
   });
 
   // Fetch suggestions
   const { data: suggestions } = useQuery({
-    queryKey: ['suggestions', user?.id],
-    queryFn: () => getDailyMealSuggestions(user!.id),
+    queryKey: ['suggestions', user?.id, today],
+    queryFn: () => getDailyMealSuggestions(user?.id || ''),
     enabled: !!user?.id
   });
 
@@ -153,8 +155,16 @@ export default function Dashboard() {
       const stream = await requestCameraAccess({
         video: {
           facingMode: facingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 60 },
+          advanced: [
+            { exposureMode: 'continuous' } as any,
+            { whiteBalanceMode: 'continuous' } as any,
+            { focusMode: 'continuous' } as any,
+            { brightness: 100 } as any,
+            { contrast: 100 } as any
+          ]
         }
       });
       if (cameraVideoRef.current) {
@@ -187,8 +197,16 @@ export default function Dashboard() {
       const stream = await requestCameraAccess({
         video: {
           facingMode: newMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 60 },
+          advanced: [
+            { exposureMode: 'continuous' } as any,
+            { whiteBalanceMode: 'continuous' } as any,
+            { focusMode: 'continuous' } as any,
+            { brightness: 100 } as any,
+            { contrast: 100 } as any
+          ]
         }
       });
       if (cameraVideoRef.current) {
@@ -391,7 +409,9 @@ export default function Dashboard() {
       addNotification('success', `Meal ${analysisData.name || ''} logged successfully!`);
       // toast.success("Meal logged!"); // Removing separate toast to avoid redundancy
       setShowMealAnalysis(false);
-      queryClient.invalidateQueries({ queryKey: ['daily-progress', user.id] });
+      queryClient.invalidateQueries({ queryKey: ['daily-progress', user.id, today] });
+      queryClient.invalidateQueries({ queryKey: ['daily-summary', user.id, today] });
+      queryClient.invalidateQueries({ queryKey: ['onboarding', user.id] });
     } catch (err: any) {
       toast.error(`Failed to log meal: ${err.message}`);
     }
@@ -541,13 +561,16 @@ export default function Dashboard() {
           protein: productData.protein,
           carbs: productData.carbs,
           fat: productData.fat
-        }]
+        }],
+        alreadySaved: true
       };
       await logMeal(user.id, mealToLog);
       addNotification('success', `${productData.productName} logged to your diary!`);
       // toast.success("Product logged!"); // Removing separate toast
       setShowProductDetails(false);
-      queryClient.invalidateQueries({ queryKey: ['daily-progress', user.id] });
+      queryClient.invalidateQueries({ queryKey: ['daily-progress', user.id, today] });
+      queryClient.invalidateQueries({ queryKey: ['daily-summary', user.id, today] });
+      queryClient.invalidateQueries({ queryKey: ['onboarding', user.id] });
     } catch (err: any) {
       toast.error(`Failed to log product: ${err.message}`);
     }
@@ -590,65 +613,65 @@ export default function Dashboard() {
   return (
     <div className="relative mx-auto flex h-auto min-h-screen w-full max-w-md flex-col bg-background-light dark:bg-[#0d1418] overflow-x-hidden font-display">
       {/* Modals */}
-      <div className={`modal-overlay ${showCameraModal ? "active" : ""}`}>
-        <div className="modal-content !p-0 bg-black h-[100dvh] flex flex-col">
-          <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
+      <div className={`modal-overlay !bg-black ${showCameraModal ? "active" : ""}`}>
+        <div className="modal-content !p-0 bg-black w-screen h-[100dvh] flex flex-col overflow-hidden">
+          <div className="relative w-full h-full bg-black overflow-hidden">
             <video
               ref={cameraVideoRef}
-              className="w-full h-full object-contain"
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ filter: 'contrast(1.1) brightness(1.1) saturate(1.2) sharpness(1.1)' } as any}
               autoPlay
               playsInline
             />
 
-            {/* Camera Controls */}
-            <div className="absolute top-6 right-6 flex flex-col gap-4">
+            {/* Immersive Scan Overlay */}
+            <div className="absolute inset-0 pointer-events-none border-[40px] border-black/5" />
+
+            {/* Top Glass Header */}
+            <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent">
               <button
                 onClick={closeCamera}
-                className="size-12 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center border border-white/10 hover:bg-black/60 transition-colors"
-                title="Close"
+                className="size-10 rounded-full bg-black/20 backdrop-blur-2xl text-white flex items-center justify-center border border-white/10 hover:bg-black/40 transition-all active:scale-90"
               >
-                <X size={22} />
+                <X size={20} />
               </button>
-              <button
-                onClick={switchCamera}
-                className="size-12 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center border border-white/10 hover:bg-black/60 transition-colors"
-                title="Switch Camera"
-              >
-                <SwitchCamera size={22} />
-              </button>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={switchCamera}
+                  className="size-10 rounded-full bg-black/20 backdrop-blur-2xl text-white flex items-center justify-center border border-white/10 hover:bg-black/40 transition-all active:scale-90"
+                >
+                  <SwitchCamera size={20} />
+                </button>
+              </div>
             </div>
 
-            <div className="absolute bottom-12 left-0 right-0 flex flex-col items-center gap-6">
-              <p className="text-white/80 text-sm font-medium px-4 py-2 bg-black/40 backdrop-blur-sm rounded-full border border-white/10">
-                {isAnalyzing ? t('analyzing') : "Capture food for analysis"}
-              </p>
+            {/* Bottom Perception Controls */}
+            <div className="absolute bottom-0 left-0 right-0 p-10 pb-16 flex flex-col items-center gap-8 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
 
-              <div className="flex items-center gap-12">
+
+              <div className="flex items-center justify-center w-full max-w-md gap-8">
                 <button
                   onClick={() => galleryInputRef.current?.click()}
                   disabled={isAnalyzing}
-                  className="size-14 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center border border-white/20 hover:bg-white/20 transition-all active:scale-95"
-                  title="Upload from Gallery"
+                  className="size-14 rounded-full bg-white/5 backdrop-blur-2xl text-white flex items-center justify-center border border-white/10 hover:bg-white/10 transition-all active:scale-90 shadow-2xl"
                 >
-                  <Images size={28} />
+                  <Images size={24} />
                 </button>
 
                 <button
                   onClick={capturePhoto}
                   disabled={isAnalyzing}
-                  className="size-24 rounded-full border-4 border-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all bg-white/20 backdrop-blur-sm disabled:opacity-50"
+                  className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-md border-4 border-white flex items-center justify-center active:scale-90 transition-all shadow-2xl"
                 >
-                  <div className="size-20 rounded-full bg-white shadow-xl flex items-center justify-center">
-                    {isAnalyzing ? (
-                      <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-vic-green"></div>
-                    ) : (
-                      <Camera className="text-vic-green" size={44} />
-                    )}
+                  <div className="w-16 h-16 rounded-full bg-white shadow-lg flex items-center justify-center">
+                    {isAnalyzing && <RefreshCw className="text-vic-green animate-spin" size={28} />}
                   </div>
                 </button>
 
-                <div className="size-14" /> {/* Spacer to balance gallery button */}
+                <div className="size-14 invisible" /> {/* Spacer */}
               </div>
+              
             </div>
 
             <input

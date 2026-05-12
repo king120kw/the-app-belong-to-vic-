@@ -59,11 +59,13 @@ export default function PhoneInput() {
 
     const filteredCountries = useMemo(() => {
         if (!countries) return [];
+        const excludedCodes = ['IL', 'AE', 'US', 'GB'];
         return countries
             .filter(c =>
-                c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 c.dialCode.includes(searchQuery) ||
-                c.code.toLowerCase().includes(searchQuery.toLowerCase())
+                c.code.toLowerCase().includes(searchQuery.toLowerCase())) &&
+                !excludedCodes.includes(c.code)
             )
             .sort((a, b) => a.name.localeCompare(b.name)); // Explicit alphabetical sort
     }, [countries, searchQuery]);
@@ -136,18 +138,20 @@ export default function PhoneInput() {
                 <div className="w-full space-y-4 relative z-30">
                     <div className="flex flex-col gap-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2">{t('phone_number_label')}</label>
-                        <div className="relative flex gap-2">
+                        <div className="relative flex items-center bg-white dark:bg-[#1f2c34] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm focus-within:ring-2 focus-within:ring-vic-green/30 focus-within:border-vic-green transition-all overflow-visible">
                             {/* Custom Country Dropdown */}
                             <div className="relative" ref={dropdownRef}>
                                 <button
                                     onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                                    className="flex items-center gap-2 h-16 px-4 bg-white dark:bg-[#1f2c34] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:border-vic-green transition-all"
+                                    className="flex items-center gap-2 h-14 px-4 hover:bg-black/5 dark:hover:bg-white/5 rounded-l-2xl border-r border-slate-100 dark:border-slate-800 transition-all min-w-[110px] justify-between"
                                 >
-                                    <span className="text-2xl">{(selectedCountry as any)?.emoji || '🏳️'}</span>
-                                    <span className="font-bold text-slate-900 dark:text-white">
-                                        {selectedCountry?.dialCode || '--'}
-                                    </span>
-                                    <ChevronDown className="text-slate-400" size={16} />
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <span className="text-xl">{(selectedCountry as any)?.emoji || '🏳️'}</span>
+                                        <span className="font-black text-slate-900 dark:text-white text-sm whitespace-nowrap">
+                                            {selectedCountry?.dialCode || '--'}
+                                        </span>
+                                    </div>
+                                    <ChevronDown className="text-slate-400 shrink-0" size={14} />
                                 </button>
 
                                 <AnimatePresence>
@@ -156,7 +160,7 @@ export default function PhoneInput() {
                                             initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                             animate={{ opacity: 1, y: 0, scale: 1 }}
                                             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                            className="absolute top-full left-0 mt-2 w-[280px] bg-white dark:bg-[#1f2c34] rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden z-50 origin-top-left"
+                                            className="absolute top-full left-0 mt-2 w-[calc(100vw-48px)] sm:w-[320px] bg-white dark:bg-[#1f2c34] rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden z-50 origin-top-left"
                                         >
                                             <div className="p-3 border-b border-slate-50 dark:border-slate-800 bg-slate-50/50 dark:bg-black/20">
                                                 <input
@@ -202,7 +206,7 @@ export default function PhoneInput() {
                                 value={phoneNumber}
                                 onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
                                 placeholder={t('phone_number_label')}
-                                className="flex-1 h-16 px-4 text-lg font-bold bg-white dark:bg-[#1f2c34] text-slate-900 dark:text-white rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm focus:ring-2 focus:ring-vic-green focus:border-transparent outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-700"
+                                className="flex-1 h-14 px-4 text-lg font-black bg-transparent text-slate-900 dark:text-white outline-none placeholder:text-slate-300 dark:placeholder:text-slate-700 placeholder:font-medium"
                             />
                         </div>
                     </div>

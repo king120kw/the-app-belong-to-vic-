@@ -10,30 +10,48 @@ export const syncUserWithSupabase = async (supabaseUser: any) => {
 
     console.log("Syncing user with Supabase:", supabaseUser.id);
 
-    // Get existing profile to preserve data (especially avatar_url)
-    const { data: existingProfile } = await supabase
+    // 1. Fetch full existing profile to preserve all data
+    const { data: existingProfile, error: fetchError } = await supabase
         .from('user_profiles')
-        .select('avatar_url')
+        .select('*')
         .eq('id', supabaseUser.id)
         .maybeSingle();
 
-    const { data: profileRows, error } = await supabase
+    if (fetchError) {
+        console.error("Error fetching existing profile:", fetchError);
+    }
+
+    // 2. Prepare update payload - only update essential fields if profile exists
+    // OR create new one if it doesn't.
+    const profilePayload: any = {
+        id: supabaseUser.id,
+        email: supabaseUser.email,
+        updated_at: new Date().toISOString()
+    };
+
+    // Only set full_name if it doesn't exist yet OR if metadata has a new value
+    const metadataName = supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.first_name;
+    if (!existingProfile?.full_name || metadataName) {
+        profilePayload.full_name = metadataName || existingProfile?.full_name || 'New User';
+    }
+
+    // Only set avatar if it doesn't exist yet
+    if (!existingProfile?.avatar_url || supabaseUser.user_metadata?.avatar_url) {
+        profilePayload.avatar_url = supabaseUser.user_metadata?.avatar_url || existingProfile?.avatar_url || '';
+    }
+
+    // 3. Upsert to ensure record exists and essential fields are updated
+    const { data: profileRows, error: upsertError } = await supabase
         .from('user_profiles')
-        .upsert({
-            id: supabaseUser.id,
-            email: supabaseUser.email,
-            full_name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.first_name || 'New User',
-            avatar_url: supabaseUser.user_metadata?.avatar_url || existingProfile?.avatar_url || '',
-            updated_at: new Date().toISOString()
-        }, {
+        .upsert(profilePayload, {
             onConflict: 'id'
         })
         .select()
         .limit(1);
 
-    if (error) {
-        console.error("Error syncing user with Supabase:", error);
-        throw error;
+    if (upsertError) {
+        console.error("Error syncing user with Supabase:", upsertError);
+        throw upsertError;
     }
 
     const profile = profileRows && profileRows.length > 0 ? profileRows[0] : null;
@@ -308,33 +326,15 @@ export const sendPhoneVerification = async (userId: string, phoneNumber: string,
 }
 
 export const verifyPhoneCode = async (userId: string, phoneNumber: string, code: string) => {
-    const { data: dataRows, error } = await supabase
-        .from('chat_users')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('phone_number', phoneNumber)
-        .limit(1)
+    const res = await fetch('/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, phoneNumber, code })
+    });
 
-    const data = dataRows && dataRows.length > 0 ? dataRows[0] : null;
-
-    if (error) throw error
-
-    if (data && data.verification_code === code) {
-        const { error: updateError, data: updatedData } = await supabase
-            .from('chat_users')
-            .update({ is_verified: true })
-            .eq('id', (data as any).id)
-            .select()
-
-        if (updateError) throw updateError
-
-        // Critical: If RLS blocked the update, it will succeed but return 0 rows.
-        if (!updatedData || updatedData.length === 0) {
-            throw new Error('Verification failed. Database update was blocked by security policies.');
-        }
-
-        return { success: true }
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Verification failed');
     }
-
-    throw new Error('Invalid verification code')
+    return data;
 }

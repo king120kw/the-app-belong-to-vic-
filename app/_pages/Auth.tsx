@@ -48,14 +48,32 @@ export default function Auth() {
 
   const syncAndNavigate = async () => {
     try {
+      console.log("[Auth] Starting profile sync for user:", user?.id);
       const profile = await syncUserWithSupabase(user);
-      if (profile && profile.onboarding_completed) {
+      
+      if (!profile) {
+        console.error("[Auth] No profile returned after sync");
+        router.push("/onboarding");
+        return;
+      }
+
+      console.log("[Auth] Profile synced successfully:", {
+        id: profile.id,
+        name: profile.full_name,
+        onboarding_completed: profile.onboarding_completed
+      });
+
+      if (profile.onboarding_completed) {
+        console.log("[Auth] Returning user detected. Redirecting to dashboard.");
+        toast.success(`${t('login_welcome')} ${profile.full_name || ''}`);
         router.push("/dashboard");
       } else {
+        console.log("[Auth] New user or incomplete onboarding. Redirecting to onboarding.");
         router.push("/onboarding");
       }
-    } catch (error) {
-      console.error("Sync failed:", error);
+    } catch (error: any) {
+      console.error("[Auth] Sync and navigate failed:", error);
+      toast.error("Failed to restore session. Please try again.");
       router.push("/onboarding");
     }
   };
@@ -165,6 +183,9 @@ export default function Auth() {
         <div className="form-container sign-in-container">
           <div className="flex w-full h-full items-center justify-center p-4 sm:p-8">
             <div className="w-full rounded-2xl form-card p-8 sm:p-10 text-center max-w-[400px] mx-auto shadow-2xl backdrop-blur-xl bg-white/10 border border-white/20">
+              <div className="flex justify-center mb-4">
+                <img src="/app logo.png" alt="Vicalary" className="h-14 w-14 object-contain rounded-full bg-white/10 p-1" />
+              </div>
               <h1 className="text-white text-3xl font-bold tracking-tight">
                 {t('welcome_back')}
               </h1>

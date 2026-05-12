@@ -97,10 +97,8 @@ export default function VerificationCode() {
         if (verificationCode.length === 6) {
             try {
                 setLoading(true);
-                // Extract local part for backend if needed, or send full
-                // The current api/auth expect phoneNumber as stored in chat_users
-                // We'll send what's in localStorage
-                await verifyPhoneCode(user.id, localPhoneNumber || phoneNumber, verificationCode);
+                // Use the full E164 number stored in localStorage for consistent verification
+                await verifyPhoneCode(user.id, phoneNumber, verificationCode);
                 queryClient.setQueryData(['chat-verified', user.id], true);
                 toast.success(t('phone_verified_msg'));
 

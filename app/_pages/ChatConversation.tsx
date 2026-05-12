@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useParams, usePathname } from 'next/navigation';
 import { requestMicrophoneAccess } from "@/lib/api/permissions";
-import { AlertCircle, MapPin, Navigation, Plus, Link, FileText, ArrowLeft, Bookmark, Video, Phone, Trash2, MoreVertical, Smile, Paperclip, Mic, Send, CheckCheck, Lock, Image, Headphones, User, BarChart, ChevronLeft } from 'lucide-react';
+import { AlertCircle, MapPin, Navigation, Plus, Link, FileText, ArrowLeft, Bookmark, Video, Phone, Trash2, MoreVertical, Smile, Paperclip, Mic, Send, CheckCheck, Lock, Image, Headphones, User, BarChart, ChevronLeft, TriangleAlert, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { getConversationById, getMessages, sendMessage, uploadChatMedia, markAsRead, sendTypingIndicator, initiateCallV2, updateCallStatus, softDeleteConversation, findUserByIdSecure, provisionAndSendMessage, findConversationByParticipants } from '@/lib/api/chat';
@@ -92,35 +93,44 @@ const AudioMessage = ({ src }: { src: string }) => {
     };
 
     return (
-        <div className="flex items-center gap-3 bg-white/10 dark:bg-black/20 backdrop-blur-md p-2.5 px-4 rounded-2xl border border-white/20 dark:border-white/5 min-w-[200px] shadow-lg group hover:bg-white/20 dark:hover:bg-black/40 transition-all duration-300">
+        <div className="flex items-center gap-3 bg-emerald-500/5 dark:bg-emerald-500/10 backdrop-blur-md p-3 px-4 rounded-2xl border border-emerald-500/20 min-w-[240px] shadow-sm group hover:bg-emerald-500/10 transition-all duration-300">
             <button
                 onClick={handleTogglePlay}
                 disabled={error}
-                className="size-10 flex items-center justify-center bg-vic-green rounded-full shadow-[0_0_15px_rgba(19,236,55,0.4)] hover:scale-110 active:scale-95 transition-all text-slate-900 shrink-0"
+                className="size-11 flex items-center justify-center bg-vic-green text-white rounded-full shadow-lg shadow-vic-green/20 hover:scale-105 active:scale-95 transition-all shrink-0"
             >
-                {error ? <AlertCircle size={22} /> : isPlaying
-                    ? <span className="text-2xl font-bold leading-none">⏸</span>
-                    : <span className="text-2xl font-bold leading-none">▶</span>}
+                {error ? <AlertCircle size={20} /> : (
+                    isPlaying ? (
+                        <div className="flex gap-1.5">
+                            <div className="w-1.5 h-4 bg-white rounded-full animate-pulse"></div>
+                            <div className="w-1.5 h-4 bg-white rounded-full animate-pulse [animation-delay:200ms]"></div>
+                        </div>
+                    ) : (
+                        <div className="translate-x-0.5">
+                            <div className="w-0 h-0 border-y-[8px] border-y-transparent border-l-[14px] border-l-white rounded-sm"></div>
+                        </div>
+                    )
+                )}
             </button>
 
-            <div className="flex-1 space-y-1">
-                <div className="flex items-end gap-0.5 h-6">
-                    {[...Array(20)].map((_, i) => (
+            <div className="flex-1 space-y-1.5">
+                <div className="flex items-end gap-1 h-6">
+                    {[...Array(24)].map((_, i) => (
                         <div
                             key={i}
-                            className={`w-1 rounded-full transition-all duration-300`}
+                            className={`w-[3px] rounded-full transition-all duration-500 ease-out`}
                             style={{ 
-                                height: `${30 + (Math.sin(i * 0.5) * 20) + 20}%`,
-                                backgroundColor: (progress * 20 / 100) > i ? '#13ec37' : 'currentColor',
-                                opacity: (progress * 20 / 100) > i ? 1 : 0.2
+                                height: `${20 + (Math.sin(i * 0.8) * 30) + 30}%`,
+                                backgroundColor: (progress * 24 / 100) > i ? '#10B981' : '#CBD5E1',
+                                opacity: (progress * 24 / 100) > i ? 1 : 0.3
                             }}
                         />
                     ))}
                 </div>
                 
-                <div className="flex justify-between items-center text-[10px] font-black tracking-tighter text-slate-500 underline-offset-2 dark:text-white/70">
-                    <span>{isPlaying ? 'Playing...' : 'Voice Note'}</span>
-                    <span>{duration > 0 ? `${Math.floor(audioRef.current?.currentTime || 0 / 60)}:${Math.floor(audioRef.current?.currentTime || 0 % 60).toString().padStart(2, '0')}` : '0:00'}</span>
+                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/70">
+                    <span className="animate-pulse">{isPlaying ? 'Playing Audio' : 'Voice Message'}</span>
+                    <span>{duration > 0 ? `${Math.floor((audioRef.current?.currentTime || 0) / 60)}:${Math.floor((audioRef.current?.currentTime || 0) % 60).toString().padStart(2, '0')}` : '0:00'}</span>
                 </div>
             </div>
 
@@ -259,9 +269,10 @@ export default function ChatConversation() {
     const [showCamera, setShowCamera] = useState(false);
     const [otherUserTyping, setOtherUserTyping] = useState(false);
     const [otherUserOnline, setOtherUserOnline] = useState(false);
-    const [recordingStartY, setRecordingStartY] = useState<number | null>(null);
+    const [isProcessingVoice, setIsProcessingVoice] = useState(false);
     const [recordingDragY, setRecordingDragY] = useState(0);
     const [recordingDragX, setRecordingDragX] = useState(0);
+    const [recordingStartY, setRecordingStartY] = useState<number | null>(null);
     const [recordingStartX, setRecordingStartX] = useState<number | null>(null);
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
@@ -282,6 +293,66 @@ export default function ChatConversation() {
     const [isDictating, setIsDictating] = useState(false);
     const recognitionRef = useRef<any>(null);
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // --- Sub-components ---
+    const ContextAttachment = () => {
+        if (!pendingAnalysisContext) return null;
+        const ctx = pendingAnalysisContext;
+        return (
+            <motion.div 
+                initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                className="mx-4 mb-6 p-4 bg-white/5 dark:bg-white/5 backdrop-blur-xl rounded-3xl border border-vic-green/30 shadow-2xl relative overflow-hidden group"
+            >
+                <div className="absolute top-0 right-0 p-2 z-10">
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            clearPendingAnalysisContext();
+                        }}
+                        className="p-1.5 bg-black/20 hover:bg-black/40 rounded-full transition-all text-white/60 hover:text-white"
+                    >
+                        <X size={14} />
+                    </button>
+                </div>
+                
+                <div className="flex gap-4 relative z-0">
+                    <div className="w-16 h-16 rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-lg">
+                        <img src={ctx.productImage} className="w-full h-full object-cover" alt="" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <h4 className="font-black text-slate-800 dark:text-white text-sm truncate uppercase tracking-tight">{ctx.productName}</h4>
+                            {ctx.healthStatus && (
+                                <span className={`px-1.5 py-0.5 text-[8px] font-black rounded-md border ${
+                                    ctx.healthStatus === 'GOOD' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                    ctx.healthStatus === 'POOR' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                    'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                }`}>
+                                    {ctx.healthStatus}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase overflow-x-auto no-scrollbar">
+                            <span className="shrink-0">{ctx.calories} kcal</span>
+                            <span className="shrink-0 opacity-20">|</span>
+                            <span className="shrink-0 text-vic-blue">{ctx.protein}g P</span>
+                            <span className="shrink-0 text-amber-400">{ctx.carbs}g C</span>
+                            <span className="shrink-0 text-rose-400">{ctx.fat}g F</span>
+                        </div>
+                    </div>
+                </div>
+                
+                {ctx.political_warning && (
+                    <div className="mt-3 flex items-center gap-2 p-2 bg-rose-500/10 rounded-xl border border-rose-500/20">
+                        <TriangleAlert size={12} className="text-rose-500 shrink-0" />
+                        <p className="text-[9px] font-black text-rose-400 uppercase leading-tight tracking-wider">{ctx.political_warning}</p>
+                    </div>
+                )}
+            </motion.div>
+        );
+    };
 
     // --- Queries ---
 
@@ -412,7 +483,7 @@ export default function ChatConversation() {
     }, [isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile]);
 
     const displayAvatar = useMemo(() => {
-        if (isAI) return '/APP%20LOGO.jpg';
+        if (isAI) return '/app logo.png';
         if (isSelf) return profile?.avatar_url || null;
         if (isVirtual) return virtualProfile?.avatar_url || null;
         const rawP = otherUserProfile || otherParticipant?.user_profiles;
@@ -470,7 +541,7 @@ export default function ChatConversation() {
 
 
     const isOnline = otherParticipant && onlineUsers.has(otherParticipant.user_id);
-    const expertStatus = isOnline ? "online" : "offline";
+    const displayStatus = isOnline ? "online" : "offline";
 
     // --- Actions ---
 
@@ -681,6 +752,7 @@ export default function ChatConversation() {
         }
 
         toast.loading("Sending audio...", { id: 'voice-upload' });
+        if (isAI) setIsProcessingVoice(true);
         try {
             const audioFile = new File([blob], `voice_note_${Date.now()}.webm`, { type: 'audio/webm' });
             const publicUrl = await uploadChatMedia(user.id, audioFile);
@@ -688,13 +760,18 @@ export default function ChatConversation() {
             sendMutation.mutate({
                 content: "Voice Message",
                 type: 'voice',
-                metadata: { url: publicUrl, duration: recordingDuration }
+                metadata: { 
+                    url: publicUrl, 
+                    duration: recordingDuration,
+                    mimeType: blob.type
+                }
             });
 
             toast.success("Sent!", { id: 'voice-upload' });
         } catch (err) {
             console.error("Failed to upload audio:", err);
             toast.error("Failed to send audio", { id: 'voice-upload' });
+            setIsProcessingVoice(false);
         } finally {
             setRecordedAudio(null);
             setRecordingStatus('idle');
@@ -790,23 +867,35 @@ export default function ChatConversation() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             const barWidth = 3;
-            const gap = 2;
+            const gap = 3;
             const barsToDraw = Math.floor(canvas.width / (barWidth + gap));
+            const centerHeight = canvas.height / 2;
 
-            // Draw generic bars based on volume, mirrored from center would be nice, but simple left-to-right for now
-            // Actually, let's just draw random-looking bars purely based on frequency data
-            // We use a subset of dataArray to look more active
+            // Gradient for the bars
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#10B981'); // Emerald-500
+            gradient.addColorStop(0.5, '#34D399'); // Emerald-400
+            gradient.addColorStop(1, '#10B981'); // Emerald-500
+
+            ctx.fillStyle = gradient;
 
             for (let i = 0; i < barsToDraw; i++) {
+                // Use frequency data for more movement
                 const value = dataArray[i % bufferLength] || 0;
                 const percent = value / 255;
-                const height = Math.max(percent * canvas.height, 4); // Min height 4px
+                const height = Math.max(percent * (canvas.height * 0.8), 6); // Min height 6px
 
-                // Center vertically
-                const y = (canvas.height - height) / 2;
+                const x = i * (barWidth + gap);
+                const y = centerHeight - (height / 2);
 
-                ctx.fillStyle = '#EF4444'; // Red-500
-                ctx.fillRect((i * (barWidth + gap)), y, barWidth, height); // Simple rect for compatibility
+                // Rounded bars for premium look with fallback
+                if (ctx.roundRect) {
+                    ctx.beginPath();
+                    ctx.roundRect(x, y, barWidth, height, 4);
+                    ctx.fill();
+                } else {
+                    ctx.fillRect(x, y, barWidth, height);
+                }
             }
 
             animationFrameRef.current = requestAnimationFrame(animate);
@@ -883,6 +972,10 @@ export default function ChatConversation() {
 
             if (payload.eventType === 'INSERT') {
                 const newMessage = payload.new;
+                if (newMessage.sender_id === COACH_ID) {
+                    setIsProcessingVoice(false);
+                    setOtherUserTyping(false);
+                }
 
                 // 1. Update local cache with deduplication
                 queryClient.setQueryData(['messages', activeId], (old: any) => {
@@ -1119,7 +1212,8 @@ export default function ChatConversation() {
                 clearLatestAnalysis();
             }
 
-            return sendMessage(user.id, activeId, args.content, (args.type as any) || 'text', messageMetadata, isAI, isSelf);
+            const result = await sendMessage(user.id, activeId, args.content, (args.type as any) || 'text', messageMetadata, isAI, isSelf);
+            return result;
         },
         onMutate: async (newMsg) => {
             console.log("[Chat] sendMutation.onMutate", newMsg);
@@ -1175,7 +1269,10 @@ export default function ChatConversation() {
 
         // Attach any pending analysis context when sending to the coach
         const contextMetadata = isAI && pendingAnalysisContext
-            ? { scannedProductContext: pendingAnalysisContext }
+            ? { 
+                scannedProductContext: pendingAnalysisContext,
+                url: pendingAnalysisContext.productImage
+              }
             : undefined;
 
         if (isAI && pendingAnalysisContext) {
@@ -1507,7 +1604,9 @@ export default function ChatConversation() {
                             {isAI && <span className="text-[9px] font-bold bg-vic-green/20 text-vic-green px-1.5 py-0.5 rounded-full">AI</span>}
                         </h2>
                         <p className="text-[13px] text-[#667781] dark:text-[#8696a0] truncate">
-                            {otherUserTyping ? (
+                            {isProcessingVoice ? (
+                                <span className="text-vic-green font-medium animate-pulse">Transcribing...</span>
+                            ) : otherUserTyping ? (
                                 <span className="text-vic-green font-medium animate-pulse">typing...</span>
                             ) : otherUserOnline ? (
                                 <span className="text-vic-green font-medium">Online</span>
@@ -1516,7 +1615,7 @@ export default function ChatConversation() {
                             ) : isSelf ? (
                                 'Personal Workspace'
                             ) : (
-                                expertStatus || 'Offline'
+                                displayStatus || 'Offline'
                             )}
                         </p>
                     </div>
@@ -1559,6 +1658,7 @@ export default function ChatConversation() {
                     ref={scrollRef}
                     className="flex-1 overflow-y-auto px-4 md:px-12 py-4 space-y-2 custom-scrollbar flex flex-col min-h-0"
                 >
+                    <ContextAttachment />
                     {Object.keys(groupedMessages).length > 0 ? (
                         Object.entries(groupedMessages).map(([date, dateMsgs]) => (
                             <div key={date} className="flex flex-col gap-2">
@@ -1620,13 +1720,16 @@ export default function ChatConversation() {
                     )}
 
                     {/* Typing Indicator Overlay (Outside the date groups but inside main) */}
-                    {otherUserTyping && (
+                    { (otherUserTyping || isProcessingVoice) && (
                         <div className="flex w-full justify-start mt-1 px-3 py-1">
                             <div className="bg-white dark:bg-[#202c33] p-2 rounded-xl shadow-sm flex items-center gap-2">
+                                <span className="text-[11px] text-vic-green font-bold uppercase tracking-wider">
+                                    {isProcessingVoice ? 'AI is transcribing' : 'AI is thinking'}
+                                </span>
                                 <div className="flex gap-1">
-                                    <div className="size-1 bg-[#8696A0] rounded-full animate-bounce"></div>
-                                    <div className="size-1 bg-[#8696A0] rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                                    <div className="size-1 bg-[#8696A0] rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                                    <div className="size-1 bg-vic-green rounded-full animate-bounce"></div>
+                                    <div className="size-1 bg-vic-green rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                                    <div className="size-1 bg-vic-green rounded-full animate-bounce [animation-delay:0.4s]"></div>
                                 </div>
                             </div>
                         </div>
@@ -1702,79 +1805,86 @@ export default function ChatConversation() {
                                         <Trash2 size={24} />
                                     </button>
 
-                                    <audio src={recordedAudio.url} controls className="flex-1 h-8 max-w-[200px] md:max-w-none" />
+                                    <div className="flex-1">
+                                        <AudioMessage src={recordedAudio.url} />
+                                    </div>
 
                                     <button
                                         onClick={confirmVoiceSend}
-                                        className="size-[40px] bg-vic-green text-white rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
+                                        className="size-[44px] bg-vic-green text-white rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
                                         title="Send Voice Message"
                                     >
-                                        <Send size={20} />
+                                        <Send size={22} />
                                     </button>
                                 </div>
                             )}
 
-                            {/* Microphone / Send Button */}
-                            <div className="relative">
-                                <button
-                                    onMouseDown={(e) => {
-                                        if (!message.trim() && recordingStatus === 'idle') {
-                                            startRecording(e);
+                            <button
+                                onMouseDown={(e) => {
+                                    if (!message.trim() && recordingStatus === 'idle') {
+                                        startRecording(e);
+                                    }
+                                }}
+                                onTouchStart={(e) => {
+                                    if (!message.trim() && recordingStatus === 'idle') {
+                                        startRecording(e);
+                                    }
+                                }}
+                                onClick={(e) => {
+                                    if (message.trim()) {
+                                        handleSend();
+                                    } else if (recordingStatus === 'recording' && isRecordingLocked) {
+                                        stopRecording(false, true);
+                                    }
+                                }}
+                                onMouseUp={() => {
+                                    if (recordingStatus === 'recording' && !isRecordingLocked) {
+                                        if (recordingDuration < 1) {
+                                            stopRecording(true);
+                                            toast("Hold to record, release to send", { duration: 2000 });
+                                        } else {
+                                            stopRecording(false, true); // send immediately
                                         }
-                                    }}
-                                    onTouchStart={(e) => {
-                                        if (!message.trim() && recordingStatus === 'idle') {
-                                            // Don't prevent default here so clicks still work, but prevent ghost clicks if needed
-                                            startRecording(e);
+                                    }
+                                }}
+                                onTouchEnd={() => {
+                                    if (recordingStatus === 'recording' && !isRecordingLocked) {
+                                        if (recordingDuration < 1) {
+                                            stopRecording(true);
+                                            toast("Hold to record, release to send", { duration: 2000 });
+                                        } else {
+                                            stopRecording(false, true); // send immediately
                                         }
-                                    }}
-                                    onClick={(e) => {
-                                        if (message.trim()) {
-                                            handleSend();
-                                        }
-                                    }}
-                                    onMouseUp={() => {
-                                        if (recordingStatus === 'recording' && !isRecordingLocked) {
-                                            if (recordingDuration < 1) {
-                                                stopRecording(true);
-                                                toast("Hold to record, release to send", { duration: 2000 });
-                                            } else {
-                                                stopRecording(false, true); // send immediately
-                                            }
-                                        }
-                                    }}
-                                    onTouchEnd={() => {
-                                        if (recordingStatus === 'recording' && !isRecordingLocked) {
-                                            if (recordingDuration < 1) {
-                                                stopRecording(true);
-                                                toast("Hold to record, release to send", { duration: 2000 });
-                                            } else {
-                                                stopRecording(false, true); // send immediately
-                                            }
-                                        }
-                                    }}
+                                    }
+                                }}
+                                className={`size-[50px] shrink-0 rounded-full flex items-center justify-center transition-all duration-300 relative z-20 shadow-lg ${isRecording
+                                        ? 'bg-rose-500 scale-125 shadow-rose-500/50'
+                                        : message.trim()
+                                            ? 'bg-vic-green text-white'
+                                            : recordingStatus === 'preview'
+                                                ? 'bg-slate-200 dark:bg-slate-800 text-slate-400'
+                                                : 'bg-white dark:bg-[#202C33] text-[#54656F] dark:text-[#8696A0]'
+                                    }`}
+                                style={{
+                                    transform: recordingStatus === 'recording' && !isRecordingLocked ? `translateY(${-Math.min(recordingDragY, 60)}px)` : 'none',
+                                }}
+                            >
+                                {isRecording ? (
+                                    <div className="size-4 bg-white rounded-[2px] animate-pulse" />
+                                ) : message.trim() ? (
+                                    <Send size={24} />
+                                ) : (
+                                    <Mic size={26} />
+                                )}
 
-                                    className={`size-[48px] shrink-0 rounded-full flex items-center justify-center shadow-md transition-all active:scale-95 z-20 
-                                      ${message.trim() || isRecordingLocked
-                                            ? 'bg-[#00A884] text-white hover:bg-[#008f6f]'
-                                            : recordingStatus === 'recording'
-                                                ? 'bg-red-500 text-white animate-pulse shadow-red-500/50'
-                                                : recordingStatus === 'preview'
-                                                    ? 'bg-gray-400 text-white cursor-not-allowed'
-                                                    : 'bg-[#00A884] text-white hover:bg-[#008f6f]'
-                                        }`}
-                                    style={{
-                                        transform: recordingStatus === 'recording' && !isRecordingLocked ? `translateY(${-Math.min(recordingDragY, 60)}px)` : 'none',
-                                        transition: 'transform 0.1s ease-out'
-                                    }}
-                                >
-                                    {message.trim() ? <Send size={24} /> : (recordingStatus === 'recording'
-                                        ? <span className="text-[24px] leading-none">⏹</span>
-                                        : (recordingStatus === 'preview'
-                                            ? <span className="text-[24px] leading-none">🎵</span>
-                                            : <Mic size={24} />))}
-                                </button>
-                            </div>
+                                {/* Pulse Effect for Recording */}
+                                {isRecording && (
+                                    <>
+                                        <div className="absolute inset-0 bg-rose-500 rounded-full animate-ping opacity-20" />
+                                        <div className="absolute -inset-4 bg-rose-500/10 rounded-full animate-pulse" />
+                                    </>
+                                )}
+                            </button>
 
                             {/* Drag to Cancel Indicator */}
                             {isRecording && !isRecordingLocked && (

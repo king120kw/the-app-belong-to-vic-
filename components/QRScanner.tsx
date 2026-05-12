@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { requestCameraAccess } from '@/lib/api/permissions';
 import { MultiFormatReader, BinaryBitmap, HybridBinarizer, HTMLCanvasElementLuminanceSource, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
 interface QRScannerProps {
@@ -31,12 +32,17 @@ export default function QRScanner({ onScan, onClose, onManualCapture, isAnalyzin
         if (intervalRef.current) clearInterval(intervalRef.current);
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
+            const stream = await requestCameraAccess({
                 video: {
                     facingMode: mode,
                     width: { ideal: 1920 },
                     height: { ideal: 1080 },
-                    advanced: [{ focusMode: 'continuous' } as any]
+                    frameRate: { ideal: 60 },
+                    advanced: [
+                        { focusMode: 'continuous' } as any,
+                        { exposureMode: 'continuous' } as any,
+                        { whiteBalanceMode: 'continuous' } as any
+                    ]
                 },
                 audio: false,
             });
@@ -54,11 +60,11 @@ export default function QRScanner({ onScan, onClose, onManualCapture, isAnalyzin
                 }
             }
 
-            // Start scanning immediately — 250ms interval for near-instant response
-            intervalRef.current = window.setInterval(scanFrame, 250);
+            // Start scanning immediately — 200ms interval for near-instant response
+            intervalRef.current = window.setInterval(scanFrame, 200);
         } catch (err) {
-            console.error('Camera error:', err);
-            toast.error('Camera access denied');
+            console.error('Camera error in QRScanner:', err);
+            // Error toast is handled by requestCameraAccess if it's a permission issue
             onClose();
         }
     };
@@ -165,6 +171,7 @@ export default function QRScanner({ onScan, onClose, onManualCapture, isAnalyzin
                 playsInline
                 muted
                 className="absolute inset-0 w-full h-full object-cover"
+                style={{ filter: 'contrast(1.1) brightness(1.1) saturate(1.2) sharpness(1.1)' } as any}
             />
             {/* Hidden canvas for ZXing calculation and capture */}
             <canvas ref={canvasRef} className="hidden" />

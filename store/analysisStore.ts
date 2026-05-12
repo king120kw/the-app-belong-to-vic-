@@ -3,6 +3,7 @@ import { create } from 'zustand'
 
 interface AnalysisStore {
     pendingAnalysisContext: {
+        productImage: string;
         productName: string;
         brand?: string;
         calories?: number;

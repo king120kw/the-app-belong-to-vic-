@@ -246,7 +246,21 @@ export function MealAnalysis({ mealImage, foodItems, totalCalories, dailyCalorie
                         <div className="text-4xl font-black text-white mb-1">
                             ~{totalCalories || item.calories} kcal
                         </div>
-                        <div className="flex justify-center gap-3">
+                        <div className="grid grid-cols-3 gap-3 mt-4">
+                            <div className="bg-white/5 rounded-2xl py-3 px-2 border border-white/5">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Protein</div>
+                                <div className="text-sm font-black text-white">{~~(item.protein || 0)}g</div>
+                            </div>
+                            <div className="bg-white/5 rounded-2xl py-3 px-2 border border-white/5">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Carbs</div>
+                                <div className="text-sm font-black text-white">{~~(item.carbs || 0)}g</div>
+                            </div>
+                            <div className="bg-white/5 rounded-2xl py-3 px-2 border border-white/5">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Fat</div>
+                                <div className="text-sm font-black text-white">{~~(item.fat || 0)}g</div>
+                            </div>
+                        </div>
+                        <div className="flex justify-center gap-3 mt-4">
                             {item.estimated_price && (
                                 <span className="px-3 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full flex items-center gap-1">
                                     <ShoppingCart className="w-3 h-3" />

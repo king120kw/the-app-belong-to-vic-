@@ -139,7 +139,7 @@ export const getConversationById = async (conversationId: string, userId: string
         data.display_phone = (Array.isArray(profile?.chat_users) ? profile.chat_users[0]?.phone_number : profile?.chat_users?.phone_number) || null;
     } else if (data.conversation_type === 'ai') {
         data.display_name = 'Health Coach';
-        data.display_avatar = '/APP%20LOGO.jpg';
+        data.display_avatar = '/app logo.png';
         data.display_phone = null;
     } else {
         const otherParticipant = data.conversation_participants.find((p: any) => p.user_id !== userId && p.user_id !== COACH_ID);

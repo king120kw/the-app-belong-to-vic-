@@ -5,6 +5,10 @@ import "./global.css";
 export const metadata: Metadata = {
   title: "VicCalary",
   description: "AI-powered nutrition tracking",
+  icons: {
+    icon: "/app logo.png",
+    apple: "/app logo.png",
+  },
 };
 
 export default function RootLayout({

@@ -153,6 +153,7 @@ export function ProductDetails({
 
             // Save complete context globally using structured pendingAnalysisContext
             setPendingAnalysisContext({
+                productImage,
                 productName,
                 brand,
                 calories,
@@ -162,16 +163,13 @@ export function ProductDetails({
                 sugar,
                 price: Number(estimated_price || 0),
                 currency: 'USD',
-                country: origin_country,
                 political_warning,
-                is_compliant,
                 healthStatus,
-                type,
-                generic_name,
-                purpose,
-                side_effects,
-                warnings,
-                interactions
+                ingredients: factory_ingredients || vitamins_and_nutrition,
+                suitability_analysis,
+                manufacturer,
+                is_compliant,
+                type: 'scan_handoff'
             });
 
             let initialMessage = '';
@@ -385,7 +383,21 @@ export function ProductDetails({
                         /* 5. Calorie & Macro Summary — Food Products */
                         <div className="bg-slate-900 dark:bg-white/5 rounded-3xl p-6 text-center border border-slate-800 dark:border-white/10">
                             <div className="text-4xl font-black text-white mb-1">~{calories} kcal</div>
-                            <div className="flex justify-center flex-wrap gap-2">
+                            <div className="grid grid-cols-3 gap-3 mt-4">
+                                <div className="bg-white/5 rounded-2xl py-3 px-2 border border-white/5">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Protein</div>
+                                    <div className="text-sm font-black text-white">{~~(protein || 0)}g</div>
+                                </div>
+                                <div className="bg-white/5 rounded-2xl py-3 px-2 border border-white/5">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Carbs</div>
+                                    <div className="text-sm font-black text-white">{~~(carbs || 0)}g</div>
+                                </div>
+                                <div className="bg-white/5 rounded-2xl py-3 px-2 border border-white/5">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Fat</div>
+                                    <div className="text-sm font-black text-white">{~~(fat || 0)}g</div>
+                                </div>
+                            </div>
+                            <div className="flex justify-center flex-wrap gap-2 mt-4">
                                 {estimated_price && (
                                     <span className="px-3 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full flex items-center gap-1">
                                         <ShoppingCart className="w-3 h-3" />

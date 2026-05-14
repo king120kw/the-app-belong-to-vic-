@@ -17,6 +17,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'No progress found for today' })
     }
 
+    // Check if summary already exists for today to avoid duplicates
+    const { data: existingSummary } = await supabase
+      .from('messages')
+      .select('id')
+      .contains('metadata', { type: 'daily_summary', date: today })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingSummary) {
+      return NextResponse.json({ message: 'Summary already sent for today', alreadySent: true })
+    }
+
     const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
     const prompt = `You are a helpful and professional Health Coach.
 Generate a concise, encouraging end-of-day summary for the user.

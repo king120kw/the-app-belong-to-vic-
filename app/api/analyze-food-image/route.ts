@@ -112,11 +112,35 @@ VERIFIED NUTRITIONAL DATA FOUND IN DATABASE:
 MANDATORY: You MUST use these exact verified numbers in your output.`
     }
 
-    const geoInfo = {
+    // V15: Automatic Geo-Detection if not provided by client
+    const clientIp =
+      req.headers.get('x-real-ip') ||
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      req.headers.get('cf-connecting-ip') ||
+      '8.8.8.8';
+
+    let geoInfo = {
       country_name: locationContext?.country || 'Unknown',
       city: locationContext?.city || 'Unknown',
       currency_code: locationContext?.currency_code || 'USD',
       currency_symbol: locationContext?.currency_symbol || '$',
+    }
+
+    if (geoInfo.country_name === 'Unknown') {
+      try {
+        const geoRes = await fetch(`https://ipapi.co/${clientIp}/json/`);
+        if (geoRes.ok) {
+          const g = await geoRes.json();
+          geoInfo = {
+            country_name: g.country_name || 'United States',
+            city: g.city || 'Unknown',
+            currency_code: g.currency || 'USD',
+            currency_symbol: g.currency_symbol || '$',
+          };
+        }
+      } catch (e) {
+        console.warn('[Food-AI] Geo lookup failed, using fallbacks');
+      }
     }
 
     const political = await checkPoliticalAffiliation(supabase, identifiedBrand)
@@ -142,6 +166,7 @@ PRODUCT NAME: ${identifiedName}
 BRAND: ${identifiedBrand}
 USER PROFILE: ${profileContext}
 ${dbVerifiedContext}
+REGIONAL STANDARDS: Use ${['US', 'UK', 'CA', 'AU'].includes(geoInfo.country_name) ? 'Imperial (oz/lbs)' : 'Metric (g/kg)'} units. Factor in ${geoInfo.country_name} food safety regulations.
 
 RULES:
 1. ${verifiedFood ? 'USE THE VERIFIED NUTRITION NUMBERS EXACTLY.' : 'Provide your best scientific estimate for macros.'}
@@ -157,7 +182,8 @@ Analyze the provided food image with extreme precision.
 
 ${profileContext}
 ${dbVerifiedContext}
-LOCATION CONTEXT: ${JSON.stringify(locationContext || {})}
+LOCATION CONTEXT: ${geoInfo.city}, ${geoInfo.country_name}
+REGIONAL STANDARDS: Use ${['US', 'UK', 'CA', 'AU'].includes(geoInfo.country_name) ? 'Imperial' : 'Metric'} units. 
 
 Write a detailed nutritional report:
 • description: EXACTLY 3 full paragraphs (minimum 80 words each).
@@ -170,7 +196,7 @@ ${verifiedFood ? 'MANDATORY: Use the VERIFIED NUTRITIONAL DATA provided above.' 
 JSON OUTPUT:
 {"name":"${identifiedName}","description":"...","vitamins_and_nutrition":"...","recommended_pairings":"...","recommendation":"...","verdict":"GOOD|MODERATE|POOR","user_alignment_boolean":true,"calories":${verifiedFood?.calories || 0},"protein":${verifiedFood?.protein || 0},"carbs":${verifiedFood?.carbs || 0},"fat":${verifiedFood?.fat || 0},"sugar":${verifiedFood?.sugar || 0},"fiber":${verifiedFood?.fiber || 0},"is_compliant":true,"confidence_interval":${verifiedFood ? 1.0 : 0.8},"is_verified":${!isHallucinated}}
 
-LANGUAGE MANDATE: Auto-detect the user's language from location. If in Arabic/Urdu region, respond in that language.`
+LANGUAGE MANDATE: Auto-detect the user's language from location (${geoInfo.country_name}). If the region speaks Arabic, Urdu, Hindi, or Indonesian, respond fluently in that language.`
 
       responseFormat = {
         type: 'json_schema',

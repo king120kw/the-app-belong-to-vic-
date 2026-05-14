@@ -288,5 +288,9 @@ export const en = {
     today: "Today",
     milestone_checkpoint: "Milestone Checkpoint",
     chat_verify_title: "Global Chat Verification",
-    prayer_time_window: "Prayer Time Window"
+    prayer_time_window: "Prayer Time Window",
+    start_your_journey: "Start Your Journey",
+    welcome_subtitle: "Personalized meal plans for a healthier you.",
+    get_started: "Get Started",
+    welcome_to_vicalary: "Welcome to VicCalary"
 };

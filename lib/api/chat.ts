@@ -1,6 +1,8 @@
 import { supabase } from '../supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
+const COACH_ID = '00000000-0000-0000-0000-000000000001';
+
 export const getConversationsV2 = async (userId: string) => {
     console.log(`[API] getConversationsV2 for user: ${userId}`);
     // 1. Provision system conversations if needed (self-chat + Health Coach)
@@ -11,44 +13,49 @@ export const getConversationsV2 = async (userId: string) => {
         console.warn('[API] provision_user_system_chats failed (non-fatal):', err);
     }
 
-    // 2. Get all conversation IDs where the user is a participant
-    const { data: participationData, error: participationError } = await (supabase
-        .from('conversation_participants')
-        .select('conversation_id, last_read_at, deleted_at')
-        .eq('user_id', userId)
-        .is('deleted_at', null) as any);
+    // 2. Get all conversations using the new optimized RPC
+    const { data: participationData, error: participationError } = await (supabase as any).rpc('get_user_conversations', { 
+        p_user_id: userId 
+    });
+    
+    let rawConvs: any[] = [];
 
     if (participationError) {
-        console.error('[API] Error fetching participation:', participationError);
-        throw participationError;
-    }
+        console.warn('[API] get_user_conversations RPC not found, using fallback query');
+        // Fallback to manual query if RPC fails
+        const { data: manualData, error: manualError } = await (supabase
+            .from('conversation_participants')
+            .select('conversation_id')
+            .eq('user_id', userId)
+            .is('deleted_at', null) as any);
+            
+        if (manualError) throw manualError;
+        
+        const conversationIds = manualData.map((p: any) => String(p.conversation_id));
+        if (conversationIds.length === 0) return [];
 
-    console.log(`[API] Found ${participationData?.length || 0} participations`);
-    if (!participationData || participationData.length === 0) return [];
-
-    const conversationIds = participationData.map(p => p.conversation_id);
-
-    // 2. Fetch the full conversations with participants, profiles, and the DENORMALIZED last message fields
-    const { data: rawConvs, error: convError } = await supabase
-        .from('conversations')
-        .select(`
-            *,
-            conversation_participants (
-                user_id,
-                last_read_at,
-                user_profiles (
-                    full_name, 
-                    username,
-                    avatar_url
+        const { data: fetchedConvs, error: convError } = await supabase
+            .from('conversations')
+            .select(`
+                *,
+                conversation_participants (
+                    user_id,
+                    last_read_at,
+                    user_profiles (
+                        full_name, 
+                        username,
+                        avatar_url,
+                        chat_users(is_verified)
+                    )
                 )
-            )
-        `)
-        .in('id', conversationIds)
-        .order('last_message_at', { ascending: false }) as any;
+            `)
+            .in('id', conversationIds)
+            .order('last_message_at', { ascending: false }) as any;
 
-    if (convError) {
-        console.error('[API] Error fetching conversations details:', convError);
-        throw convError;
+        if (convError) throw convError;
+        rawConvs = fetchedConvs || [];
+    } else {
+        rawConvs = participationData || [];
     }
 
     // 4. Process and calc unread counts locally
@@ -84,12 +91,18 @@ export const getConversationsV2 = async (userId: string) => {
             display_name = 'Health Coach';
             display_avatar = '/APP%20LOGO.jpg';
         } else {
-            const otherParticipant = conv.conversation_participants?.find((p: any) => p.user_id !== userId);
-            const profileArray = otherParticipant?.user_profiles;
-            const profile = Array.isArray(profileArray) ? profileArray[0] : profileArray;
+            const otherParticipant = conv.conversation_participants?.find((p: any) => String(p.user_id) !== String(userId));
+            const rawProfile = otherParticipant?.user_profiles;
+            const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
+            const chatUserArray = profile?.chat_users;
+            const chatUser = Array.isArray(chatUserArray) ? chatUserArray[0] : chatUserArray;
+
+            // V15: Removed restrictive verification filter for existing chats
+            // Users should always see chats they have already initiated.
 
             display_name = profile?.full_name || profile?.username || conv.name || 'User';
             display_avatar = profile?.avatar_url || null;
+            display_phone = chatUser?.phone_number || null;
         }
 
         return {
@@ -100,9 +113,29 @@ export const getConversationsV2 = async (userId: string) => {
             last_message: lastMsg,
             unread_count
         };
-    }) || [];
+    }).filter((c): c is any => c !== null); // Filter out unverified chats and nulls
 
-    return processed;
+    // 5. Final Deduplication Layer: One conversation per person
+    const finalDeduplicated: any[] = [];
+    const seenParticipants = new Set<string>();
+
+    processed.forEach((conv: any) => {
+        // For direct/private chats, identify the other person
+        let participantKey = conv.id;
+        if (conv.conversation_type === 'ai') participantKey = 'ai-coach';
+        else if (conv.conversation_type === 'self') participantKey = 'self-notes';
+        else {
+            const other = conv.conversation_participants?.find((p: any) => String(p.user_id) !== String(userId));
+            if (other) participantKey = String(other.user_id);
+        }
+
+        if (!seenParticipants.has(participantKey)) {
+            seenParticipants.add(participantKey);
+            finalDeduplicated.push(conv);
+        }
+    });
+
+    return finalDeduplicated;
 }
 
 export const getConversationById = async (conversationId: string, userId: string) => {
@@ -188,8 +221,66 @@ export const provisionAndSendMessage = async (
         console.error('[API] provision_and_send_message RPC error:', error);
         throw error;
     }
-    console.log(`[API] provisionAndSendMessage success. ConvId: ${convId}`);
-    return convId; // Returns the UUID of the conversation (new or existing)
+    
+    // Handle both string and object return types from RPC
+    // V16: Robust property extraction for various RPC return shapes
+    let finalId = convId;
+    if (typeof convId === 'object' && convId !== null) {
+        finalId = convId.id || convId.conversation_id || convId.r_id || (Array.isArray(convId) ? convId[0]?.id : null) || convId;
+    }
+    
+    console.log(`[API] provisionAndSendMessage Success. Raw:`, convId, `Final ID: ${finalId}`);
+    
+    // V17: Ensure the coach is triggered if this is the first message to the AI
+    if (receiverId === COACH_ID) {
+        console.log("[API] Triggering coach-reply for NEW conversation");
+        // We don't have the full message record here easily from the RPC return, 
+        // but the coach-reply endpoint can fetch it if we pass enough info, 
+        // or we can just pass a dummy record with the ID if the RPC returns it.
+        // Actually, the coach-reply route fetches the latest message anyway.
+        
+        // Let's try to fetch the message we just sent to pass it to the reply route
+        try {
+            const { data: messages } = await supabase
+                .from('messages')
+                .select('*')
+                .eq('conversation_id', finalId)
+                .order('created_at', { ascending: false })
+                .limit(1);
+            
+            if (messages && messages[0]) {
+                const triggerPayload = {
+                    type: 'INSERT',
+                    table: 'messages',
+                    record: messages[0],
+                    system_context: {
+                        current_time: new Date().toISOString(),
+                        time_zone: typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC',
+                        language: typeof navigator !== 'undefined' ? navigator.language : 'en-US'
+                    }
+                };
+
+                // Try Edge Function first, then fallback to local API route
+                try {
+                    const { error: invokeError } = await supabase.functions.invoke('coach-reply', {
+                        body: triggerPayload
+                    });
+                    if (invokeError) throw invokeError;
+                } catch (err) {
+                    console.log("[API] Edge function 'coach-reply' not found, falling back to local route");
+                    await fetch('/api/coach-reply', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(triggerPayload)
+                    }).catch(e => console.error("[API] Fallback coach trigger failed:", e));
+                }
+            }
+        } catch (e) {
+            console.error("[API] Failed to trigger coach for new conversation:", e);
+        }
+    }
+
+    return String(finalId);
 }
 
 export const createPrivateConversation = async (userId: string, otherUserId: string) => {
@@ -203,7 +294,8 @@ export const createPrivateConversation = async (userId: string, otherUserId: str
     });
 
     if (error) throw error;
-    return { id: convId };
+    const finalId = typeof convId === 'object' && convId !== null ? (convId.id || convId.conversation_id || convId[0]?.id) : convId;
+    return String(finalId);
 }
 
 export const findConversationByParticipants = async (user1Id: string, user2Id: string) => {
@@ -246,7 +338,7 @@ export const getContacts = async (userId: string) => {
         const chatUser = Array.isArray(chatUserArray) ? chatUserArray[0] : chatUserArray;
 
         return {
-            id: c.contact_user_id,
+            id: String(c.contact_user_id),
             full_name: profile?.full_name || profile?.username || chatUser?.phone_number || 'Unknown',
             avatar_url: profile?.avatar_url,
             phone_number: chatUser?.phone_number,
@@ -351,7 +443,12 @@ export const sendMessage = async (
         .select()
         .single()
 
-    if (error) throw error
+    if (error) throw error;
+
+    if (!data) {
+        console.warn('[API] Message insert returned no data (RLS issue?)');
+        throw new Error('Message could not be saved');
+    }
 
     // Update conversation last_message_at (Migration trigger handles this too, but for speed:)
     supabase.from('conversations')
@@ -363,25 +460,35 @@ export const sendMessage = async (
         // Explicitly trigger the coach reply function if this is an AI chat
         const systemContext = {
             current_time: new Date().toISOString(),
-            time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            language: navigator.language,
+            time_zone: typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC',
+            language: typeof navigator !== 'undefined' ? navigator.language : 'en-US',
             location_hint: metadata?.location_hint,
             latest_analysis: metadata?.latest_analysis || metadata?.analysisContext
         };
 
+        const triggerPayload = {
+            type: 'INSERT',
+            table: 'messages',
+            record: data,
+            system_context: systemContext
+        };
+
         const invokeWithRetry = async (retryCount = 0) => {
             try {
-                const res = await fetch('/api/coach-reply', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        type: 'INSERT',
-                        table: 'messages',
-                        record: data,
-                        system_context: systemContext
-                    })
+                // Try Edge Function first
+                const { error: invokeError } = await supabase.functions.invoke('coach-reply', {
+                    body: triggerPayload
                 });
-                if (!res.ok) throw new Error(`coach-reply failed: ${res.status}`);
+                
+                if (invokeError) {
+                    // Fallback to local route
+                    const res = await fetch('/api/coach-reply', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(triggerPayload)
+                    });
+                    if (!res.ok) throw new Error(`coach-reply fallback failed: ${res.status}`);
+                }
             } catch (err) {
                 if (retryCount < 3) {
                     const delay = Math.pow(2, retryCount) * 1000;
@@ -418,29 +525,25 @@ export const uploadChatMedia = async (userId: string, file: File): Promise<strin
 }
 
 // Mark messages as read for a specific conversation
-export const markAsRead = async (userId: string, conversationId: string, timestamp?: string) => {
-    const lastReadAt = timestamp || new Date().toISOString();
-
-    const { error } = await supabase
-        .from('conversation_participants')
-        .update({
-            last_read_at: lastReadAt
-        } as any)
-        .eq('user_id', userId)
-        .eq('conversation_id', conversationId);
+export const markAsRead = async (userId: string, conversationId: string) => {
+    const { error } = await (supabase as any).rpc('mark_conversation_as_read', {
+        p_user_id: userId,
+        p_conversation_id: conversationId
+    });
 
     if (error) {
         console.error('[API] Error marking as read:', error);
         return false;
     }
 
+    const now = new Date().toISOString();
     // Also mark individual messages as read (inc. is_read flag per spec)
     // ONLY update messages NOT sent by the current user
     await supabase
         .from('messages')
         .update({
             is_read: true,
-            read_at: lastReadAt
+            read_at: now
         } as any)
         .eq('conversation_id', conversationId)
         .neq('sender_id', userId)
@@ -455,19 +558,19 @@ export const markAsRead = async (userId: string, conversationId: string, timesta
 
 export const subscribeToMessages = (
     conversationId: string,
-    callback: (message: any) => void
+    callback: (payload: any) => void
 ): RealtimeChannel => {
     const channel = supabase
         .channel(`messages:${conversationId}`)
         .on(
             'postgres_changes',
             {
-                event: 'INSERT',
+                event: '*', // Listen to INSERT (new msg) and UPDATE (streaming content)
                 schema: 'public',
                 table: 'messages',
                 filter: `conversation_id=eq.${conversationId}`,
             },
-            (payload) => callback(payload.new)
+            (payload) => callback(payload) // Pass the full payload to handle UPDATE
         )
         .subscribe()
 

@@ -235,6 +235,7 @@ export default function Onboarding() {
   }, [questions]);
 
   const [syncAttempted, setSyncAttempted] = useState(false);
+  const [syncFailed, setSyncFailed] = useState(false);
 
   useEffect(() => {
     if (!authLoading) {
@@ -252,16 +253,28 @@ export default function Onboarding() {
             setSyncAttempted(true);
             console.warn("Profile missing in Onboarding, triggering initial sync...");
             import("../../lib/api/auth").then(({ syncUserWithSupabase }) => {
-              syncUserWithSupabase(user).catch(err => {
+              syncUserWithSupabase(user).then(() => {
+                // Refresh query after sync
+                queryClient.invalidateQueries({ queryKey: ['profile', user.id] });
+              }).catch(err => {
                 console.error("Critical: Failed to sync profile during onboarding recovery:", err);
-                toast.error("Failed to initialize your profile. Please try logging in again or refresh the page.");
+                if (err?.code === '42883' || err?.code === '42501' || String(err).includes('operator does not exist')) {
+                  setSyncFailed(true);
+                  return;
+                }
+                toast.error("Failed to initialize your profile. Please try refreshing the page.");
               });
             });
           }
+        }).catch(err => {
+            console.error("Profile fetch error in onboarding:", err);
+            if (err?.code === '42883' || String(err).includes('operator does not exist')) {
+                setSyncFailed(true);
+            }
         });
       }
     }
-  }, [authLoading, user, router, syncAttempted]);
+  }, [authLoading, user, router, syncAttempted, queryClient]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -323,6 +336,18 @@ export default function Onboarding() {
       setCurrentStep(currentStep - 1);
     }
   };
+
+  if (syncFailed) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-white text-center px-4">
+        <h2 className="text-2xl font-bold text-red-600 mb-4">Profile Setup Failed</h2>
+        <p className="text-gray-600 mb-6">We encountered a database error. Please ensure the backend migration has run successfully.</p>
+        <button onClick={() => window.location.reload()} className="px-6 py-2 bg-vic-blue text-white rounded-lg font-bold hover:bg-vic-blue/90 transition-colors">
+          Reload Page
+        </button>
+      </div>
+    );
+  }
 
   if (authLoading) {
     return (

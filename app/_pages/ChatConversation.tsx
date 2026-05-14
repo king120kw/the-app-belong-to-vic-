@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useRouter, useParams, usePathname } from 'next/navigation';
+import { useRouter, useParams, usePathname, useSearchParams } from 'next/navigation';
 import { requestMicrophoneAccess } from "@/lib/api/permissions";
 import { AlertCircle, MapPin, Navigation, Plus, Link, FileText, ArrowLeft, Bookmark, Video, Phone, Trash2, MoreVertical, Smile, Paperclip, Mic, Send, CheckCheck, Lock, Image, Headphones, User, BarChart, ChevronLeft, TriangleAlert, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -93,72 +93,74 @@ const AudioMessage = ({ src }: { src: string }) => {
     };
 
     return (
-        <div className="flex items-center gap-3 bg-emerald-500/5 dark:bg-emerald-500/10 backdrop-blur-md p-3 px-4 rounded-2xl border border-emerald-500/20 min-w-[240px] shadow-sm group hover:bg-emerald-500/10 transition-all duration-300">
-            <button
-                onClick={handleTogglePlay}
-                disabled={error}
-                className="size-11 flex items-center justify-center bg-vic-green text-white rounded-full shadow-lg shadow-vic-green/20 hover:scale-105 active:scale-95 transition-all shrink-0"
-            >
-                {error ? <AlertCircle size={20} /> : (
-                    isPlaying ? (
-                        <div className="flex gap-1.5">
-                            <div className="w-1.5 h-4 bg-white rounded-full animate-pulse"></div>
-                            <div className="w-1.5 h-4 bg-white rounded-full animate-pulse [animation-delay:200ms]"></div>
-                        </div>
-                    ) : (
-                        <div className="translate-x-0.5">
-                            <div className="w-0 h-0 border-y-[8px] border-y-transparent border-l-[14px] border-l-white rounded-sm"></div>
-                        </div>
-                    )
-                )}
-            </button>
+        <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3 bg-emerald-500/5 dark:bg-emerald-500/10 backdrop-blur-md p-3 px-4 rounded-2xl border border-emerald-500/20 min-w-[240px] shadow-sm group hover:bg-emerald-500/10 transition-all duration-300">
+                <button
+                    onClick={handleTogglePlay}
+                    disabled={error}
+                    className="size-11 flex items-center justify-center bg-vic-green text-white rounded-full shadow-lg shadow-vic-green/20 hover:scale-105 active:scale-95 transition-all shrink-0"
+                >
+                    {error ? <AlertCircle size={20} /> : (
+                        isPlaying ? (
+                            <div className="flex gap-1.5">
+                                <div className="w-1.5 h-4 bg-white rounded-full animate-pulse"></div>
+                                <div className="w-1.5 h-4 bg-white rounded-full animate-pulse [animation-delay:200ms]"></div>
+                            </div>
+                        ) : (
+                            <div className="translate-x-0.5">
+                                <div className="w-0 h-0 border-y-[8px] border-y-transparent border-l-[14px] border-l-white rounded-sm"></div>
+                            </div>
+                        )
+                    )}
+                </button>
 
-            <div className="flex-1 space-y-1.5">
-                <div className="flex items-end gap-1 h-6">
-                    {[...Array(24)].map((_, i) => (
-                        <div
-                            key={i}
-                            className={`w-[3px] rounded-full transition-all duration-500 ease-out`}
-                            style={{ 
-                                height: `${20 + (Math.sin(i * 0.8) * 30) + 30}%`,
-                                backgroundColor: (progress * 24 / 100) > i ? '#10B981' : '#CBD5E1',
-                                opacity: (progress * 24 / 100) > i ? 1 : 0.3
-                            }}
-                        />
-                    ))}
+                <div className="flex-1 space-y-1.5">
+                    <div className="flex items-end gap-1 h-6">
+                        {[...Array(24)].map((_, i) => (
+                            <div
+                                key={i}
+                                className={`w-[3px] rounded-full transition-all duration-500 ease-out`}
+                                style={{ 
+                                    height: `${20 + (Math.sin(i * 0.8) * 30) + 30}%`,
+                                    backgroundColor: (progress * 24 / 100) > i ? '#10B981' : '#CBD5E1',
+                                    opacity: (progress * 24 / 100) > i ? 1 : 0.3
+                                }}
+                            />
+                        ))}
+                    </div>
+                    
+                    <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/70">
+                        <span className="animate-pulse">{isPlaying ? 'Playing Audio' : 'Voice Message'}</span>
+                        <span>{duration > 0 ? `${Math.floor((audioRef.current?.currentTime || 0) / 60)}:${Math.floor((audioRef.current?.currentTime || 0) % 60).toString().padStart(2, '0')}` : '0:00'}</span>
+                    </div>
                 </div>
-                
-                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/70">
-                    <span className="animate-pulse">{isPlaying ? 'Playing Audio' : 'Voice Message'}</span>
-                    <span>{duration > 0 ? `${Math.floor((audioRef.current?.currentTime || 0) / 60)}:${Math.floor((audioRef.current?.currentTime || 0) % 60).toString().padStart(2, '0')}` : '0:00'}</span>
-                </div>
+
+                <audio
+                    ref={audioRef}
+                    src={internalSrc}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => { setIsPlaying(false); setProgress(0); }}
+                    onTimeUpdate={() => {
+                        if (audioRef.current) {
+                            const p = (audioRef.current.currentTime / audioRef.current.duration) * 100;
+                            setProgress(p || 0);
+                        }
+                    }}
+                    onLoadedMetadata={() => {
+                        if (audioRef.current) setDuration(audioRef.current.duration);
+                    }}
+                    onError={() => {
+                        if (!internalSrc.startsWith('blob:') && retryCount < MAX_RETRIES) {
+                            setRetryCount(prev => prev + 1);
+                            performRetry(retryCount + 1);
+                        } else {
+                            setError(true);
+                        }
+                    }}
+                    className="hidden"
+                />
             </div>
-
-            <audio
-                ref={audioRef}
-                src={internalSrc}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                onEnded={() => { setIsPlaying(false); setProgress(0); }}
-                onTimeUpdate={() => {
-                    if (audioRef.current) {
-                        const p = (audioRef.current.currentTime / audioRef.current.duration) * 100;
-                        setProgress(p || 0);
-                    }
-                }}
-                onLoadedMetadata={() => {
-                    if (audioRef.current) setDuration(audioRef.current.duration);
-                }}
-                onError={() => {
-                    if (!internalSrc.startsWith('blob:') && retryCount < MAX_RETRIES) {
-                        setRetryCount(prev => prev + 1);
-                        performRetry(retryCount + 1);
-                    } else {
-                        setError(true);
-                    }
-                }}
-                className="hidden"
-            />
         </div>
     );
 };
@@ -237,8 +239,22 @@ const isValidUUID = (id: string | undefined): boolean => {
 
 export default function ChatConversation() {
     const { id: activeId } = useParams() as { id: string };
-    const isVirtual = activeId?.startsWith('new-');
-    const virtualTargetId = isVirtual ? activeId?.replace('new-', '') : null;
+    const searchParams = useSearchParams();
+    const targetHint = searchParams.get('target');
+    
+    // V18: localActiveId allows for seamless transitions without full page reloads
+    const [localActiveId, setLocalActiveId] = useState(activeId);
+    
+    // Sync localActiveId with URL params when they change externally (e.g. sidebar tap)
+    useEffect(() => {
+        if (activeId && activeId !== localActiveId) {
+            console.log(`[Chat] URL Sync: Updating localActiveId to ${activeId}`);
+            setLocalActiveId(activeId);
+        }
+    }, [activeId]);
+
+    const isVirtual = localActiveId?.startsWith('new-');
+    const virtualTargetId = isVirtual ? localActiveId.replace('new-', '') : (targetHint || null);
 
     const { user } = useAuth();
     const { t } = useTranslation();
@@ -250,6 +266,7 @@ export default function ChatConversation() {
     const pendingAnalysisContext = useAnalysisStore(state => state.pendingAnalysisContext);
     const clearPendingAnalysisContext = useAnalysisStore(state => state.clearPendingAnalysisContext);
     const lastMarkedId = useRef<string | null>(null);
+    const activeSubscriptionIdRef = useRef<string | null>(null);
     const renderCount = useRef(0);
     renderCount.current++;
 
@@ -281,7 +298,17 @@ export default function ChatConversation() {
     const recordingStartTimeRef = useRef(0);
 
     const scrollRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+
+    const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+        if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior });
+        } else if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    };
+
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
 
@@ -357,15 +384,15 @@ export default function ChatConversation() {
     // --- Queries ---
 
     const { data: conversationData, isLoading: isLoadingConv } = useQuery({
-        queryKey: ['conversation', activeId],
-        queryKeyHashFn: () => `conversation-${activeId}`, // Force unique hash
-        queryFn: () => getConversationById(activeId!, user!.id),
-        enabled: isValidUUID(activeId) && !!user,
+        queryKey: ['conversation', localActiveId],
+        queryKeyHashFn: () => `conversation-${localActiveId}`, // Force unique hash
+        queryFn: () => getConversationById(localActiveId!, user!.id),
+        enabled: isValidUUID(localActiveId) && !!user,
         refetchOnWindowFocus: false // Don't refetch on window focus to avoid jumps
     });
 
     const { data: messages = [], isLoading: isLoadingMessages } = useQuery({
-        queryKey: ['messages', activeId],
+        queryKey: ['messages', localActiveId],
         queryFn: async () => {
             if (isVirtual && virtualTargetId) {
                 // V7/V8: Check if a direct conversation already exists to load history using RPC
@@ -376,9 +403,9 @@ export default function ChatConversation() {
                 }
                 return [];
             }
-            return getMessages(activeId!);
+            return getMessages(localActiveId!);
         },
-        enabled: (isValidUUID(activeId) || !!isVirtual) && !!user?.id,
+        enabled: (isValidUUID(localActiveId) || !!isVirtual) && !!user?.id,
         refetchOnWindowFocus: false
     });
 
@@ -394,8 +421,36 @@ export default function ChatConversation() {
         enabled: !!isVirtual && !!virtualTargetId
     });
 
-    const isAI = useMemo(() => conversationData?.conversation_type === 'ai' || (isVirtual && virtualTargetId === '00000000-0000-0000-0000-000000000001'), [conversationData, isVirtual, virtualTargetId]);
-    const isSelf = useMemo(() => conversationData?.conversation_type === 'self' || (isVirtual && virtualTargetId === user?.id), [conversationData, isVirtual, virtualTargetId, user?.id]);
+    // V17: Robust AI/Self detection even during loading/transitions
+    const isAI = useMemo(() => {
+        if (localActiveId === 'ai-coach' || localActiveId?.includes(COACH_ID)) return true;
+        if (isVirtual && virtualTargetId === COACH_ID) return true;
+        
+        // Check conversation object
+        if (conversationData?.conversation_type === 'ai' || conversationData?.is_ai_coach) return true;
+        
+        // Check participants if available
+        const participants = conversationData?.participants || conversationData?.conversation_participants;
+        if (participants?.some((p: any) => p.user_id === COACH_ID)) return true;
+
+        // Check global cache if we just transitioned and conversationData is loading
+        const cachedConvs = queryClient.getQueryData<any[]>(['conversations', user?.id]);
+        const currentConv = cachedConvs?.find(c => c.id === localActiveId);
+        if (currentConv?.conversation_type === 'ai' || currentConv?.is_ai_coach) return true;
+        
+        return false;
+    }, [conversationData, isVirtual, virtualTargetId, localActiveId, queryClient, user?.id]);
+
+    const isSelf = useMemo(() => {
+        if (conversationData?.conversation_type === 'self') return true;
+        if (isVirtual && virtualTargetId === user?.id) return true;
+        
+        const cachedConvs = queryClient.getQueryData<any[]>(['conversations', user?.id]);
+        const currentConv = cachedConvs?.find(c => c.id === localActiveId);
+        if (currentConv?.conversation_type === 'self') return true;
+
+        return false;
+    }, [conversationData, isVirtual, virtualTargetId, localActiveId, user?.id, queryClient]);
 
     // Construct a "resolvedConversation" that handles virtual IDs for the UI to render
     const conversation = useMemo(() => {
@@ -424,9 +479,9 @@ export default function ChatConversation() {
     const otherParticipantId = otherParticipant?.user_id;
 
     const { data: otherUserProfile } = useQuery({
-        queryKey: ['profile', otherParticipantId],
-        queryFn: () => findUserByIdSecure(otherParticipantId!),
-        enabled: !!otherParticipantId && !isAI && !isSelf && !isVirtual
+        queryKey: ['profile', otherParticipantId || virtualTargetId],
+        queryFn: () => findUserByIdSecure((otherParticipantId || virtualTargetId)!),
+        enabled: !!(otherParticipantId || virtualTargetId) && !isAI && !isSelf
     });
 
     // Profile Realtime Sync
@@ -470,17 +525,25 @@ export default function ChatConversation() {
         }
     }, [pendingAnalysisContext, hasSentInitial, isAI]);
 
-    if (activeId && !isValidUUID(activeId) && !isVirtual) {
-        return null;
-    }
 
     const displayName = useMemo(() => {
         if (isAI) return 'Health Coach';
         if (isSelf) return (profile?.full_name ? `${profile.full_name} (Me)` : 'Personal Notes');
+        
+        // If loading, try to find the profile in the virtual cache or global search cache
         const rawP = isVirtual ? virtualProfile : (otherUserProfile || otherParticipant?.user_profiles);
         const p = Array.isArray(rawP) ? rawP[0] : rawP;
-        return p?.full_name || p?.username || otherParticipant?.chat_users?.phone_number || 'User';
-    }, [isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile]);
+        
+        if (p?.full_name || p?.username) return p.full_name || p.username;
+        if (otherParticipant?.chat_users?.phone_number) return otherParticipant.chat_users.phone_number;
+        
+        // Final fallback: Check the conversations list cache for a pre-loaded name
+        const cachedConvs = queryClient.getQueryData<any[]>(['conversations', user?.id]);
+        const currentConv = cachedConvs?.find(c => c.id === localActiveId);
+        if (currentConv?.display_name) return currentConv.display_name;
+
+        return 'User';
+    }, [isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile, queryClient, user?.id, localActiveId]);
 
     const displayAvatar = useMemo(() => {
         if (isAI) return '/app logo.png';
@@ -498,19 +561,31 @@ export default function ChatConversation() {
         }
     }, [isLoadingMessages, activeId]);
 
-    const scrollToBottom = useCallback(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTo({
-                top: scrollRef.current.scrollHeight,
-                behavior: 'smooth'
-            });
-        }
+    // V13: Robust Smart Scroll
+    const isAtBottom = useRef(true);
+    const handleScroll = useCallback(() => {
+        if (!scrollRef.current) return;
+        const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+        // 100px threshold to be considered "at bottom"
+        const atBottom = scrollHeight - scrollTop - clientHeight < 100;
+        isAtBottom.current = atBottom;
     }, []);
 
-    // Scroll when messages changes (but only if we are already near bottom or it's our own message)
+
+    // Scroll when messages changes or AI is typing
     useEffect(() => {
-        scrollToBottom();
-    }, [messages.length, otherUserTyping, scrollToBottom]);
+        if (isAtBottom.current) {
+            scrollToBottom('smooth');
+        }
+    }, [messages.length, otherUserTyping]);
+
+    // V13: Also scroll when the LAST message content changes (for AI streaming)
+    const lastMessageContent = messages[messages.length - 1]?.content;
+    useEffect(() => {
+        if (isAI && otherUserTyping && isAtBottom.current) {
+            scrollToBottom('smooth');
+        }
+    }, [lastMessageContent, isAI, otherUserTyping]);
 
     // Presence Logic
     useEffect(() => {
@@ -911,11 +986,12 @@ export default function ChatConversation() {
     // --- Real-time Sync Logic ---
 
     // Robust Read Status Sync
-    const markConversationAsReadLocal = useCallback(async (convId: string) => {
+    const markConversationAsReadLocal = useCallback(async (convId: string, force = false) => {
         if (!user?.id || !convId) return;
 
         // Loop Guard: If we JUST marked this ID as read in this component instance, STOP.
-        if (lastMarkedId.current === convId) {
+        // Unless it's a forced update (e.g. new message came in)
+        if (!force && lastMarkedId.current === convId) {
             return;
         }
 
@@ -931,18 +1007,21 @@ export default function ChatConversation() {
             return;
         }
 
-        // --- Double Guard: Check local state too ---
+        // --- Double Guard: Check local cache unread status ---
         const conversations = queryClient.getQueryData<any[]>(['conversations', user.id]);
         const currentConv = conversations?.find(c => c.id === realId);
 
-        // Only skip if unread_count is zero AND we've already marked THIS specific ID in this session.
-        // If unread_count > 0, we ALWAYS want to try marking as read.
-        if (currentConv && currentConv.unread_count === 0 && lastMarkedId.current === convId) {
+        // If unread_count is already 0 in the UI and we are not forced, we can skip
+        if (!force && currentConv && currentConv.unread_count === 0 && lastMarkedId.current === convId) {
             return;
         }
 
-        console.log(`[Chat] Marking as read (API call): ${realId}`);
-        lastMarkedId.current = convId; // Set guard IMMEDIATELY before async work
+        if (lastMarkedId.current === realId && !force) {
+            return;
+        }
+
+        console.log(`[Chat] Marking as read (API call): ${realId} (Force: ${force})`);
+        lastMarkedId.current = realId; // Set guard IMMEDIATELY using the resolved realId
 
         // 1. Optimistic UI update
         queryClient.setQueryData(['conversations', user.id], (old: any) => {
@@ -951,8 +1030,9 @@ export default function ChatConversation() {
         });
 
         try {
-            await markAsRead(user.id, realId, new Date().toISOString());
-            // No forced invalidation here, let the real-time events handle it
+            await markAsRead(user.id, realId);
+            // Clear unread count globally too
+            queryClient.invalidateQueries({ queryKey: ['unread-messages-global', user.id] });
         } catch (err) {
             console.error('[Chat] Failed to clear unread:', err);
             lastMarkedId.current = null; // Reset guard on failure to allow retry
@@ -981,25 +1061,25 @@ export default function ChatConversation() {
                 queryClient.setQueryData(['messages', activeId], (old: any) => {
                     const base = Array.isArray(old) ? old : [];
 
-                    // Already have this real message?
+                    // Already have this real message? (Check by ID)
                     if (base.some((m: any) => m.id === newMessage.id)) {
                         console.log(`[Chat] Message ${newMessage.id} already in cache, skipping.`);
                         return old;
                     }
 
-                    // If it's from US, try to match and replace the optimistic one
-                    if (newMessage.sender_id === user?.id) {
-                        const optIndex = base.findIndex(m =>
-                            m.id?.toString().startsWith('opt-') &&
-                            m.content === newMessage.content &&
-                            m.message_type === newMessage.message_type
-                        );
-                        if (optIndex > -1) {
-                            console.log(`[Chat] Replacing optimistic message with real message ${newMessage.id}`);
-                            const updated = [...base];
-                            updated[optIndex] = newMessage;
-                            return updated;
-                        }
+                    // DEDUPLICATION: If we have an optimistic message with same content/type, REPLACE it
+                    const optIndex = base.findIndex(m =>
+                        (m.id?.toString().startsWith('opt-') || m.id?.toString().startsWith('temp-')) &&
+                        m.content === newMessage.content &&
+                        m.message_type === newMessage.message_type &&
+                        m.sender_id === newMessage.sender_id
+                    );
+
+                    if (optIndex > -1) {
+                        console.log(`[Chat] Dedup: Replacing optimistic message with real message ${newMessage.id}`);
+                        const updated = [...base];
+                        updated[optIndex] = newMessage;
+                        return updated;
                     }
 
                     console.log(`[Chat] Appending new message ${newMessage.id} to conversation ${activeId}`);
@@ -1017,7 +1097,7 @@ export default function ChatConversation() {
 
                 // 2. Mark as read if not from us
                 if (newMessage.sender_id !== user?.id && activeId) {
-                    markConversationAsReadLocal(activeId);
+                    markConversationAsReadLocal(activeId, true); // TRUE: Force read for new message
                 }
 
                 // --- Sidebar Sync ---
@@ -1041,18 +1121,25 @@ export default function ChatConversation() {
                 });
             }
         };
-    }, [activeId, user?.id, queryClient, markConversationAsReadLocal]);
+    }, [localActiveId, user?.id, queryClient, markConversationAsReadLocal]);
 
     useEffect(() => {
         if (!activeId || !user?.id) return;
 
         // Skip for uninitialized virtual chats until first message
-        const isV = activeId.startsWith('new-');
-        const vTargetId = isV ? activeId.replace('new-', '') : null;
+        const isV = localActiveId.startsWith('new-');
+        const vTargetId = isV ? localActiveId.replace('new-', '') : null;
 
-        const channelName = isV
-            ? `private_chat_${[user.id, vTargetId].sort().join('_')}`
-            : `chat_room_${activeId}`;
+        // STABILIZATION GUARD: Don't re-subscribe if already on this channel for this user
+        const currentSubKey = `${user.id}:${localActiveId}`;
+        if (activeSubscriptionIdRef.current === currentSubKey && activeChannelRef.current) {
+            return;
+        }
+        
+        activeSubscriptionIdRef.current = currentSubKey;
+        const channelName = isAI ? `chat_room_${localActiveId}` : (localActiveId === user.id ? `private_chat_self_${localActiveId}` : `private_chat_${[user.id, localActiveId].sort().join('_')}`);
+        
+        console.log(`[Chat] V12 Subscribing to: ${channelName} for ${localActiveId}`);
 
         const initChannel = () => {
             if (activeChannelRef.current) {
@@ -1061,7 +1148,6 @@ export default function ChatConversation() {
                 activeChannelRef.current = null;
             }
 
-            console.log(`[Chat] V12 Subscribing to: ${channelName} for ${activeId}`);
             const channel = supabase.channel(channelName)
                 .on('presence', { event: 'sync' }, () => {
                     const state = channel.presenceState();
@@ -1073,7 +1159,7 @@ export default function ChatConversation() {
                         presences.forEach((p: any) => {
                             if (p.user_id === targetId) {
                                 isOnline = true;
-                                if (p.typing && (p.conversation_id === activeId || isV)) {
+                                if (p.typing && (p.conversation_id === localActiveId || isV)) {
                                     isTyping = true;
                                 }
                             }
@@ -1092,13 +1178,13 @@ export default function ChatConversation() {
                     const incomingConvId = payload.new ? (payload.new as any).conversation_id : (payload.old as any)?.conversation_id;
                     
                     // Only process messages for the CURRENT conversation (Case-Insensitive UUID check)
-                    const isMatch = incomingConvId?.toString().toLowerCase() === activeId?.toString().toLowerCase();
+                    const isMatch = incomingConvId?.toString().toLowerCase() === localActiveId?.toString().toLowerCase();
 
                     if (isMatch || (isV && incomingConvId)) {
-                        console.log(`[Chat] Real-time event [${payload.eventType}] matching ${activeId}. Incoming: ${incomingConvId}`);
+                        console.log(`[Chat] Real-time event [${payload.eventType}] matching ${localActiveId}. Incoming: ${incomingConvId}`);
                         onMessageEventRef.current?.(payload);
                     } else {
-                        console.log(`[Chat] Skipping real-time event [${payload.eventType}] - No match. Target: ${activeId}, Received: ${incomingConvId}`);
+                        console.log(`[Chat] Skipping real-time event [${payload.eventType}] - No match. Target: ${localActiveId}, Received: ${incomingConvId}`);
                     }
                 })
                 .subscribe(async (status) => {
@@ -1106,7 +1192,7 @@ export default function ChatConversation() {
                         console.log(`[Chat] V12 channel ${channelName} SUBSCRIBED`);
                         await channel.track({
                             user_id: user.id,
-                            conversation_id: activeId,
+                            conversation_id: localActiveId,
                             online_at: new Date().toISOString(),
                             typing: false
                         });
@@ -1118,14 +1204,16 @@ export default function ChatConversation() {
 
         initChannel();
 
+        const activeIdCopy = localActiveId;
         return () => {
+            console.log(`[Chat] V12 Hook Cleanup for realtime:${channelName} (ID: ${activeIdCopy})`);
             if (activeChannelRef.current) {
-                console.log(`[Chat] V12 Hook Cleanup for ${activeChannelRef.current.topic}`);
                 supabase.removeChannel(activeChannelRef.current);
                 activeChannelRef.current = null;
             }
+            activeSubscriptionIdRef.current = null;
         };
-    }, [activeId, user?.id]); // STRICT DEPENDENCY
+    }, [activeId, user?.id]); // Dependencies are correct, but ref-guard prevents churn
 
     // On mount or switch: clear unread
     useEffect(() => {
@@ -1212,50 +1300,90 @@ export default function ChatConversation() {
                 clearLatestAnalysis();
             }
 
-            const result = await sendMessage(user.id, activeId, args.content, (args.type as any) || 'text', messageMetadata, isAI, isSelf);
+            const result = await sendMessage(user.id, localActiveId, args.content, (args.type as any) || 'text', messageMetadata, isAI, isSelf);
             return result;
         },
         onMutate: async (newMsg) => {
-            console.log("[Chat] sendMutation.onMutate", newMsg);
-            await queryClient.cancelQueries({ queryKey: ['messages', activeId] });
-            const previousMessages = queryClient.getQueryData(['messages', activeId]);
+            // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+            await queryClient.cancelQueries({ queryKey: ['messages', localActiveId] });
 
-            const optimisticMessage = {
-                id: 'opt-' + Math.random().toString(36),
-                conversation_id: activeId,
-                sender_id: user!.id,
+            // Snapshot the previous value
+            const previousMessages = queryClient.getQueryData(['messages', localActiveId]);
+            const previousConvs = queryClient.getQueryData(['conversations', user?.id]);
+
+            // Optimistically update to the new value
+            const optimisticId = `opt-${Date.now()}`;
+            const optimisticMsg = {
+                id: optimisticId,
                 content: newMsg.content,
+                sender_id: user?.id,
+                conversation_id: localActiveId,
+                created_at: new Date().toISOString(),
                 message_type: newMsg.type || 'text',
                 metadata: newMsg.metadata,
-                created_at: new Date().toISOString(),
-                read_at: null,
+                is_optimistic: true
             };
 
-            queryClient.setQueryData(['messages', activeId], (old: any) => {
-                const msgs = Array.isArray(old) ? old : [];
-                return [...msgs, optimisticMessage];
+            queryClient.setQueryData(['messages', localActiveId], (old: any) => [...(old || []), optimisticMsg]);
+
+            // V18: Optimistically update the sidebar conversation list to prevent "stale" previews
+            queryClient.setQueryData(['conversations', user?.id], (old: any) => {
+                if (!Array.isArray(old)) return old;
+                return old.map((conv: any) => {
+                    if (conv.id === localActiveId) {
+                        return {
+                            ...conv,
+                            last_message_content: newMsg.content,
+                            last_message_at: new Date().toISOString(),
+                            last_message_sender_id: user?.id
+                        };
+                    }
+                    return conv;
+                }).sort((a: any, b: any) => {
+                    const timeA = new Date(a.last_message_at || 0).getTime();
+                    const timeB = new Date(b.last_message_at || 0).getTime();
+                    return timeB - timeA;
+                });
             });
 
             setMessage("");
             setShowEmoji(false);
             scrollToBottom();
 
-            return { previousMessages };
+            return { previousMessages, previousConvs };
         },
-        onError: (err, newMessage, context: any) => {
-            queryClient.setQueryData(['messages', activeId], context.previousMessages);
-            toast.error("Failed to send message");
+        onError: (err, newMsg, context: any) => {
+            queryClient.setQueryData(['messages', localActiveId], context?.previousMessages);
+            queryClient.setQueryData(['conversations', user?.id], context?.previousConvs);
+            toast.error("Message failed to send");
         },
-        onSuccess: (data: any) => {
+        onSuccess: (data: any, variables: any) => {
             if (data?.realId) {
-                console.log("[Chat] V11 Conversation provisioned! Navigating to:", data.realId);
-                router.replace(`/chat/${data.realId}`);
+                const id = typeof data.realId === 'object' ? (data.realId.id || data.realId.conversation_id || data.realId.r_id) : data.realId;
+                
+                // V16: Migrate optimistic messages and conversation metadata to the new real ID cache
+                const virtualMsgs = queryClient.getQueryData(['messages', localActiveId]);
+                if (virtualMsgs) {
+                    queryClient.setQueryData(['messages', String(id)], virtualMsgs);
+                }
+
+                const virtualConv = queryClient.getQueryData(['conversation', localActiveId]);
+                if (virtualConv) {
+                    queryClient.setQueryData(['conversation', String(id)], virtualConv);
+                }
+
+                // V18: SEAMLESS TRANSITION - Update local state and navigate
+                setLocalActiveId(String(id));
+                const newUrl = `/chat/${String(id)}${virtualTargetId ? `?target=${virtualTargetId}` : ''}`;
+                router.push(newUrl, { scroll: false });
             }
         },
         onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: ['messages', activeId] });
+            queryClient.invalidateQueries({ queryKey: ['messages', localActiveId] });
+            queryClient.invalidateQueries({ queryKey: ['conversations', user?.id] });
         }
     });
+
     const handleSend = async () => {
         if (!message.trim() || !user || !activeId || isSubmitting) return;
         const content = message.trim();
@@ -1439,7 +1567,21 @@ export default function ChatConversation() {
             case 'video':
                 return <video src={mediaUrl} controls className="max-w-full rounded-lg" />;
             case 'voice':
-                return <AudioMessage src={mediaUrl} />;
+                return (
+                    <div className="flex flex-col gap-2">
+                        <AudioMessage src={mediaUrl} />
+                        {msg.metadata?.transcription && (
+                            <div className="px-3 py-2 bg-black/5 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 relative group">
+                                <div className="absolute -top-2 -right-1 px-1.5 py-0.5 bg-vic-green/10 dark:bg-vic-green/20 rounded-md border border-vic-green/20 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <span className="text-[7px] font-black uppercase tracking-widest text-vic-green">Whisper Intelligence</span>
+                                </div>
+                                <p className="text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-400 italic">
+                                    "{msg.metadata.transcription}"
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                );
             case 'location': {
                 const locMeta = typeof metadata === 'object' && metadata !== null ? metadata : {};
                 const lat = Number(locMeta.lat || locMeta.latitude || 0);
@@ -1536,6 +1678,11 @@ export default function ChatConversation() {
         return groups;
     }, [messages]);
 
+    // V18: Move all early returns to the end to comply with React hook rules
+    if (activeId && !isValidUUID(activeId) && !isVirtual) {
+        return null;
+    }
+
     if (isLoadingConv && !conversation) {
         return (
             <div className="flex flex-col h-screen bg-[#F0F2F5] dark:bg-[#111B21] items-center justify-center">
@@ -1596,7 +1743,7 @@ export default function ChatConversation() {
                     <div className="flex-1 min-w-0" onClick={() => {
                         if (!isSelf && !isAI) {
                             const chatUser = Array.isArray(otherParticipant?.chat_users) ? otherParticipant.chat_users[0] : otherParticipant?.chat_users;
-                            if (chatUser?.phone_number) router.push(`/expert/${chatUser.phone_number}`);
+                            if (chatUser?.phone_number) router.push(`/expert/${String(chatUser.phone_number)}`);
                         }
                     }}>
                         <h2 className="text-[16px] font-semibold text-[#111B21] dark:text-[#e9edef] truncate flex items-center gap-1.5">
@@ -1656,7 +1803,8 @@ export default function ChatConversation() {
                 {/* Messages Area */}
                 <main
                     ref={scrollRef}
-                    className="flex-1 overflow-y-auto px-4 md:px-12 py-4 space-y-2 custom-scrollbar flex flex-col min-h-0"
+                    className="flex-1 overflow-y-auto px-4 py-6 scroll-smooth no-scrollbar overscroll-none"
+                    onScroll={handleScroll}
                 >
                     <ContextAttachment />
                     {Object.keys(groupedMessages).length > 0 ? (
@@ -1734,6 +1882,7 @@ export default function ChatConversation() {
                             </div>
                         </div>
                     )}
+                    <div ref={messagesEndRef} className="h-4" />
                 </main>
 
                 {/* Input Footer */}

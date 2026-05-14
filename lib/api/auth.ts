@@ -8,88 +8,74 @@ import { detectLocation } from './location'
 export const syncUserWithSupabase = async (supabaseUser: any) => {
     if (!supabaseUser) return null;
 
-    console.log("Syncing user with Supabase:", supabaseUser.id);
+    console.log("[Auth API] Starting secure synchronization for:", supabaseUser.id);
 
-    // 1. Fetch full existing profile to preserve all data
-    const { data: existingProfile, error: fetchError } = await supabase
+    try {
+        // 1. Attempt secure server-side synchronization via API
+        // This bypasses RLS and handles the UUID type mismatch gracefully
+        const response = await fetch('/api/auth/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: supabaseUser.id,
+                email: supabaseUser.email,
+                full_name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.first_name || '',
+                avatar_url: supabaseUser.user_metadata?.avatar_url || ''
+            }),
+        });
+
+        if (response.ok) {
+            const { profile } = await response.json();
+            console.log("[Auth API] Secure sync successful");
+            return profile;
+        } else {
+            const errorData = await response.json();
+            console.warn("[Auth API] Secure sync failed, falling back to client-side:", errorData.error);
+        }
+    } catch (err) {
+        console.warn("[Auth API] Secure sync request failed:", err);
+    }
+
+    // 2. FALLBACK: Client-side sync (Original logic, preserved for robustness)
+    // Note: This may fail with 42883 if the DB schema hasn't been migrated to UUID yet
+    const { data: existingProfile } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', supabaseUser.id)
         .maybeSingle();
 
-    if (fetchError) {
-        console.error("Error fetching existing profile:", fetchError);
-    }
+    const extractNameFromEmail = (email: string) => {
+        if (!email) return 'User';
+        const namePart = email.split('@')[0];
+        return namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/[._-]/g, ' ');
+    };
 
-    // 2. Prepare update payload - only update essential fields if profile exists
-    // OR create new one if it doesn't.
+    const metadataName = supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.first_name;
+    const finalName = metadataName || (existingProfile?.full_name && existingProfile.full_name !== '-' ? existingProfile.full_name : extractNameFromEmail(supabaseUser.email));
+
     const profilePayload: any = {
         id: supabaseUser.id,
         email: supabaseUser.email,
+        full_name: finalName,
         updated_at: new Date().toISOString()
     };
 
-    // Only set full_name if it doesn't exist yet OR if metadata has a new value
-    const metadataName = supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.first_name;
-    if (!existingProfile?.full_name || metadataName) {
-        profilePayload.full_name = metadataName || existingProfile?.full_name || 'New User';
+    if (supabaseUser.user_metadata?.avatar_url) {
+        profilePayload.avatar_url = supabaseUser.user_metadata.avatar_url;
     }
 
-    // Only set avatar if it doesn't exist yet
-    if (!existingProfile?.avatar_url || supabaseUser.user_metadata?.avatar_url) {
-        profilePayload.avatar_url = supabaseUser.user_metadata?.avatar_url || existingProfile?.avatar_url || '';
-    }
-
-    // 3. Upsert to ensure record exists and essential fields are updated
     const { data: profileRows, error: upsertError } = await supabase
         .from('user_profiles')
-        .upsert(profilePayload, {
-            onConflict: 'id'
-        })
+        .upsert(profilePayload, { onConflict: 'id' })
         .select()
         .limit(1);
 
     if (upsertError) {
-        console.error("Error syncing user with Supabase:", upsertError);
+        console.error("[Auth] Client-side sync failed:", upsertError);
         throw upsertError;
     }
 
-    const profile = profileRows && profileRows.length > 0 ? profileRows[0] : null;
-
-    // Initialize or update settings with location-based defaults if not exists
-    try {
-        const { data: settingsRows, error: settingsError } = await supabase
-            .from('user_settings')
-            .select('*')
-            .eq('user_id', profile.id)
-            .limit(1);
-
-        const existingSettings = settingsRows && settingsRows.length > 0 ? settingsRows[0] : null;
-
-        if (!existingSettings) {
-            console.log("No existing settings found, detecting location...");
-            const loc = await detectLocation();
-            console.log("Detected location for initialization:", loc);
-
-            const { error: insertError } = await supabase.from('user_settings').insert({
-                user_id: profile.id,
-                language: loc.language,
-                currency: loc.currency,
-                timezone: loc.timezone,
-                theme: 'light'
-            });
-
-            if (insertError) {
-                console.error("Failed to insert initial user settings:", insertError);
-            } else {
-                console.log("Initial user settings created successfully.");
-            }
-        }
-    } catch (err) {
-        console.error("Failed to initialize user settings:", err);
-    }
-
-    return profile;
+    return profileRows && profileRows.length > 0 ? profileRows[0] : null;
 }
 
 // ============================================================================
@@ -164,8 +150,8 @@ export const searchUsers = async (query: string, currentUserId: string) => {
         `)
         .neq('id', currentUserId)
         .eq('chat_users.is_verified', true)
-        .or(`full_name.ilike.%${query}%, email.ilike.%${query}%, chat_users.phone_number.ilike.%${query}%`) as any)
-        .limit(10);
+        .or(`full_name.ilike.%${query}%, email.ilike.%${query}%`)
+        .limit(10) as any);
 
     if (error) throw error;
     return data;

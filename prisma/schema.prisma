@@ -26,23 +26,23 @@ model budget_transactions {
 model calls {
   id                                             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   conversation_id                                String?        @db.Uuid
-  caller_id                                      String?
-  receiver_id                                    String?
+  caller_id                                      String?        @db.Uuid
+  receiver_id                                    String?        @db.Uuid
   room_url                                       String
   type                                           String
   status                                         String
   created_at                                     DateTime?      @default(now()) @db.Timestamptz(6)
   ended_at                                       DateTime?      @db.Timestamptz(6)
-  user_profiles_calls_caller_idTouser_profiles   user_profiles? @relation("calls_caller_idTouser_profiles", fields: [caller_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user_profiles_calls_caller_idTouser_profiles   user_profiles? @relation("calls_caller_idTouser_profiles", fields: [caller_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   conversations                                  conversations? @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  user_profiles_calls_receiver_idTouser_profiles user_profiles? @relation("calls_receiver_idTouser_profiles", fields: [receiver_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user_profiles_calls_receiver_idTouser_profiles user_profiles? @relation("calls_receiver_idTouser_profiles", fields: [receiver_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 /// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
 model chat_users {
   id                      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id                 String?        @unique
+  user_id                 String?        @unique @db.Uuid
   phone_number            String         @unique
   country_code            String
   is_verified             Boolean?       @default(false)
@@ -85,8 +85,8 @@ model companies {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model contact_requests {
   id                                                         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  from_user_id                                               String?
-  to_user_id                                                 String?
+  from_user_id                                               String?        @db.Uuid
+  to_user_id                                                 String?        @db.Uuid
   status                                                     String?        @default("pending")
   created_at                                                 DateTime?      @default(now()) @db.Timestamptz(6)
   user_profiles_contact_requests_from_user_idTouser_profiles user_profiles? @relation("contact_requests_from_user_idTouser_profiles", fields: [from_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -98,8 +98,8 @@ model contact_requests {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model contacts {
   id                                                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id                                               String
-  contact_user_id                                       String
+  user_id                                               String         @db.Uuid
+  contact_user_id                                       String         @db.Uuid
   status                                                String?       @default("active")
   created_at                                            DateTime?     @default(now()) @db.Timestamptz(6)
   user_profiles_contacts_contact_user_idTouser_profiles user_profiles @relation("contacts_contact_user_idTouser_profiles", fields: [contact_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -112,7 +112,7 @@ model contacts {
 model conversation_participants {
   id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   conversation_id String?        @db.Uuid
-  user_id         String?
+  user_id         String?        @db.Uuid
   joined_at       DateTime?      @default(now()) @db.Timestamptz(6)
   last_read_at    DateTime?      @db.Timestamptz(6)
   deleted_at      DateTime?      @db.Timestamptz(6)
@@ -132,7 +132,7 @@ model conversations {
   name                      String?
   avatar_url                String?
   is_group                  Boolean?                    @default(false)
-  created_by                String?
+  created_by                String?                     @db.Uuid
   created_at                DateTime?                   @default(now()) @db.Timestamptz(6)
   last_message_at           DateTime?                   @default(now()) @db.Timestamptz(6)
   metadata                  Json?                       @default("{}")
@@ -141,7 +141,7 @@ model conversations {
   last_message_sender_id    String?
   calls                     calls[]
   conversation_participants conversation_participants[]
-  user_profiles             user_profiles?              @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user_profiles             user_profiles?              @relation(fields: [created_by], references: [id], onDelete: Cascade, onUpdate: NoAction)
   messages                  messages[]
 
   @@index([last_message_at(sort: Desc)], map: "idx_conv_last_msg")
@@ -173,7 +173,7 @@ model currency_lookup {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model daily_progress {
   id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id           String?
+  user_id           String?        @db.Uuid
   progress_date     DateTime       @db.Date
   progress_data     Json?          @default("{}")
   calories_goal     Int?
@@ -210,7 +210,7 @@ model email_verification_codes {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model food_analysis_history {
   id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id           String
+  user_id           String         @db.Uuid
   food_item_id      String?       @db.Uuid
   food_name         String?
   image_url         String?
@@ -277,7 +277,7 @@ model food_items {
   alternatives            Json?                   @default("[]")
   vitamins_and_nutrition  String?
   recommendation          String?
-  user_id                 String?
+  user_id                 String?                 @db.Uuid
   food_analysis_history   food_analysis_history[]
   user_profiles           user_profiles?          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
@@ -337,7 +337,7 @@ model medications {
 model messages {
   id                    String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   conversation_id       String?                @db.Uuid
-  sender_id             String?
+  sender_id             String?                @db.Uuid
   content               String?
   metadata              Json?
   is_read               Boolean?               @default(false)
@@ -349,7 +349,7 @@ model messages {
   pending_analysis_id   String?                @db.Uuid
   conversations         conversations?         @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   food_analysis_history food_analysis_history? @relation(fields: [pending_analysis_id], references: [id], onUpdate: NoAction)
-  user_profiles         user_profiles?         @relation(fields: [sender_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user_profiles         user_profiles?         @relation(fields: [sender_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([conversation_id, created_at(sort: Desc)], map: "idx_messages_conv_created")
   @@index([conversation_id, created_at(sort: Desc)], map: "idx_messages_conversation")
@@ -360,7 +360,7 @@ model messages {
 
 model monthly_reports {
   id                   String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id              String?
+  user_id              String?        @db.Uuid
   report_year          Int
   report_month         Int
   summary              String?
@@ -378,7 +378,7 @@ model monthly_reports {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model notifications {
   id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id           String?
+  user_id           String?        @db.Uuid
   notification_type String
   title             String?
   content           String
@@ -451,7 +451,7 @@ model products {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model progress_measurements {
   id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id          String?
+  user_id          String?        @db.Uuid
   weight           Decimal        @db.Decimal
   height           Decimal?       @db.Decimal
   measurement_date DateTime       @db.Date
@@ -534,7 +534,7 @@ model system_logs {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model user_budgets {
   id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id             String?
+  user_id             String?               @db.Uuid
   total_budget        Decimal               @db.Decimal
   current_balance     Decimal               @db.Decimal
   remaining_budget    Decimal?              @db.Decimal
@@ -569,7 +569,7 @@ model user_milestones {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model user_profiles {
-  id                                                            String                      @id
+  id                                                            String                      @id @db.Uuid
   first_name                                                    String?
   last_name                                                     String?
   full_name                                                     String?
@@ -615,13 +615,14 @@ model user_profiles {
   user_milestones                                               user_milestones[]
   user_recipe_interactions                                      user_recipe_interactions[]
   user_spiritual_history                                        user_spiritual_history[]
+  user_settings                                                 user_settings?
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model user_recipe_interactions {
   id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id          String?
+  user_id          String?        @db.Uuid
   recipe_id        String?        @db.Uuid
   interaction_type String
   rating           Int?
@@ -636,24 +637,25 @@ model user_recipe_interactions {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model user_settings {
-  id                         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  user_id                    String    @unique
-  theme                      String?   @default("light")
-  push_notifications_enabled Boolean?  @default(true)
-  language                   String?   @default("en")
-  currency                   String?   @default("USD")
+  id                         String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id                    String         @unique @db.Uuid
+  theme                      String?        @default("light")
+  push_notifications_enabled Boolean?       @default(true)
+  language                   String?        @default("en")
+  currency                   String?        @default("USD")
   timezone                   String?
-  subscription_status        String?   @default("free")
-  subscription_expires_at    DateTime? @db.Timestamptz(6)
-  created_at                 DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at                 DateTime? @default(now()) @db.Timestamptz(6)
+  subscription_status        String?        @default("free")
+  subscription_expires_at    DateTime?      @db.Timestamptz(6)
+  created_at                 DateTime?      @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime?      @default(now()) @db.Timestamptz(6)
   country_code               String?
-  is_language_auto           Boolean?  @default(true)
+  is_language_auto           Boolean?       @default(true)
+  user_profiles              user_profiles? @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model user_spiritual_history {
   id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id           String?
+  user_id           String?            @db.Uuid
   content_id        String?            @db.Uuid
   viewed_at         DateTime?          @default(now()) @db.Timestamptz(6)
   spiritual_content spiritual_content? @relation(fields: [content_id], references: [id], onDelete: Cascade, onUpdate: NoAction)

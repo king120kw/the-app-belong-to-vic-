@@ -106,14 +106,11 @@ export default function QRScanner({ onScan, onClose, onManualCapture, isAnalyzin
             // Hints to only look for typical product barcodes instead of QR
             const hints = new Map();
             hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-                BarcodeFormat.EAN_8,
+                BarcodeFormat.QR_CODE, // Prioritize QR for VicCode
                 BarcodeFormat.EAN_13,
-                BarcodeFormat.UPC_A,
-                BarcodeFormat.UPC_E,
-                BarcodeFormat.CODE_128,
-                BarcodeFormat.CODE_39,
-                BarcodeFormat.ITF
+                BarcodeFormat.CODE_128
             ]);
+            hints.set(DecodeHintType.TRY_HARDER, true);
 
             const result = codeReaderRef.current.decode(binaryBitmap, hints);
 
@@ -227,7 +224,7 @@ export default function QRScanner({ onScan, onClose, onManualCapture, isAnalyzin
                                 <div className="flex items-center gap-2 px-5 py-2.5 bg-black/50 backdrop-blur-md rounded-full border border-white/10">
                                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                                     <span className="text-white/80 text-xs font-bold tracking-widest uppercase">
-                                        Scanning OR Tap to Capture
+                                        Scan QR Code or Barcode
                                     </span>
                                 </div>
                             )}

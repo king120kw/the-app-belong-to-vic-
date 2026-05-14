@@ -87,6 +87,25 @@ export const getUserLocation = async (): Promise<GeoLocationData> => {
 
 export const detectLocation = async (): Promise<LocationData> => {
     const data = await getUserLocation();
+    
+    // Expanded language mapping based on country codes
+    const countryToLang: Record<string, string> = {
+        // Arabic
+        'SA': 'ar', 'AE': 'ar', 'QA': 'ar', 'KW': 'ar', 'BH': 'ar', 'OM': 'ar', 'EG': 'ar', 'JO': 'ar', 'LB': 'ar', 'IQ': 'ar', 'LY': 'ar', 'MA': 'ar', 'TN': 'ar', 'DZ': 'ar',
+        // Indonesian / Malay
+        'ID': 'id', 'MY': 'id',
+        // Indian Subcontinent
+        'IN': 'hi', 'PK': 'ur', 'BD': 'bn',
+        // Greater China
+        'CN': 'zh', 'TW': 'zh', 'HK': 'zh',
+        // Europe
+        'FR': 'fr', 'ES': 'es', 'MX': 'es', 'DE': 'de', 'AT': 'de', 'CH': 'de', 'RU': 'ru', 'TR': 'tr',
+        // Others
+        'VN': 'vi', 'KR': 'ko', 'JP': 'ja', 'TH': 'th', 'PH': 'en', 'BR': 'pt', 'PT': 'pt'
+    };
+
+    const detectedLang = countryToLang[data.location.country_code] || 'en';
+
     return {
         country: data.location.country_name,
         country_code: data.location.country_code,
@@ -94,6 +113,6 @@ export const detectLocation = async (): Promise<LocationData> => {
         currency: data.currency.code,
         currency_symbol: data.currency.symbol,
         timezone: data.location.timezone,
-        language: ['SA', 'AE', 'QA', 'KW', 'BH', 'OM', 'EG', 'JO', 'LB'].includes(data.location.country_code) ? 'ar' : 'en'
+        language: detectedLang
     };
 };

@@ -132,7 +132,7 @@ export default function FoodCarousel({
                     </div>
                 </div>
 
-                <div className="carousel h-[400px]">
+                <div className="carousel h-[420px]">
                     {activeMeals.length > 0 ? (
                         <>
                             <button className="nav prev" onClick={handlePrev}>

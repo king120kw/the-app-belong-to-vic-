@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link"
 import { useRouter } from "next/navigation";
-import { ArrowLeft, X, Moon, Settings as SettingsIcon, ChevronRight, LogOut } from "lucide-react";
+import { ArrowLeft, X, Moon, Settings as SettingsIcon, ChevronRight, LogOut, QrCode } from "lucide-react";
+import { MyQRCode } from "@/components/MyQRCode";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { getUserSettings, updateSettings } from "@/lib/api/settings";
@@ -19,6 +20,7 @@ export default function Settings() {
   const [darkMode, setDarkMode] = useState(false);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
 
   const currenciesList = [
     { code: 'USD', name: 'US Dollar', symbol: '$', country: 'US' },
@@ -148,6 +150,11 @@ export default function Settings() {
             icon="payments"
             value={currencyCode}
             onClick={() => setShowCurrencyModal(true)}
+          />
+          <SettingItem
+            label="My VicCode (QR)"
+            icon="qr_code"
+            onClick={() => setShowQRModal(true)}
           />
         </SettingGroup>
 
@@ -317,11 +324,19 @@ export default function Settings() {
         </SettingGroup>
 
 
+        {showQRModal && (
+          <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setShowQRModal(false)}>
+            <div onClick={(e) => e.stopPropagation()}>
+              <MyQRCode data={user?.id || ''} fullName={user?.user_metadata?.full_name || user?.email} />
+            </div>
+          </div>
+        )}
+
         {/* Sign Out Button */}
-        <div className="p-6">
+        <div className="p-6 pb-2">
           <button
             onClick={handleSignOut}
-            className="w-full px-6 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg font-bold hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors flex items-center justify-center gap-2"
+            className="w-full px-6 py-3 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 rounded-xl font-bold hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2"
           >
             <LogOut size={18} />
             {t('sign_out')}
@@ -372,6 +387,10 @@ function SettingItem({
         }`}
     >
       <div className="flex items-center gap-3">
+        {icon === "account_circle" && <div className="p-2 bg-blue-500/10 rounded-lg"><SettingsIcon size={18} className="text-blue-500" /></div>}
+        {icon === "language" && <div className="p-2 bg-emerald-500/10 rounded-lg"><SettingsIcon size={18} className="text-emerald-500" /></div>}
+        {icon === "payments" && <div className="p-2 bg-amber-500/10 rounded-lg"><SettingsIcon size={18} className="text-amber-500" /></div>}
+        {icon === "qr_code" && <div className="p-2 bg-purple-500/10 rounded-lg"><QrCode size={18} className="text-purple-500" /></div>}
         <span className="font-medium text-slate-900 dark:text-white">
           {label}
         </span>

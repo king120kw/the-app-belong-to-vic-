@@ -3,9 +3,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
+import { useTranslation } from "@/lib/api/translation";
 
-const CinematicText = ({ onComplete }: { onComplete: () => void }) => {
-  const text = "Welcome to Vicalary";
+const CinematicText = ({ text, onComplete }: { text: string; onComplete: () => void }) => {
   return (
     <motion.h2 
       className="font-semibold text-gray-900 text-3xl md:text-4xl tracking-tight text-center flex items-center justify-center mt-6 md:mt-8"
@@ -40,6 +40,7 @@ const CinematicText = ({ onComplete }: { onComplete: () => void }) => {
 
 const SplashSequence = ({ onComplete }: { onComplete: () => void }) => {
   const [isTypingDone, setIsTypingDone] = useState(false);
+  const { t } = useTranslation();
 
   const handleTypingComplete = () => {
     setIsTypingDone(true);
@@ -71,7 +72,7 @@ const SplashSequence = ({ onComplete }: { onComplete: () => void }) => {
         </motion.div>
         
         <div className="h-16 md:h-20 flex items-center justify-center">
-          <CinematicText onComplete={handleTypingComplete} />
+          <CinematicText text={t('welcome_to_vicalary')} onComplete={handleTypingComplete} />
         </div>
       </div>
     </motion.div>
@@ -82,6 +83,7 @@ export default function Welcome() {
   const [animationPhase, setAnimationPhase] = useState<"idle" | "zooming" | "welcome" | "complete">("idle");
   const router = useRouter();
   const { user, loading } = useAuth();
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (!loading && user) {
@@ -167,10 +169,10 @@ export default function Welcome() {
               >
                 <div className="max-w-xs sm:max-w-md md:max-w-2xl space-y-2 md:space-y-4">
                   <h1 className="font-bold tracking-tight text-gray-900 text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold">
-                    Start Your Journey
+                    {t('start_your_journey')}
                   </h1>
                   <p className="text-gray-500 font-medium leading-relaxed text-base sm:text-lg md:text-xl lg:text-2xl">
-                    Personalized meal plans for a healthier you.
+                    {t('welcome_subtitle')}
                   </p>
                 </div>
                 
@@ -178,11 +180,11 @@ export default function Welcome() {
                   <button 
                     onClick={handleGetStarted}
                     disabled={animationPhase !== "idle"}
-                    aria-label="Start your journey" 
+                    aria-label={t('get_started')}
                     className="w-full bg-black text-white py-3.5 sm:py-4 md:py-5 px-6 rounded-full font-semibold text-base sm:text-lg md:text-xl active:scale-95 transition-transform duration-100 shadow-lg" 
                     type="button"
                   >
-                    Get Started
+                    {t('get_started')}
                   </button>
                 </div>
                 

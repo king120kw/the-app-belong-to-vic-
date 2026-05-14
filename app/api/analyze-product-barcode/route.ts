@@ -191,6 +191,7 @@ Provide a JSON response. All fields required:
 PRODUCT DETAILS: ${JSON.stringify(productData || { barcode })}
 POLITICAL STATUS: invest_israel=${political.invest_israel}, invest_uae=${political.invest_uae}
 USER LOCATION: ${geoInfo.city}, ${geoInfo.country_name} | CURRENCY: ${currencySymbol}
+REGIONAL STANDARDS: Use ${['US', 'UK', 'CA', 'AU'].includes(geoInfo.country_name) ? 'Imperial (oz/lbs)' : 'Metric (g/kg)'} units. Factor in ${geoInfo.country_name} food safety regulations.
 
 RULES:
 1. ${hasVerifiedNutrition ? 'USE THE VERIFIED NUTRITION NUMBERS EXACTLY.' : 'Provide your best scientific estimate for macros.'}
@@ -203,7 +204,7 @@ RULES:
 Respond with ONLY JSON:
 {"name":"exact product name","brand":"brand name","description":"...","usage_instructions":"...","factory_ingredients":"...","suitability_analysis":"...","country_origin_details":"...","vitamins_and_nutrition":"...","recommendation":"...","recommended_pairings":"...","estimated_price":"${currencySymbol}X.XX","cheaper_alternatives":[{"name":"...","price":"...","reason":"..."}],"is_compliant":${!political.invest_israel},"political_warning":"${political.invest_israel ? political.warning : 'Company is not involved in these two countries (Israel/UAE).'}","calories":${hasVerifiedNutrition ? verifiedNutrition.calories : 0},"protein":${hasVerifiedNutrition ? verifiedNutrition.protein : 0},"carbs":${hasVerifiedNutrition ? verifiedNutrition.carbs : 0},"fat":${hasVerifiedNutrition ? verifiedNutrition.fat : 0},"sugar":${hasVerifiedNutrition ? verifiedNutrition.sugar : 0},"fiber":${hasVerifiedNutrition ? verifiedNutrition.fiber : 0},"healthStatus":"GOOD|MODERATE|POOR","user_alignment_boolean":true}
 
-LANGUAGE MANDATE: Auto-detect language. If in Arabic/Urdu region, respond in that language.`
+LANGUAGE MANDATE: Auto-detect language based on location (${geoInfo.country_name}). If the region speaks Arabic, Urdu, Hindi, or Indonesian, respond fluently in that language.`
     }
 
     const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {

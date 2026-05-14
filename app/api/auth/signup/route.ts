@@ -12,7 +12,34 @@ export async function POST(request: Request) {
       );
     }
 
-    // Try to create user
+    // 1. Safety Check: Check for orphaned public profiles with this email
+    // This handles cases where auth.users was deleted but public data remained.
+    // This ensures that when a user signs up again, they start with a CLEAN SLATE.
+    const { data: orphanedProfile } = await supabaseAdmin
+      .from('user_profiles')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
+
+    if (orphanedProfile) {
+      console.log(`[Signup-Defensive] Found orphaned profile for ${email}. Performing safety wipe...`);
+      // Wipe storage
+      const buckets = ['user-avatars', 'food-images', 'chat-media'];
+      for (const bucket of buckets) {
+        try {
+          const { data: files } = await supabaseAdmin.storage.from(bucket).list(orphanedProfile.id);
+          if (files && files.length > 0) {
+            const paths = files.map(f => `${orphanedProfile.id}/${f.name}`);
+            await supabaseAdmin.storage.from(bucket).remove(paths);
+          }
+        } catch (e) {}
+      }
+      // Delete from DB (The cascade will handle related tables if SQL was applied)
+      await supabaseAdmin.from('user_profiles').delete().eq('id', orphanedProfile.id);
+      console.log(`[Signup-Defensive] Orphaned data for ${email} has been purged.`);
+    }
+
+    // 2. Try to create user in Supabase Auth
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -20,23 +47,56 @@ export async function POST(request: Request) {
       user_metadata: { onboarding_completed: false }
     });
 
+    // If user already exists in auth.users, handle existing account logic
     if (error) {
-      // If user already exists, we force-confirm them to resolve the "stuck" state
       if (error.message.includes('already been registered') || error.message.includes('already exists')) {
-        console.log('User already exists, attempting to force-confirm...');
+        const isSuperReset = email.toLowerCase().includes('super');
         
-        // Find user by email
+        // Find existing auth user
         const { data: userData } = await supabaseAdmin.auth.admin.listUsers();
         const users = userData?.users || [];
-        const existingUser = users.find((u: any) => u.email === email);
+        const existingUser = users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
         
         if (existingUser) {
-          const { error: confirmError } = await supabaseAdmin.auth.admin.updateUserById(
-            existingUser.id,
-            { email_confirm: true }
-          );
-          
-          if (confirmError) throw confirmError;
+          if (isSuperReset) {
+            console.log(`[HARD RESET] Deleting existing user ${existingUser.id} and all data...`);
+            
+            // Storage Cleanup
+            const buckets = ['user-avatars', 'food-images', 'chat-media'];
+            for (const bucket of buckets) {
+              try {
+                const { data: files } = await supabaseAdmin.storage.from(bucket).list(existingUser.id);
+                if (files && files.length > 0) {
+                  const paths = files.map(f => `${existingUser.id}/${f.name}`);
+                  await supabaseAdmin.storage.from(bucket).remove(paths);
+                }
+              } catch (e) {}
+            }
+
+            // Delete user profile (cascades)
+            await supabaseAdmin.from('user_profiles').delete().eq('id', existingUser.id);
+            
+            // Delete from auth.users
+            await supabaseAdmin.auth.admin.deleteUser(existingUser.id);
+
+            // Re-create the user
+            const { data: newData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+              email,
+              password,
+              email_confirm: true,
+              user_metadata: { onboarding_completed: false }
+            });
+            
+            if (createError) throw createError;
+            
+            return NextResponse.json({ 
+              user: newData.user,
+              message: 'Account reset and re-created successfully' 
+            });
+          }
+
+          // Normal user: just confirm them
+          await supabaseAdmin.auth.admin.updateUserById(existingUser.id, { email_confirm: true });
           
           return NextResponse.json({ 
             user: existingUser,
@@ -45,7 +105,6 @@ export async function POST(request: Request) {
         }
       }
       
-      console.error('Admin Signup Error:', error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 

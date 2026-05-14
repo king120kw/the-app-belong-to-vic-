@@ -132,10 +132,20 @@ export default function Chat() {
       .on('postgres_changes', {
         event: '*', // Listen to INSERT, UPDATE, DELETE for full sync
         schema: 'public',
+        table: 'conversations'
+      }, (payload: any) => {
+        // A conversation was updated (e.g. last_message_at changed)
+        console.log(`[Chat] V10 Global conversation event [${payload.eventType}]:`, payload.new?.id || payload.old?.id);
+        queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
+      })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
         table: 'messages'
       }, (payload: any) => {
-        // A message change happened. Invalidate conversations and contacts if needed.
-        console.log(`[Chat] V10 Global message event [${payload.eventType}]:`, payload.new?.id || payload.old?.id);
+        // We still listen to messages to catch new ones, but maybe we can filter better?
+        // For now, only refresh if it's a message that could be in one of our conversations.
+        // Actually, invalidating 'conversations' is correct to update the preview.
         queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
       })
       .on('postgres_changes', {
@@ -144,7 +154,7 @@ export default function Chat() {
         table: 'conversation_participants',
         filter: `user_id=eq.${user.id}`
       }, () => {
-        // User was added to a new conversation (either they sent a first message or someone added them)
+        // User was added to a new conversation
         console.log("[Chat] V10 Participant event: refreshing list");
         queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
         queryClient.invalidateQueries({ queryKey: ['contacts', user.id] });
@@ -170,7 +180,7 @@ export default function Chat() {
       supabase.removeChannel(presenceChannel);
       supabase.removeChannel(listUpdateChannel);
     };
-  }, [user?.id, verified, queryClient, router, pathname, searchParams]);
+  }, [user?.id, verified, queryClient]);
 
   // ── Mutations ────────────────────────────────────────────────────
   const addContactMutation = useMutation({
@@ -232,7 +242,7 @@ export default function Chat() {
       );
 
       if (existingConv) {
-        router.push(`/chat/${existingConv.id}`);
+        router.push(`/chat/${String(existingConv.id)}`);
         setIsDiscoveryOpen(false);
         setContactFound(null);
         return;
@@ -256,20 +266,19 @@ export default function Chat() {
   };
 
   const handleQRScan = async (data: string) => {
-    console.log("[Chat] QR Data scanned:", data);
-    setShowQRScanner(false);
-
+    let targetId = data;
     try {
-      let targetId = data;
-      // 1. Try to parse as JSON first (standard payload)
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed.userId) targetId = parsed.userId;
-      } catch (e) {
-        // Fallback: use raw data if not JSON (maybe just a UUID or phone)
-      }
+      const parsed = JSON.parse(data);
+      if (parsed.userId) targetId = parsed.userId;
+      else if (parsed.id) targetId = parsed.id;
+    } catch (e) {
+      // Fallback: use raw data
+    }
 
-      toast.loading("Resolving contact...", { id: 'qr-resolve' });
+    console.log("[Chat] Resolving QR Data:", targetId);
+    toast.loading("Resolving VicCode...", { id: 'qr-resolve' });
+    
+    try {
       const targetUser = await findUserByIdentifier(targetId);
 
       if (!targetUser) {
@@ -277,9 +286,16 @@ export default function Chat() {
         return;
       }
 
+      // V15: Check verification status explicitly for QR scans
+      const verified = await isChatVerified(targetUser.id);
+      if (!verified) {
+        toast.error("This user has not authenticated their number yet.", { id: 'qr-resolve' });
+        return;
+      }
+
       toast.success(`Found ${targetUser.full_name || 'User'}!`, { id: 'qr-resolve' });
       setContactFound(targetUser);
-      setIsDiscoveryOpen(true); // Open discovery to show the "Add" button
+      setIsDiscoveryOpen(true); 
     } catch (err: any) {
       console.error("[Chat] QR Resolution failed:", err);
       toast.error("Failed to resolve QR code", { id: 'qr-resolve' });
@@ -293,7 +309,7 @@ export default function Chat() {
       if (error) throw error;
       const selfConvId = data?.self_conversation_id;
       if (!selfConvId) throw new Error('No self conversation returned');
-      router.push(`/chat/${selfConvId}`);
+      router.push(`/chat/${String(selfConvId)}`);
     } catch (err: any) {
       console.error("Failed to open self-chat:", err);
       toast.error("Could not open personal notes. Please try again.");
@@ -357,11 +373,24 @@ export default function Chat() {
   // Contacts tab = PURE address book: list ALL friends/contacts
   // This matches WhatsApp's design of having a complete contact list
   const contactList = useMemo(() => {
-    return contactsData
+    const baseList = contactsData
       .filter((c: any) => c && (c.full_name || c.phone_number || c.username))
       .sort((a: any, b: any) =>
         (a.full_name || a.phone_number || '').localeCompare(b.full_name || b.phone_number || '')
       );
+    
+    // V10: Inject Health Coach into the contact list so it's always discoverable
+    const listWithCoach = [
+      {
+        id: COACH_ID,
+        full_name: 'Health Coach',
+        avatar_url: '/app logo.png',
+        is_ai: true
+      },
+      ...baseList
+    ];
+
+    return listWithCoach;
   }, [contactsData]);
 
   // When tapping a contact: navigate to existing conversation or create one
@@ -373,10 +402,10 @@ export default function Chat() {
       conv.conversation_participants?.some((p: any) => p.user_id === contact.id)
     );
     if (existingConv) {
-      router.push(`/chat/${existingConv.id}`);
+      router.push(`/chat/${String(existingConv.id)}`);
     } else {
       // Navigate using a special prefix or state to signal this is a NEW conversation
-      router.push(`/chat/new-${contact.id}`);
+      router.push(`/chat/new-${String(contact.id)}`);
     }
   };
 
@@ -485,7 +514,7 @@ export default function Chat() {
 
             {/* ── Health Coach (pinned AI chat) ── */}
             {coachConv && (
-              <Link href={`/chat/${coachConv.id}`}
+              <Link href={`/chat/${String(coachConv.id)}`}
                 className={`flex gap-4 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors ${isActuallyUnread(coachConv) ? 'bg-vic-green/5' : ''}`}>
                 <div className="size-14 rounded-full overflow-hidden shrink-0 border-2 border-vic-green/30">
                   <AvatarImg src="/app logo.png" name="Health Coach" />
@@ -525,7 +554,7 @@ export default function Chat() {
 
             {/* ── Message Yourself (self chat) ── */}
             <button
-              onClick={() => selfConv ? router.push(`/chat/${selfConv.id}`) : openSelfChat()}
+              onClick={() => selfConv ? router.push(`/chat/${String(selfConv.id)}`) : openSelfChat()}
               className={`w-full flex gap-4 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.03] text-left transition-colors ${selfConv && isActuallyUnread(selfConv) ? 'bg-vic-green/5' : ''}`}>
               <div className="size-14 rounded-full overflow-hidden border-2 border-vic-pink/30 shrink-0 relative">
                 <AvatarImg src={profile?.avatar_url} name="Me" />
@@ -568,7 +597,7 @@ export default function Chat() {
                 <div
                   key={conv.id}
                   className={`flex gap-4 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors ${isUnread ? 'bg-vic-green/5' : ''} select-none cursor-pointer`}
-                  onClick={() => router.push(`/chat/${conv.id}`)}
+                  onClick={() => router.push(`/chat/${String(conv.id)}`)}
                   onTouchStart={() => handleLongPressStart(conv)}
                   onTouchEnd={handleLongPressEnd}
                   onMouseDown={() => handleLongPressStart(conv)}

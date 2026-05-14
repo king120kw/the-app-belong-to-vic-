@@ -143,19 +143,17 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  border: 1px solid rgba(19, 236, 55, 0.1);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
-  color: var(--vic-text-light);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
-  cursor: pointer;
-  font-size: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(4px);
+  color: white;
   display: grid;
   place-items: center;
-  z-index: 10;
-  transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  z-index: 20;
+  transition: all 0.2s ease;
   user-select: none;
 }
 
@@ -237,13 +235,12 @@
     opacity 400ms ease, filter 400ms ease, box-shadow 400ms ease;
   width: min(340px, 85vw);
   height: 100%;
-  border-radius: 24px;
-  background: #111;
+  border-radius: 28px;
+  background: #000;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  display: block;
 }
 
 .dark .product-card {
@@ -290,10 +287,12 @@
 
 /* Product Media */
 .product-media {
-  position: relative;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   overflow: hidden;
+  z-index: 1;
 }
 
 .product-media img {
@@ -314,14 +313,14 @@
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 24px 20px;
+  padding: 32px 20px 24px;
   background: linear-gradient(to top, 
-    rgba(0,0,0,0.95) 0%, 
-    rgba(0,0,0,0.6) 50%, 
+    rgba(0,0,0,1) 0%, 
+    rgba(0,0,0,0.8) 30%, 
+    rgba(0,0,0,0.4) 60%,
     transparent 100%);
-  backdrop-filter: blur(2px);
   color: white;
-  z-index: 2;
+  z-index: 3;
 }
 
 .product-name {
@@ -337,11 +336,11 @@
 .product-calories-badge {
   background: #13ec37;
   color: #000;
-  padding: 4px 10px;
-  border-radius: 10px;
-  font-size: 0.75rem;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 0.8rem;
   font-weight: 900;
-  box-shadow: 0 4px 12px rgba(19, 236, 55, 0.3);
+  box-shadow: 0 8px 20px rgba(19, 236, 55, 0.4);
   white-space: nowrap;
 }
 
@@ -353,11 +352,6 @@
 
   .deck {
     height: 380px;
-  }
-
-  .product-media img {
-    width: 86%;
-    height: 220px;
   }
 
   /* Don't hide nav on mobile, just in case */
@@ -373,11 +367,6 @@
 @media (max-width: 768px) {
   .deck {
     height: 360px;
-  }
-
-  .product-media img {
-    width: 240px;
-    height: 180px;
   }
 
   .product-card {

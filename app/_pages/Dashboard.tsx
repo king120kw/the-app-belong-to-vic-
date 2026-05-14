@@ -137,6 +137,14 @@ export default function Dashboard() {
     }
   }, [user, profile, authLoading]);
 
+  // Route Guard: Redirect to onboarding if profile is incomplete
+  useEffect(() => {
+    if (profile && !profile.onboarding_completed && !authLoading) {
+      console.log("[Dashboard] Profile incomplete. Redirecting to onboarding.");
+      router.push("/onboarding");
+    }
+  }, [profile, authLoading, router]);
+
   const toggleTheme = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);

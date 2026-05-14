@@ -57,8 +57,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'Ignored' })
     }
 
-    const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
-    if (!apiKey) throw new Error('NEXT_PUBLIC_OPENAI_API_KEY not set')
+    const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.OPENAI_API_KEY
+    if (!apiKey || apiKey.startsWith('your_') || apiKey.startsWith('sk-your')) {
+      console.error('[Coach-Reply] Critical Error: OPENAI_API_KEY is missing or is a placeholder. Check .env.local');
+      throw new Error('AI Provider API key not set or is a placeholder')
+    }
 
     const { supabaseAdmin } = await import('@/lib/supabase-admin')
     const supabase = supabaseAdmin
@@ -71,24 +74,35 @@ export async function POST(req: NextRequest) {
       '8.8.8.8'
     const geoInfo = await getGeoInfo(supabase, clientIp)
 
-    const { data: participants } = await supabase
-      .from('conversation_participants')
-      .select('user_id')
-      .eq('conversation_id', conversationId)
-
-    const userId = participants?.find((p: any) => p.user_id !== COACH_ID)?.user_id
-    console.log(`[Coach-Reply] Resolved Human User: ${userId} in Conv: ${conversationId}`)
-    if (!userId) {
-      console.warn(`[Coach-Reply] No human user found in conversation ${conversationId}. Participants:`, participants)
-      return NextResponse.json({ message: 'No human' })
+    // V17: Use the sender_id from the record directly to avoid race conditions with participant fetching
+    const userId = record.sender_id
+    console.log(`[Coach-Reply] Using Sender ID from record: ${userId} for Conv: ${conversationId}`)
+    
+    if (!userId || userId === COACH_ID) {
+      console.warn(`[Coach-Reply] Invalid sender for AI reply: ${userId}`)
+      return NextResponse.json({ message: 'Invalid sender' })
     }
 
+    const safeFetch = async (promise: Promise<any>, label: string) => {
+      try {
+        const res = await promise;
+        if (res.error) {
+          console.warn(`[Coach-Reply] Warning fetching ${label}:`, res.error.message);
+          return { data: null };
+        }
+        return res;
+      } catch (e: any) {
+        console.error(`[Coach-Reply] Critical error fetching ${label}:`, e.message);
+        return { data: null };
+      }
+    };
+
     const [onboardingRes, profileRes, nutritionRes, messagesRes, scannedProductsRes] = await Promise.all([
-      supabase.from('onboarding_responses').select('*').eq('user_id', userId).maybeSingle(),
-      supabase.from('user_profiles').select('*').eq('id', userId).maybeSingle(),
-      supabase.from('food_analysis_history').select('*').eq('user_id', userId).order('analyzed_at', { ascending: false }).limit(7),
-      supabase.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(20),
-      supabase.from('food_analysis_history').select('food_name, calories, protein, carbs, fat, analyzed_at').eq('user_id', userId).order('analyzed_at', { ascending: false }).limit(3),
+      safeFetch(supabase.from('onboarding_responses').select('*').eq('user_id', userId).maybeSingle(), 'onboarding'),
+      safeFetch(supabase.from('user_profiles').select('*').eq('id', userId).maybeSingle(), 'profile'),
+      safeFetch(supabase.from('food_analysis_history').select('*').eq('user_id', userId).order('analyzed_at', { ascending: false }).limit(7), 'nutrition'),
+      safeFetch(supabase.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(20), 'messages'),
+      safeFetch(supabase.from('food_analysis_history').select('food_name, calories, protein, carbs, fat, analyzed_at').eq('user_id', userId).order('analyzed_at', { ascending: false }).limit(3), 'scans'),
     ])
 
     const profile = profileRes.data
@@ -129,6 +143,7 @@ MULTIMODAL & CONTEXTUAL REASONING:
 - FACTOR IN THE FOLLOWING METRICS:
   - Current Time/Date: ${currentTime}
   - User Location: ${geoInfo.city}, ${geoInfo.country_name}
+  - Regional Standards: Use ${['US', 'UK', 'CA', 'AU'].includes(geoInfo.country_name) ? 'Imperial (kcal/oz/lbs)' : 'Metric (kcal/kJ/g/kg)'} units. Factor in local health regulations of ${geoInfo.country_name}.
   - Today's Consumption: ${totalCaloriesToday} kcal
   - Remaining Calories: ${caloriesRemaining} kcal (Goal: ${calorieGoal} kcal)
   - Primary Health Goal: ${(onboarding as any).goal || 'General Wellness'}
@@ -136,7 +151,7 @@ MULTIMODAL & CONTEXTUAL REASONING:
 - LATEST DEPTH ANALYSIS CONTEXT: ${system_context?.latest_analysis ? JSON.stringify(system_context.latest_analysis) : 'None'}
 
 INTELLIGENCE DIRECTIVES:
-- LANGUAGE: Auto-detect the user's language. If they speak Arabic or Urdu, respond fluently in those languages.
+- LANGUAGE: Auto-detect the user's language. If they speak Arabic, Urdu, Hindi, Indonesian, Spanish, French, or Portuguese, respond fluently in that language to create a premium, localized experience.
 - REASONING: Before you reply, internally evaluate the user's intent. Are they asking for motivation, data analysis, or a recommendation? Tailor your depth to their specific need.
 - CONSISTENCY: If they ask about a previous meal or scan mentioned in the history, you know exactly what they are referring to.
 
@@ -171,6 +186,15 @@ Respond directly with your conversational reply. Avoid all robotic formatting.`
               const tData = await transRes.json()
               transcribedText = tData.text || ''
               console.log(`[Coach-Reply] Transcription Success: "${transcribedText}"`)
+              
+              // V14: PERSIST TRANSCRIPTION to the original message for future context & UI display
+              await supabase.from('messages').update({
+                metadata: { 
+                  ...record.metadata, 
+                  transcription: transcribedText,
+                  transcription_v: 1 // versioning if we change algorithms
+                }
+              }).eq('id', record.id);
             } else {
               const errText = await transRes.text()
               console.error(`[Coach-Reply] Whisper Error: ${errText}`)
@@ -183,12 +207,25 @@ Respond directly with your conversational reply. Avoid all robotic formatting.`
       }
     }
 
-    const chatContext: any[] = recentMessages.map((m: any) => ({
-      role: m.sender_id === COACH_ID ? 'assistant' : 'user',
-      content: m.sender_id === COACH_ID
-        ? (m.content || '')
-        : (m.message_type === 'text' ? (m.content || '') : `[${m.message_type} message shared]`),
-    })).filter((m: any) => m.content)
+    const chatContext: any[] = recentMessages.map((m: any) => {
+      const isCoach = m.sender_id === COACH_ID;
+      let content = m.content || '';
+      
+      if (!isCoach && m.message_type !== 'text') {
+        // V14: Use transcription if available in metadata for non-text messages (voice)
+        const transcription = m.metadata?.transcription || m.metadata?.transcribedText;
+        if (transcription) {
+          content = `[${m.message_type}]: ${transcription}`;
+        } else {
+          content = `[${m.message_type} message shared]`;
+        }
+      }
+
+      return {
+        role: isCoach ? 'assistant' : 'user',
+        content
+      };
+    }).filter((m: any) => m.content)
 
     let content = record.content || ''
     const scanCtx = record.metadata?.scannedProductContext
@@ -247,7 +284,7 @@ Respond directly with your conversational reply. Avoid all robotic formatting.`
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: process.env.NEXT_PUBLIC_OPENAI_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
         messages: [{ role: 'system', content: systemPrompt }, ...chatWithCurrent.slice(-20)],
         stream: true,
         temperature: 0.7,
@@ -284,17 +321,14 @@ Respond directly with your conversational reply. Avoid all robotic formatting.`
 
       if (Date.now() - lastUpdateTime > 500 && fullReply.length > 0) {
         lastUpdateTime = Date.now()
-        // Final cleaning of markdown symbols just in case
-        const cleanReply = fullReply.replace(/[*#]/g, '')
-        supabase.from('messages').update({ content: cleanReply }).eq('id', newMsg.id).then()
+        supabase.from('messages').update({ content: fullReply.trim() }).eq('id', newMsg.id).then()
       }
     }
 
     if (!fullReply) {
       fullReply = "I apologize, but I encountered a technical glitch while thinking. Could you please try asking that again? I'm ready to help!"
     } else {
-      // Final clean up for the final save
-      fullReply = fullReply.replace(/[*#]/g, '')
+      fullReply = fullReply.trim();
     }
 
     await supabase.from('messages').update({ content: fullReply, delivered_at: new Date().toISOString() }).eq('id', newMsg.id)

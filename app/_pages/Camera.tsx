@@ -422,7 +422,8 @@ export default function Camera() {
                             political_warning: analysisResult.political_warning,
                             is_compliant: analysisResult.is_compliant,
                             healthStatus: analysisResult.healthStatus || analysisResult.verdict,
-                            type: 'MEDICATION'
+                            type: 'MEDICATION',
+                            productImage: analysisResult.image_url
                           });
 
                           // Navigate with context
@@ -552,7 +553,8 @@ export default function Camera() {
                             political_warning: analysisResult.political_warning,
                             is_compliant: analysisResult.is_compliant,
                             healthStatus: analysisResult.healthStatus || analysisResult.verdict,
-                            type: 'FOOD'
+                            type: 'FOOD',
+                            productImage: analysisResult.image_url
                           });
 
                           const priceStr = analysisResult.estimated_price ? ` (${analysisResult.estimated_price})` : '';

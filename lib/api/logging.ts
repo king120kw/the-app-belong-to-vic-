@@ -8,12 +8,16 @@ export const logEvent = async (
     event: string,
     metadata: any = {}
 ) => {
+    // Skip if no userId — anonymous logging not supported via RLS
+    if (!userId) return;
     try {
         const { error } = await supabase
             .from('system_logs')
             .insert({
+                user_id: userId,
                 message: event,
                 status: level,
+                metadata: metadata,
                 created_at: new Date().toISOString()
             });
 

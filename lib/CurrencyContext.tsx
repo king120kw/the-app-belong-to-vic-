@@ -36,9 +36,11 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
             const { getUserLocation } = await import('./api/location');
             const data = await getUserLocation();
 
-            setCountryCode(data.location.country_code || 'US');
-            setCurrencyCode(data.currency.code || 'USD');
-            setCurrencySymbol(data.currency.symbol || '$');
+            if (data) {
+                setCountryCode(data.country_code || 'US');
+                setCurrencyCode(data.currency || 'USD');
+                setCurrencySymbol(data.currency_symbol || '$');
+            }
         } catch (e) {
             console.error('Failed to fetch geo IP', e);
         } finally {

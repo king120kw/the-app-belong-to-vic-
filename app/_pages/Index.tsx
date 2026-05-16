@@ -68,7 +68,7 @@ const SplashSequence = ({ onComplete }: { onComplete: () => void }) => {
           }}
           className="w-48 h-48 md:w-56 md:h-56 lg:w-64 lg:h-64 rounded-full overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.06)] bg-white flex items-center justify-center p-3 md:p-4 border border-black/5"
         >
-          <img src="/app logo.png" alt="Vicalary Logo" className="w-full h-full object-contain rounded-full" />
+          <img src="/app logo.png" alt="VICALARY Logo" className="w-full h-full object-contain rounded-full" />
         </motion.div>
         
         <div className="h-16 md:h-20 flex items-center justify-center">

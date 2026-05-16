@@ -1,5 +1,51 @@
 import { supabase } from '../supabase'
-// Removed gemini import
+
+// ============================================================================
+// HELPERS for External API mapping
+// ============================================================================
+
+/**
+ * Ensures that external recipes (from Spoonacular) are present in our 'recipes' table
+ * and returns a map of spoonacular_id -> internal_uuid.
+ */
+const ensureRecipesUuids = async (recipesData: any[]): Promise<Record<string, string>> => {
+    if (!recipesData || recipesData.length === 0) return {};
+
+    const uniqueIds = new Set();
+    const toUpsert = recipesData
+        .filter(m => {
+            const sid = String(m.id || m.spoonacular_id);
+            if (!sid || sid === 'undefined' || uniqueIds.has(sid)) return false;
+            uniqueIds.add(sid);
+            return true;
+        })
+        .map(m => ({
+            spoonacular_id: String(m.id || m.spoonacular_id),
+            title: m.title || m.name,
+            image_url: m.image || m.image_url,
+            total_calories: m.calories || m.total_calories,
+            protein_g: m.protein || m.protein_g,
+            carbs_g: m.carbs || m.carbs_g,
+            fat_g: m.fat || m.fat_g,
+            ingredients: m.ingredients || [],
+            instructions: m.instructions || []
+        }));
+
+    const { data, error } = await supabase
+        .from('recipes')
+        .upsert(toUpsert, { onConflict: 'spoonacular_id' })
+        .select('id, spoonacular_id');
+
+    if (error) {
+        console.error("[Recipes] Upsert failed:", error);
+        return {};
+    }
+
+    return (data || []).reduce((acc: Record<string, string>, r: any) => {
+        acc[r.spoonacular_id] = r.id;
+        return acc;
+    }, {});
+};
 
 // ============================================================================
 // RECIPES
@@ -11,8 +57,6 @@ export const getRecipes = async (filters?: {
     maxCalories?: number
     tags?: string[]
 }) => {
-    // Check if we should use the Search Edge Function or local DB
-    // For now, let's proxy through search-recipes if filters exist that mimic search
     if (filters) {
         const res = await fetch('/api/search-recipes', {
             method: 'POST',
@@ -25,73 +69,34 @@ export const getRecipes = async (filters?: {
         }
     }
 
-    // Fallback to local DB
-    let query = supabase
-        .from('recipes')
-        .select('*')
-
+    let query = supabase.from('recipes').select('*')
     if (filters) {
-        if (filters.cuisineType) {
-            query = query.eq('cuisine_type', filters.cuisineType)
-        }
-        if (filters.difficulty) {
-            query = query.eq('difficulty', filters.difficulty)
-        }
-        if (filters.maxCalories) {
-            query = query.lte('total_calories', filters.maxCalories)
-        }
-        if (filters.tags && filters.tags.length > 0) {
-            query = query.contains('tags', filters.tags)
-        }
+        if (filters.cuisineType) query = query.eq('cuisine_type', filters.cuisineType)
+        if (filters.difficulty) query = query.eq('difficulty', filters.difficulty)
+        if (filters.maxCalories) query = query.lte('total_calories', filters.maxCalories)
+        if (filters.tags && filters.tags.length > 0) query = query.contains('dietary_tags', filters.tags)
     }
 
     const { data, error } = await query.order('created_at', { ascending: false })
-
     if (error) throw error
     return data
 }
 
 export const getRecipeDetails = async (recipeId: string | number) => {
     try {
-        console.log(`Fetching details for ${recipeId}...`);
         const res = await fetch('/api/recipe-details', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: recipeId?.toString() })
         });
         const data = await res.json();
-
         if (!res.ok || data.error) throw new Error(data?.error || "Failed to fetch details");
         return data;
     } catch (e) {
-        console.warn("Edge Function failed.", e);
-
-        // Fallback: Try fetching from meals table (legacy) ONLY if ID is non-numeric (UUID)
-        // TheMealDB IDs are numeric (e.g. 52772), while legacy meals use UUIDs.
-        if (isNaN(parseInt(String(recipeId)))) {
-            const { data: meal, error: mealError } = await supabase
-                .from('meals')
-                .select('*')
-                .eq('id', String(recipeId))
-                .maybeSingle()
-
-            if (mealError) throw mealError;
-
-            if (meal) {
-                // Cast meal to any to avoid strict type checks for missing optional fields that we know might exist in legacy data or we are polyfilling
-                const m = meal as any;
-                return {
-                    ...m,
-                    title: m.name,
-                    total_calories: m.calories,
-                    image_url: m.image,
-                    ingredients: m.ingredients || [],
-                    instructions: m.instructions || []
-                };
-            }
+        if (typeof recipeId === 'string' && recipeId.includes('-')) {
+            const { data: recipe } = await supabase.from('recipes').select('*').eq('id', recipeId).maybeSingle();
+            if (recipe) return recipe;
         }
-
-        // If numeric ID failed Edge Function, it's a hard error.
         throw e;
     }
 }
@@ -107,12 +112,10 @@ export const searchRecipes = async (searchTerm: string) => {
         const data = await res.json();
         return data.results || [];
     } catch (error) {
-        console.warn("Search Edge Function failed, using local fallback");
         const { data, error: dbError } = await supabase
             .from('recipes')
             .select('*')
-            .or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`)
-
+            .or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`)
         if (dbError) throw dbError;
         return data;
     }
@@ -122,29 +125,49 @@ export const searchRecipes = async (searchTerm: string) => {
 // RECIPE INTERACTIONS
 // ============================================================================
 
-export const toggleFavoriteRecipe = async (userId: string, recipeId: string) => {
+export const toggleFavoriteRecipe = async (userId: string, recipeId: string | number, recipeData?: any) => {
+    let finalUuid = String(recipeId);
+
+    // If it's a numeric Spoonacular ID, resolve to UUID first
+    const isNumericId = !isNaN(Number(recipeId)) && !String(recipeId).includes('-');
+    if (isNumericId) {
+        const map = await ensureRecipesUuids([recipeData || { id: recipeId, title: 'Recipe' }]);
+        const mapped = map[String(recipeId)];
+        if (mapped) {
+            finalUuid = mapped;
+        } else {
+            console.error(`[Recipes] Could not resolve Spoonacular ID ${recipeId} to UUID`);
+            throw new Error("Invalid recipe reference");
+        }
+    }
+
+    // FINAL GUARD: Ensure finalUuid is a valid UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(finalUuid)) {
+        console.error(`[Recipes] Invalid UUID for favorite: ${finalUuid}`);
+        throw new Error("Invalid recipe reference format");
+    }
+
     const { data: existing } = await supabase
         .from('user_recipe_interactions')
         .select('*')
         .eq('user_id', userId)
-        .eq('recipe_id', recipeId)
+        .eq('recipe_id', finalUuid)
         .eq('interaction_type', 'favorited')
         .maybeSingle()
 
     if (existing) {
-        await supabase
-            .from('user_recipe_interactions')
-            .delete()
-            .eq('id', existing.id)
+        await supabase.from('user_recipe_interactions').delete().eq('id', existing.id)
         return { favorited: false }
     } else {
-        await supabase
+        const { error } = await supabase
             .from('user_recipe_interactions')
             .insert({
                 user_id: userId,
-                recipe_id: recipeId,
+                recipe_id: finalUuid,
                 interaction_type: 'favorited',
             })
+        if (error) throw error;
         return { favorited: true }
     }
 }
@@ -160,12 +183,8 @@ export const markRecipeAsCooked = async (userId: string, recipeId: string, notes
         })
         .select()
         .maybeSingle()
-
     if (error) throw error
-
-    // Update daily progress
     await updateDailyRecipeCount(userId)
-
     return data
 }
 
@@ -181,39 +200,58 @@ export const rateRecipe = async (userId: string, recipeId: string, rating: numbe
         })
         .select()
         .maybeSingle()
-
     if (error) throw error
     return data
 }
 
 export const getFavoriteRecipes = async (userId: string) => {
-    const { data, error } = await supabase
+    const { data: interactions, error } = await supabase
         .from('user_recipe_interactions')
-        .select(`
-      *,
-      recipes (*)
-    `)
+        .select('*')
         .eq('user_id', userId)
         .eq('interaction_type', 'favorited')
         .order('interacted_at', { ascending: false })
-
     if (error) throw error
-    return data
+
+    if (!interactions || interactions.length === 0) return [];
+    
+    const recipeIds = interactions.map(i => i.recipe_id).filter(Boolean);
+    const { data: recipes, error: recipesError } = await supabase
+        .from('recipes')
+        .select('*')
+        .in('id', recipeIds);
+        
+    if (recipesError) throw recipesError;
+    
+    return interactions.map(interaction => ({
+        ...interaction,
+        recipes: recipes.find(r => r.id === interaction.recipe_id) || null
+    }));
 }
 
 export const getCookedRecipes = async (userId: string) => {
-    const { data, error } = await supabase
+    const { data: interactions, error } = await supabase
         .from('user_recipe_interactions')
-        .select(`
-      *,
-      recipes (*)
-    `)
+        .select('*')
         .eq('user_id', userId)
         .eq('interaction_type', 'cooked')
         .order('interacted_at', { ascending: false })
-
     if (error) throw error
-    return data
+
+    if (!interactions || interactions.length === 0) return [];
+    
+    const recipeIds = interactions.map(i => i.recipe_id).filter(Boolean);
+    const { data: recipes, error: recipesError } = await supabase
+        .from('recipes')
+        .select('*')
+        .in('id', recipeIds);
+        
+    if (recipesError) throw recipesError;
+    
+    return interactions.map(interaction => ({
+        ...interaction,
+        recipes: recipes.find(r => r.id === interaction.recipe_id) || null
+    }));
 }
 
 // ============================================================================
@@ -221,24 +259,7 @@ export const getCookedRecipes = async (userId: string) => {
 // ============================================================================
 
 export const getPersonalizedSuggestions = async (userId: string) => {
-    // Get user profile and onboarding responses for context
-    const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle()
-
-    const { data: onboardingRows } = await (supabase
-        .from('onboarding_responses')
-        .select('*')
-        .eq('user_id', userId)
-        .limit(1) as any);
-
-    const onboarding = onboardingRows && onboardingRows.length > 0 ? onboardingRows[0] : null;
-
-    // Call recommendations Edge Function
     try {
-        console.log("Fetching personalized suggestions from backend...");
         const res = await fetch('/api/personalized-recommendations', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -252,185 +273,145 @@ export const getPersonalizedSuggestions = async (userId: string) => {
     }
 }
 
-export const getDailyMealSuggestions = async (userId: string) => {
-    const { data: onboarding } = await supabase
-        .from('onboarding_responses')
-        .select('preferred_cuisines, daily_calorie_goal, restrictions, dietary_lifestyle')
-        .eq('user_id', userId)
-        .maybeSingle() as any
-
-    // Determine current session for UI highlighting
-    const localHour = new Date().getHours();
-    let currentSession: 'breakfast' | 'lunch' | 'dinner' = 'breakfast';
-    if (localHour >= 11 && localHour < 16) currentSession = 'lunch';
-    else if (localHour >= 16 || localHour < 4) currentSession = 'dinner';
-
-    const fetchFromApi = async (type: string, queryTerm: string) => {
+export const getCookbookSuggestions = async (userId: string) => {
+    const fetchFromApi = async (type: string) => {
         try {
-            const isValidImage = (url: string) => {
-                if (!url) return false;
-                if (url.includes('placeholder')) return false;
-                if (url.startsWith('https://spoonacular.com/recipeImages/') && url.endsWith('-312x231.unknown')) return false;
-                return true;
-            };
-
-            // Mapping for Indonesian terms and Spoonacular compatibility
-            const mapDiet = (diet: string | undefined) => {
-                if (!diet) return undefined;
-                if (diet === 'Halal') return undefined; // Spoonacular doesn't have Halal diet, handle via query if needed
-                return diet;
-            };
-
-            const mapRestrictions = (restrictions: string[] | undefined) => {
-                if (!restrictions) return { intolerances: undefined, excludeIngredients: undefined };
-
-                const validIntolerances = ['dairy', 'egg', 'gluten', 'grain', 'peanut', 'seafood', 'sesame', 'shellfish', 'soy', 'sulfite', 'tree nut', 'wheat'];
-                const mapping: Record<string, string> = {
-                    'Babi': 'pork',
-                    'Kacang-kacangan': 'peanut,tree nut',
-                    'Makanan Laut': 'seafood,shellfish',
-                    'Susu': 'dairy',
-                    'Telur': 'egg',
-                    'Gandum': 'wheat,gluten',
-                    'Kedelai': 'soy'
-                };
-
-                const mapped = restrictions.flatMap(r => (mapping[r] || r).toLowerCase().split(','));
-                const intolerances = mapped.filter(r => validIntolerances.includes(r)).join(',');
-                const excludeIngredients = mapped.filter(r => !validIntolerances.includes(r)).join(',');
-
-                return {
-                    intolerances: intolerances || undefined,
-                    excludeIngredients: excludeIngredients || undefined
-                };
-            };
-
-            const dietParam = (onboarding?.dietary_lifestyle && onboarding.dietary_lifestyle.length > 0) ? onboarding.dietary_lifestyle[0] : undefined;
-            const restrictions = mapRestrictions(onboarding?.restrictions);
-
-            const requestBody = {
-                type: type || 'main course',
-                diet: mapDiet(dietParam),
-                number: 10
-            };
-
-            console.log("Invoking search-recipes with sanitized body:", requestBody);
-
             const res = await fetch('/api/search-recipes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify({ type: type || 'main course', number: 10, userId })
             });
-
-            if (!res.ok) {
-                console.error(`search-recipes API error for ${type}:`, res.status);
-                throw new Error(`search-recipes failed: ${res.status}`);
-            }
-
+            if (!res.ok) return [];
             const data = await res.json();
-
-            if (!data) {
-                console.error(`No data returned from search-recipes for ${type}`);
-                return [];
-            }
-
-            const uniqueIds = new Set();
-            return (data?.results || [])
-                .filter((m: any) => {
-                    if (!m.image || !isValidImage(m.image)) return false;
-                    if (uniqueIds.has(m.id)) return false;
-                    uniqueIds.add(m.id);
-                    return true;
-                })
-                .slice(0, 5)
-                .map((m: any) => ({
-                    ...m,
-                    name: m.title,
-                    calories: m.calories,
-                    subtitle: `${m.calories} cal`,
-                    image: m.image
-                }));
-        } catch (e) {
-            console.error(`API fetch failed for ${type}`, e);
-            return [];
-        }
+            return (data?.results || []).map((m: any) => ({
+                ...m,
+                id: String(m.id),
+                name: m.title,
+                calories: m.calories,
+                subtitle: `${m.calories} cal`,
+                image: m.image
+            }));
+        } catch (e) { return []; }
     };
 
-    // Parallel fetch from backend
-    const [rawBreakfast, rawLunch, rawDinner] = await Promise.all([
-        fetchFromApi('breakfast', 'healthy breakfast'),
-        fetchFromApi('main course', 'healthy lunch'),
-        fetchFromApi('main course', 'light dinner')
-    ]);
+    const categories = ['breakfast', 'main course', 'snack', 'drink', 'dessert'];
+    const [b, m, s, dr, ds] = await Promise.all(categories.map(cat => fetchFromApi(cat)));
 
-    // Strict Deduplication Logic
-    const seenIds = new Set<string>();
+    const allFetched = [...b, ...m, ...s, ...dr, ...ds];
+    const uuidMap = await ensureRecipesUuids(allFetched);
+    const mapWithUuid = (list: any[]) => list.map(m => ({ ...m, internal_id: uuidMap[m.id] }));
 
-    // 1. Process Breakfast
-    const breakfast = rawBreakfast.filter((m: any) => {
-        if (seenIds.has(m.id)) return false;
-        seenIds.add(m.id);
-        return true;
-    });
+    const lunch = m.slice(0, 5);
+    const dinner = m.slice(5, 10);
 
-    // 2. Process Lunch (ensure no repeats from Breakfast)
-    const lunch = rawLunch.filter((m: any) => {
-        if (seenIds.has(m.id)) return false;
-        seenIds.add(m.id);
-        return true;
-    });
-
-    // 3. Process Dinner (ensure no repeats from Breakfast or Lunch)
-    const dinner = rawDinner.filter((m: any) => {
-        if (seenIds.has(m.id)) return false;
-        seenIds.add(m.id);
-        return true;
-    });
-
-    // Fallback to local 'meals' table if API returns empty (e.g., no key)
-    if (breakfast.length === 0 && lunch.length === 0) {
-        console.warn("Using local fallback for suggestions");
-        // Reuse old logic here slightly modified
-        const fetchLocal = async (type: string) => {
-            const { data } = await supabase.from('meals').select('*').eq('meal_type', type).limit(15); // Increased limit for dedup
-            return (data || [])
-                .filter((m: any) => m.image && !m.image.includes('placeholder'))
-                .map((m: any) => ({ ...m, subtitle: `${m.calories} cal`, image: m.image }));
-        };
-        const [fb, fl, fd] = await Promise.all([fetchLocal('breakfast'), fetchLocal('lunch'), fetchLocal('dinner')]);
-
-        // Apply same deduplication to fallback
-        const seenLocal = new Set<string>();
-        const cleanFb = fb.filter((m: any) => { if (seenLocal.has(m.id)) return false; seenLocal.add(m.id); return true; }).slice(0, 6);
-        const cleanFl = fl.filter((m: any) => { if (seenLocal.has(m.id)) return false; seenLocal.add(m.id); return true; }).slice(0, 6);
-        const cleanFd = fd.filter((m: any) => { if (seenLocal.has(m.id)) return false; seenLocal.add(m.id); return true; }).slice(0, 6);
-
-        return { breakfast: cleanFb, lunch: cleanFl, dinner: cleanFd, currentSession };
-    }
-
-    return { breakfast, lunch, dinner, currentSession }
+    return { 
+        breakfast: mapWithUuid(b), 
+        lunch: mapWithUuid(lunch), 
+        dinner: mapWithUuid(dinner), 
+        snacks: mapWithUuid(s), 
+        drinks: mapWithUuid(dr), 
+        desserts: mapWithUuid(ds) 
+    };
 }
 
-// ============================================================================
-// HELPERS
-// ============================================================================
+export const getDailyMealSuggestions = async (userId: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const { data: existing, error: existingError } = await supabase
+        .from('user_recipe_interactions')
+        .select('recipe_id, metadata')
+        .eq('user_id', userId)
+        .eq('interaction_type', 'suggested')
+        .gte('interacted_at', today);
+
+    if (existingError) {
+        console.error("[Recipes] getDailyMealSuggestions fetch error:", existingError);
+    }
+
+    if (existing && existing.length > 0) {
+        const mapByType = (type: string) => (existing as any[]).filter(s => (s.metadata as any)?.meal_type === type).map(s => (s.metadata as any)?.meal_data);
+        const hour = new Date().getHours();
+        let currentSession = 'breakfast';
+        if (hour >= 11 && hour < 16) currentSession = 'lunch';
+        else if (hour >= 16 || hour < 5) currentSession = 'dinner';
+
+        return {
+            breakfast: mapByType('breakfast'),
+            lunch: mapByType('lunch'),
+            dinner: mapByType('dinner'),
+            snacks: mapByType('snack'),
+            drinks: mapByType('drink'),
+            desserts: mapByType('dessert'),
+            currentSession
+        };
+    }
+
+    const { data: expired } = await supabase.from('user_recipe_interactions').select('recipe_id').eq('user_id', userId).eq('interaction_type', 'expired');
+    const expiredIds = new Set(expired?.map(e => String(e.recipe_id)) || []);
+
+    const fetchFromApi = async (type: string) => {
+        try {
+            const res = await fetch('/api/search-recipes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, number: 10, userId })
+            });
+            const data = await res.json();
+            return (data?.results || []).map((m: any) => ({
+                ...m,
+                id: String(m.id),
+                name: m.title,
+                calories: m.calories,
+                subtitle: `${m.calories} cal`,
+                image: m.image
+            }));
+        } catch (e) { return []; }
+    };
+
+    const [b, l, s, dr, ds] = await Promise.all(['breakfast', 'main course', 'snack', 'drink', 'dessert'].map(fetchFromApi));
+    
+    const allFetched = [...b, ...l, ...s, ...dr, ...ds];
+    const uuidMap = await ensureRecipesUuids(allFetched);
+
+    const lunch = l.slice(0, 3);
+    const dinner = l.slice(3, 6);
+    const mapWithUuid = (list: any[]) => list.map(m => ({ ...m, internal_id: uuidMap[m.id] }));
+
+    const toInsert = [
+        ...b.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'breakfast', meal_data: { ...m, internal_id: uuidMap[m.id] } } })),
+        ...lunch.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'lunch', meal_data: { ...m, internal_id: uuidMap[m.id] } } })),
+        ...dinner.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'dinner', meal_data: { ...m, internal_id: uuidMap[m.id] } } })),
+        ...s.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'snack', meal_data: { ...m, internal_id: uuidMap[m.id] } } })),
+        ...dr.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'drink', meal_data: { ...m, internal_id: uuidMap[m.id] } } })),
+        ...ds.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'dessert', meal_data: { ...m, internal_id: uuidMap[m.id] } } }))
+    ].filter(item => item.recipe_id);
+
+    if (toInsert.length > 0) {
+        await supabase.from('user_recipe_interactions').upsert(toInsert, { onConflict: 'user_id,recipe_id,interaction_type' });
+    }
+
+    (supabase.rpc as any)('expire_old_suggestions', { p_user_id: userId }).catch(() => {});
+
+    const hour = new Date().getHours();
+    let currentSession = 'breakfast';
+    if (hour >= 11 && hour < 16) currentSession = 'lunch';
+    else if (hour >= 16 || hour < 5) currentSession = 'dinner';
+
+    return { 
+        breakfast: mapWithUuid(b), 
+        lunch: mapWithUuid(lunch), 
+        dinner: mapWithUuid(dinner), 
+        snacks: mapWithUuid(s), 
+        drinks: mapWithUuid(dr), 
+        desserts: mapWithUuid(ds), 
+        currentSession
+    };
+}
 
 const updateDailyRecipeCount = async (userId: string) => {
     const today = new Date().toISOString().split('T')[0]
-
-    const { data: existingProgress } = await supabase
-        .from('daily_progress')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('progress_date', today)
-        .maybeSingle()
-
+    const { data: existingProgress } = await supabase.from('daily_progress').select('*').eq('user_id', userId).eq('progress_date', today).maybeSingle()
     if (existingProgress) {
-        await supabase
-            .from('daily_progress')
-            .update({
-                recipes_cooked: ((existingProgress as any).recipes_cooked || 0) + 1,
-            } as any)
-            .eq('id', existingProgress.id)
+        await supabase.from('daily_progress').update({ recipes_cooked: ((existingProgress as any).recipes_cooked || 0) + 1 } as any).eq('id', existingProgress.id)
     }
 }

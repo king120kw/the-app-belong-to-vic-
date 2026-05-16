@@ -1,7 +1,12 @@
 "use client"
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "@/lib/api/translation";
-import { Sunrise, Sun, Moon, ChevronLeft, ChevronRight, UtensilsCrossed } from "lucide-react";
+import { Sunrise, Sun, Moon, ChevronLeft, ChevronRight, UtensilsCrossed, Heart } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext";
+import { toggleFavoriteRecipe, getFavoriteRecipes } from "@/lib/api/recipes";
+import { toast } from "sonner";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { FavoriteButton } from "./FavoriteButton";
 
 
 interface Meal {
@@ -14,24 +19,31 @@ interface Meal {
 }
 
 interface FoodCarouselProps {
-    breakfastMeals: Meal[];
-    lunchMeals: Meal[];
-    dinnerMeals: Meal[];
+    breakfastMeals?: Meal[];
+    lunchMeals?: Meal[];
+    dinnerMeals?: Meal[];
     initialMealType?: 'breakfast' | 'lunch' | 'dinner';
+    singleCategoryMeals?: Meal[];
+    categoryTitle?: string;
 }
 
 export default function FoodCarousel({
-    breakfastMeals,
-    lunchMeals,
-    dinnerMeals,
+    breakfastMeals = [],
+    lunchMeals = [],
+    dinnerMeals = [],
     initialMealType = 'breakfast',
-    strictMode = false
+    strictMode = false,
+    singleCategoryMeals,
+    categoryTitle
 }: FoodCarouselProps & { strictMode?: boolean }) {
     // Process meals: ensure exactly 12 items and trim images
-    const processMeals = (meals: Meal[]) => meals.slice(0, 12).map(m => ({
+    const processMeals = (meals: Meal[]) => (meals || []).slice(0, 12).map(m => ({
         ...m,
         image: (m.image || "").trim() || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000&auto=format&fit=crop"
     }));
+
+    const isSingleMode = !!singleCategoryMeals;
+
 
     // Combine all meals into a single array of 36 cards
     const allMeals = [
@@ -51,9 +63,10 @@ export default function FoodCarousel({
     }, [initialMealType]);
 
     const activeMeals = processMeals(
-        selectedTab === 'breakfast' ? breakfastMeals :
-            selectedTab === 'lunch' ? lunchMeals :
-                dinnerMeals
+        isSingleMode ? singleCategoryMeals! :
+            (selectedTab === 'breakfast' ? breakfastMeals :
+                selectedTab === 'lunch' ? lunchMeals :
+                    dinnerMeals)
     );
 
     const { t } = useTranslation();
@@ -80,24 +93,30 @@ export default function FoodCarousel({
         breakfast: { title: t('breakfast') || "Breakfast", time: "6:00 AM - 11:00 AM", icon: Sunrise },
         lunch: { title: t('lunch') || "Lunch", time: "11:00 AM - 4:00 PM", icon: Sun },
         dinner: { title: t('dinner') || "Dinner", time: "4:00 PM - 4:00 AM", icon: Moon },
+        single: { title: categoryTitle || "Suggested", time: "Tailored for you", icon: UtensilsCrossed }
     };
 
     const handleNext = () => setLocalIdx((prev) => (prev + 1) % activeMeals.length);
     const handlePrev = () => setLocalIdx((prev) => (prev - 1 + activeMeals.length) % activeMeals.length);
 
-    return (
-        <div className="food-carousel-container px-4">
-            <div className="flex items-center justify-between mb-4">
-                <h1 className="text-xl font-black dark:text-white uppercase tracking-tighter">
-                    {t('meal_suggestions_title')}
-                </h1>
-                <div className="size-10 bg-vic-green/10 rounded-full flex items-center justify-center">
-                    {React.createElement(mealLabels[selectedTab].icon, { className: "text-vic-green text-xl", size: 20 })}
-                </div>
-            </div>
+    const activeLabelKey = isSingleMode ? 'single' : selectedTab;
 
-            {/* Strict Meal Type Selector - HIDDEN in strict mode */}
-            {!strictMode && (
+    return (
+        <div className={`food-carousel-container px-4 ${isSingleMode ? 'mb-12' : ''}`}>
+            {!isSingleMode && (
+                <div className="flex items-center justify-between mb-4">
+                    <h1 className="text-xl font-black dark:text-white uppercase tracking-tighter">
+                        {t('meal_suggestions_title')}
+                    </h1>
+                    <div className="size-10 bg-vic-green/10 rounded-full flex items-center justify-center">
+                        {React.createElement(mealLabels[activeLabelKey].icon, { className: "text-vic-green text-xl", size: 20 })}
+                    </div>
+                </div>
+            )}
+
+            {/* Strict Meal Type Selector - HIDDEN in strict mode or single mode */}
+            {!strictMode && !isSingleMode && (
+
                 <div className="flex gap-2 mb-6">
                     {(['breakfast', 'lunch', 'dinner'] as const).map(type => (
                         <button
@@ -117,20 +136,23 @@ export default function FoodCarousel({
             <div className="tile active">
                 <div className="meal-header">
                     <div>
-                        <div className="meal-title">{mealLabels[selectedTab].title}</div>
+                        <div className="meal-title">{mealLabels[activeLabelKey].title}</div>
                         <div className="meal-time opacity-50 uppercase tracking-widest text-[10px] font-bold">
-                            {mealLabels[selectedTab].time}
+                            {mealLabels[activeLabelKey].time}
                         </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                        <div className="badge animate-pulse">
-                            {selectedTab === initialMealType ? "NOW" : "BROWSE"}
-                        </div>
+                        {!isSingleMode && (
+                            <div className="badge animate-pulse">
+                                {selectedTab === initialMealType ? "NOW" : "BROWSE"}
+                            </div>
+                        )}
                         <div className="text-[10px] font-black text-vic-green tabular-nums">
                             {activeMeals.length > 0 ? `${localIdx + 1} / ${activeMeals.length}` : ''}
                         </div>
                     </div>
                 </div>
+
 
                 <div className="carousel h-[420px]">
                     {activeMeals.length > 0 ? (
@@ -155,6 +177,11 @@ export default function FoodCarousel({
                                             />
                                             {/* Gradient Overlay for Text Readability */}
                                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+                                            
+                                            {/* Heart Button */}
+                                            <div className="absolute top-4 right-4 z-20">
+                                                <FavoriteButton recipeId={meal.internal_id || meal.id} />
+                                            </div>
                                         </div>
                                         <div className="product-info-overlay">
                                             <div className="flex justify-between items-end mb-1">
@@ -175,6 +202,7 @@ export default function FoodCarousel({
                                             </div>
                                         </div>
                                     </div>
+
                                 ))}
                             </div>
 
@@ -203,3 +231,5 @@ export default function FoodCarousel({
         </div>
     );
 }
+
+

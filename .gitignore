@@ -1,21 +1,37 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+/dist
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+
 # Logs
-logs
-*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
+.pnpm-debug.log*
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -23,24 +39,13 @@ dist-ssr
 *.sln
 *.sw?
 
-.config/
-.env
-.env.local
-*.local
+# Supabase
+/supabase/.temp/
+/supabase/migrations/schema_dump.sql
+/supabase/migrations/schema_out.txt
 
-# Local Netlify folder
-.netlify
-.next
-
-# Scratch/Log files
-*.log
-*.txt
-*.sql
-*.cjs
-*.js
-!client/**
-!supabase/**
-!postcss.config.js
-!tailwind.config.js
-!vite.config.ts
-!*.config.js
+# Scratch
+/scratch/
+*.tsbuildinfo
+schema_out.txt
+Reference Example.png

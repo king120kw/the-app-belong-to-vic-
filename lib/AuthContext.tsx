@@ -2,6 +2,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import type { User, Session } from '@supabase/supabase-js';
+import { detectLocation, getPrimaryLanguage } from './api/location';
+import { getUserSettings, updateSettings } from './api/settings';
+import { toast } from 'sonner';
 
 interface AuthContextType {
     user: User | null;
@@ -58,7 +61,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (data) setProfile(data);
         };
 
+        const handleLocationConfig = async (uid: string) => {
+            try {
+                const settings = await getUserSettings(uid);
+                // If language is already manually set or settings exist with values, we might skip
+                // But the user wants real-time detection to set default language.
+                if (!settings || settings.is_language_auto !== false) {
+                    const loc = await detectLocation();
+                    if (loc) {
+                        const lang = getPrimaryLanguage(loc.languages);
+                        await updateSettings(uid, {
+                            language: lang,
+                            country_code: loc.country_code,
+                            timezone: loc.timezone,
+                            currency: loc.currency,
+                            is_language_auto: true
+                        });
+                        console.log(`[Auth] Auto-configured location: ${loc.country_name}, Lang: ${lang}, Method: ${loc.method}`);
+                    } else {
+                        console.warn("[Auth] No location detected by detectLocation()");
+                    }
+                }
+            } catch (err) {
+                console.error("[Auth] Location config failed:", err);
+            }
+        };
+
         fetchProfile();
+        handleLocationConfig(user.id);
 
         // Real-time subscription to profile updates
         const profileSubscription = supabase

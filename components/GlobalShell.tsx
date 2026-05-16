@@ -187,13 +187,43 @@ export function GlobalShell({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, dailyStatus, isChatConversation, isCallMinimized]);
 
+  // AI Coach Midnight Trigger
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const checkAndTriggerSummary = async () => {
+      try {
+        const now = new Date();
+        const today = now.toISOString().split('T')[0];
+        const lastCheckKey = `vicalary_summary_check_${user.id}`;
+        const lastChecked = localStorage.getItem(lastCheckKey);
+
+        if (lastChecked !== today) {
+          // If it's early morning (e.g., just after midnight), we trigger for "yesterday"
+          // If they open later, we trigger for "today" to give them a wrap-up.
+          // The user specifically asked for "at midnight".
+          console.log("[Coach] Checking daily summary trigger...");
+          const { generateDailySummary } = await import("@/lib/api/coach");
+          await generateDailySummary(user.id, today); 
+          localStorage.setItem(lastCheckKey, today);
+        }
+      } catch (e) {
+        console.error("[Coach] Trigger failed:", e);
+      }
+    };
+
+    checkAndTriggerSummary();
+    const interval = setInterval(checkAndTriggerSummary, 60 * 60 * 1000); // Check hourly
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
   // Global Auth Loader to prevent flashing
   if (loading) {
     return (
       <div className="fixed inset-0 bg-[#0b141a] flex items-center justify-center z-[9999]">
         <div className="flex flex-col items-center gap-4">
           <div className="size-12 border-4 border-vic-green border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-vic-green font-bold tracking-widest text-xs uppercase animate-pulse">Loading VicCalary...</p>
+          <p className="text-vic-green font-bold tracking-widest text-xs uppercase animate-pulse">Loading VICALARY...</p>
         </div>
       </div>
     );

@@ -6,14 +6,14 @@ import { AlertCircle, MapPin, Navigation, Plus, Link, FileText, ArrowLeft, Bookm
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { getConversationById, getMessages, sendMessage, uploadChatMedia, markAsRead, sendTypingIndicator, initiateCallV2, updateCallStatus, softDeleteConversation, findUserByIdSecure, provisionAndSendMessage, findConversationByParticipants } from '@/lib/api/chat';
+import { saveFoodAnalysis } from '@/lib/api/food';
+import { getConversationById, getMessages, sendMessage, uploadChatMedia, markAsRead, sendTypingIndicator, initiateCallV2, updateCallStatus, softDeleteConversation, findUserByIdSecure, provisionAndSendMessage, findConversationByParticipants, archiveConversation, muteConversation, clearChatHistory } from '@/lib/api/chat';
 import { useAuth } from '@/lib/AuthContext';
 import { getUserProfile } from '@/lib/api/auth';
 import { toast } from 'sonner';
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 import { useTranslation } from '@/lib/api/translation';
 import CameraCapture from '@/components/CameraCapture';
-import { saveFoodAnalysis } from '@/lib/api/food';
 import { useAnalysisStore } from '@/store/analysisStore';
 import { useCoachInjectionStore } from '@/store/coachInjectionStore';
 
@@ -293,6 +293,7 @@ export default function ChatConversation() {
     const [recordingStartX, setRecordingStartX] = useState<number | null>(null);
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const shouldSendOnStopRef = useRef(false);
     const recordingStartTimeRef = useRef(0);
@@ -399,11 +400,11 @@ export default function ChatConversation() {
                 const existingId = await findConversationByParticipants(user!.id, virtualTargetId);
 
                 if (existingId) {
-                    return getMessages(existingId);
+                    return getMessages(existingId, user!.id);
                 }
                 return [];
             }
-            return getMessages(localActiveId!);
+            return getMessages(localActiveId!, user!.id);
         },
         enabled: (isValidUUID(localActiveId) || !!isVirtual) && !!user?.id,
         refetchOnWindowFocus: false
@@ -510,20 +511,7 @@ export default function ChatConversation() {
         };
     }, [otherParticipantId, queryClient, activeId]);
 
-    // V13: Handle initial message and context from navigation state or stores
-    useEffect(() => {
-        const initialMessage = sessionStorage.getItem('chatInitialMessage');
-        if (initialMessage && !hasSentInitial) {
-            sessionStorage.removeItem('chatInitialMessage');
-            setMessage(initialMessage);
-            setHasSentInitial(true);
-        } else if (pendingAnalysisContext && !hasSentInitial && isAI) {
-            const ctx = pendingAnalysisContext;
-            const msg = `I just analyzed ${ctx.productName} (${ctx.calories} kcal). ${ctx.political_warning ? 'It has an ethical warning.' : ''} How does this look for me?`;
-            setMessage(msg);
-            setHasSentInitial(true);
-        }
-    }, [pendingAnalysisContext, hasSentInitial, isAI]);
+    // V13: Handle initial message and context from navigation state or stores (Moved down)
 
 
     const displayName = useMemo(() => {
@@ -1033,6 +1021,7 @@ export default function ChatConversation() {
             await markAsRead(user.id, realId);
             // Clear unread count globally too
             queryClient.invalidateQueries({ queryKey: ['unread-messages-global', user.id] });
+            queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
         } catch (err) {
             console.error('[Chat] Failed to clear unread:', err);
             lastMarkedId.current = null; // Reset guard on failure to allow retry
@@ -1412,16 +1401,40 @@ export default function ChatConversation() {
 
     // --- Context Injection: Pre-populate input from navigation state ---
     useEffect(() => {
-        if (hasSentInitial) return;
+        if (hasSentInitial || isLoadingConv) return;
+        
         const initialMsg = sessionStorage.getItem('chatInitialMessage');
-        if (initialMsg && !isLoadingConv) {
-            console.log("[Chat] Pre-populating input with context message...");
+        let autoSendMessage = initialMsg;
+        
+        if (initialMsg) {
+            console.log("[Chat] Auto-sending initial context message...");
             sessionStorage.removeItem('chatInitialMessage');
-            setHasSentInitial(true);
-            setMessage(initialMsg);
-            setTimeout(() => inputRef.current?.focus(), 300);
+        } else if (pendingAnalysisContext && isAI) {
+            const ctx = pendingAnalysisContext;
+            autoSendMessage = `I just analyzed ${ctx.productName} (${ctx.calories} kcal). ${ctx.political_warning ? 'It has an ethical warning.' : ''} How does this look for me?`;
         }
-    }, [hasSentInitial, isLoadingConv]);
+
+        if (autoSendMessage) {
+            setHasSentInitial(true);
+            
+            const contextMetadata = isAI && pendingAnalysisContext
+                ? { 
+                    scannedProductContext: pendingAnalysisContext,
+                    url: pendingAnalysisContext.productImage
+                  }
+                : undefined;
+
+            if (isAI && pendingAnalysisContext) {
+                clearPendingAnalysisContext();
+            }
+
+            if (isAI) {
+                setOtherUserTyping(true);
+            }
+
+            sendMutation.mutate({ content: autoSendMessage, metadata: contextMetadata });
+        }
+    }, [hasSentInitial, isLoadingConv, isAI, pendingAnalysisContext, sendMutation, clearPendingAnalysisContext]);
 
     const handleLocationShare = async () => {
         if (!navigator.geolocation) {
@@ -1493,9 +1506,14 @@ export default function ChatConversation() {
 
     const formatMessageTime = (dateStr: string) => {
         if (!dateStr) return '';
-        const date = new Date(dateStr);
-        if (isNaN(date.getTime())) return '';
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        try {
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return '';
+            // Using a stable locale for hydration consistency
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        } catch (e) {
+            return '';
+        }
     };
 
     const renderMessageContent = (msg: any) => {
@@ -1614,7 +1632,17 @@ export default function ChatConversation() {
                         const parsed = JSON.parse(msg.content);
                         if (parsed.foodAnalysis) {
                             return (
-                                <div className="p-4 bg-white/5 dark:bg-black/40 rounded-3xl border border-vic-green/30 backdrop-blur-md shadow-lg my-2 max-w-[280px]">
+                                <div className="p-4 bg-white/5 dark:bg-black/40 rounded-3xl border border-vic-green/30 backdrop-blur-md shadow-lg my-2 max-w-[280px] overflow-hidden">
+                                    {parsed.foodAnalysis.image_url && (
+                                        <div className="relative h-40 -mx-4 -mt-4 mb-4 overflow-hidden">
+                                            <img 
+                                                src={parsed.foodAnalysis.image_url} 
+                                                alt={parsed.foodAnalysis.name}
+                                                className="w-full h-full object-cover"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                                        </div>
+                                    )}
                                     <div className="flex justify-between items-start mb-4">
                                         <div>
                                             <h3 className="font-black text-vic-green text-sm uppercase tracking-tight mb-1">{parsed.foodAnalysis.name}</h3>
@@ -1662,6 +1690,36 @@ export default function ChatConversation() {
                         // Not valid JSON, fall through to text
                     }
                 }
+                
+                // If it has scanned product context, render the custom pill
+                if (metadata?.scannedProductContext) {
+                    const ctx = metadata.scannedProductContext;
+                    return (
+                        <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-3 p-3 bg-white dark:bg-[#1f2c34] rounded-2xl shadow-sm border border-vic-green/20 min-w-[260px] max-w-[320px]">
+                                {ctx.productImage ? (
+                                    <img src={ctx.productImage} alt="Food" className="w-12 h-12 rounded-xl object-cover" />
+                                ) : (
+                                    <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <h4 className="font-black text-slate-800 dark:text-white text-xs uppercase tracking-tight truncate">{ctx.productName}</h4>
+                                        <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-emerald-500/20 text-emerald-500">GOOD</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[9px] font-bold uppercase">
+                                        <span className="text-slate-500">{ctx.calories} KCAL</span>
+                                        <span className="text-slate-300 dark:text-slate-600">|</span>
+                                        <span className="text-[#34B7F1]">{ctx.protein}G P</span>
+                                        <span className="text-[#F5B400]">{ctx.carbs}G C</span>
+                                        <span className="text-[#F25F5C]">{ctx.fat}G F</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+                
                 return <p className="text-[14.2px] leading-[19px] whitespace-pre-wrap">{msg.content}</p>;
         }
     };
@@ -1776,27 +1834,69 @@ export default function ChatConversation() {
                                 <button onClick={() => handleStartCall('voice')} className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full">
                                     <Phone size={24} />
                                 </button>
-                                <button
-                                    onClick={async () => {
-                                        if (window.confirm("Delete this conversation?")) {
-                                            try {
-                                                await softDeleteConversation(activeId!, user!.id);
-                                                toast.success("Conversation deleted");
-                                                router.push('/chat');
-                                            } catch {
-                                                toast.error("Failed to delete conversation");
-                                            }
-                                        }
-                                    }}
-                                    className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full"
-                                >
-                                    <Trash2 size={24} />
-                                </button>
                             </>
                         )}
-                        <button className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full">
-                            <MoreVertical size={24} />
-                        </button>
+                        <div className="relative">
+                            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full">
+                                <MoreVertical size={24} />
+                            </button>
+                            {isMenuOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
+                                    <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#233138] rounded-xl shadow-2xl border border-slate-100 dark:border-white/5 z-50 py-2 animate-in fade-in zoom-in duration-100">
+                                        {!isSelf && !isAI && (
+                                            <>
+                                                <button onClick={async () => {
+                                                    setIsMenuOpen(false);
+                                                    try {
+                                                        await archiveConversation(user!.id, activeId!, true);
+                                                        toast.success("Chat archived");
+                                                        router.push('/chat');
+                                                    } catch { toast.error("Failed to archive chat"); }
+                                                }} className="w-full flex items-center gap-3 px-4 py-3 text-sm dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                                    <Bookmark size={16} /> Archive Chat
+                                                </button>
+                                                <button onClick={async () => {
+                                                    setIsMenuOpen(false);
+                                                    try {
+                                                        await muteConversation(user!.id, activeId!, true);
+                                                        toast.success("Notifications muted");
+                                                    } catch { toast.error("Failed to mute notifications"); }
+                                                }} className="w-full flex items-center gap-3 px-4 py-3 text-sm dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                                    <Mic size={16} /> Mute Notifications
+                                                </button>
+                                            </>
+                                        )}
+                                        <button onClick={async () => {
+                                            setIsMenuOpen(false);
+                                            if (window.confirm("Clear all messages in this chat?")) {
+                                                try {
+                                                    await clearChatHistory(user!.id, activeId!);
+                                                    queryClient.invalidateQueries({ queryKey: ['messages', activeId] });
+                                                    toast.success("Chat history cleared");
+                                                } catch { toast.error("Failed to clear history"); }
+                                            }
+                                        }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
+                                            <Trash2 size={16} /> Clear History
+                                        </button>
+                                        {!isSelf && !isAI && (
+                                            <button onClick={async () => {
+                                                setIsMenuOpen(false);
+                                                if (window.confirm("Delete this conversation completely?")) {
+                                                    try {
+                                                        await softDeleteConversation(activeId!, user!.id);
+                                                        toast.success("Conversation deleted");
+                                                        router.push('/chat');
+                                                    } catch { toast.error("Failed to delete conversation"); }
+                                                }
+                                            }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
+                                                <X size={16} /> Delete Chat
+                                            </button>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
                 </header>
 
@@ -1806,7 +1906,6 @@ export default function ChatConversation() {
                     className="flex-1 overflow-y-auto px-4 py-6 scroll-smooth no-scrollbar overscroll-none"
                     onScroll={handleScroll}
                 >
-                    <ContextAttachment />
                     {Object.keys(groupedMessages).length > 0 ? (
                         Object.entries(groupedMessages).map(([date, dateMsgs]) => (
                             <div key={date} className="flex flex-col gap-2">

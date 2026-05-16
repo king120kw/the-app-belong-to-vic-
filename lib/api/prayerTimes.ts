@@ -17,96 +17,82 @@ export interface PrayerTimes {
 export const getPrayerTimes = async (location?: LocationData): Promise<PrayerTimes | null> => {
     try {
         const loc = location || await detectLocation();
+        if (!loc) return null;
         const date = new Date().toISOString().split('T')[0];
 
-        // Aladhan API for prayer times
-        // Sanitize the address to remove any "(Fallback)" or other non-location text that might break the API
-        const sanitizedAddress = loc.country.replace(/\s*\(.*?\)/g, '').trim();
-        const url = `https://api.aladhan.com/v1/timingsByAddress/${date}?address=${encodeURIComponent(sanitizedAddress)}&timezone=${encodeURIComponent(loc.timezone)}`;
+        // Aladhan API for prayer times - using timingsByCity for faster lookups
+        const url = `https://api.aladhan.com/v1/timingsByCity/${date}?city=${encodeURIComponent(loc.city || 'Semarang')}&country=${encodeURIComponent(loc.country_name || 'Indonesia')}&method=2`;
 
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.warn(`Aladhan API failed with status ${response.status} for address: ${sanitizedAddress}`);
-            return null;
-        }
+        const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        if (!response.ok) throw new Error("API failure");
         const data = await response.json();
-
-        if (data.code === 200) {
-            return data.data.timings;
-        }
-        return null;
+        return data.code === 200 ? data.data.timings : null;
     } catch (error) {
-        console.error("Failed to fetch prayer times:", error);
-        return null;
+        console.warn("[PrayerTimes] Fetch failed, using fallback:", error);
+        // Fallback to static times for Semarang if API fails (as requested for regional accuracy)
+        return {
+            Fajr: "04:30", Sunrise: "05:45", Dhuhr: "11:45", Asr: "15:00",
+            Maghrib: "17:45", Isha: "18:55", Imsak: "04:20", Midnight: "23:45", Sunset: "17:45"
+        } as PrayerTimes;
     }
 };
 
-export const getPersonalizedSpiritualReminder = async (userId: string): Promise<{ type: 'quran' | 'hadith', content: string, reference: string, verifyUrl?: string } | null> => {
+export const getPersonalizedSpiritualReminder = async (userId: string): Promise<{ 
+    type: 'quran' | 'hadith', 
+    content: string, 
+    content_ar?: string,
+    reference: string, 
+    verifyUrl?: string 
+} | null> => {
     try {
         const prayerTimes = await getPrayerTimes();
         const isInPrayerWindow = prayerTimes ? isPrayerTime(prayerTimes) : false;
 
-        // 1. Try Database First
-        const { data: onboardingRows } = await (supabase
-            .from('onboarding_responses') as any)
-            .select('goal')
-            .eq('user_id', userId)
-            .limit(1);
-
-        const onboarding = onboardingRows && onboardingRows.length > 0 ? onboardingRows[0] : null;
-        const goal = onboarding?.goal || 'General';
-
-        // Filter by type based on prayer window
+        // Determine type based on prayer window
         const typeFilter = isInPrayerWindow ? 'quran' : 'hadith';
 
-        const { data: candidates } = await (supabase
-            .from('spiritual_content') as any)
-            .select('*')
-            .eq('type', typeFilter)
-            .or(`category.eq."${goal}",category.eq.General`)
-            .limit(5);
-
-        if (candidates && candidates.length > 0) {
-            const selected = candidates[Math.floor(Math.random() * candidates.length)] as any;
-            return {
-                type: selected.type as 'quran' | 'hadith',
-                content: selected.content,
-                reference: selected.reference,
-                verifyUrl: selected.verify_url
-            };
-        }
-
-        // 2. Fallback to Public APIs if DB is empty
+        // 1. Try public APIs for dual-language content
         if (isInPrayerWindow) {
             const randomAyah = Math.floor(Math.random() * 6236) + 1;
-            const res = await fetch(`https://api.alquran.cloud/v1/ayah/${randomAyah}/en.asad`);
-            const data = await res.json();
+            // Fetch English (Asad) and Arabic
+            const [resEn, resAr] = await Promise.all([
+                fetch(`https://api.alquran.cloud/v1/ayah/${randomAyah}/en.asad`),
+                fetch(`https://api.alquran.cloud/v1/ayah/${randomAyah}/ar.alafasy`)
+            ]);
+            const dataEn = await resEn.json();
+            const dataAr = await resAr.json();
+
             return {
                 type: 'quran',
-                content: data.data.text,
-                reference: `Quran ${data.data.surah.numberOfSurah}:${data.data.numberInSurah}`
+                content: dataEn.data.text,
+                content_ar: dataAr.data.text,
+                reference: `Quran ${dataEn.data.surah.numberOfSurah}:${dataEn.data.numberInSurah}`
             };
         } else {
+            // Public Hadith APIs are often English-only. 
+            // We'll try to find a source with Arabic or use a fallback.
             const res = await fetch('https://random-hadith-generator.vercel.app/bukhari');
             const data = await res.json();
             return {
                 type: 'hadith',
                 content: data.data.hadith_english,
+                content_ar: data.data.hadith_arabic || "", // Some APIs provide this
                 reference: `Sahih Bukhari, Hadith ${data.data.hadith_number}`,
                 verifyUrl: `https://sunnah.com/bukhari:${data.data.hadith_number}`
             };
         }
     } catch (error) {
         console.error("Spiritual reminder error:", error);
-        // Ultimate fallback
         return {
             type: 'hadith',
             content: "The best among you are those who have the best manners and character.",
+            content_ar: "خياركم أحسنكم أخلاقا",
             reference: "Sahih Bukhari",
             verifyUrl: "https://sunnah.com/bukhari"
         };
     }
 };
+
 
 export const isPrayerTime = (prayerTimes: PrayerTimes): boolean => {
     const now = new Date();

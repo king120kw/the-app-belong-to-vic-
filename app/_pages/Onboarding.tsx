@@ -1,7 +1,7 @@
 "use client"
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { saveOnboardingResponses, getUserProfile } from "@/lib/api/auth";
 import { useCurrency } from "@/lib/CurrencyContext";
@@ -36,6 +36,7 @@ export default function Onboarding() {
   const { user, loading: authLoading } = useAuth();
   const { t } = useTranslation();
   const { currencySymbol } = useCurrency();
+  const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState(0);
   const [responses, setResponses] = useState<any>({});
 

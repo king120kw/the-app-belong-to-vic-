@@ -1,118 +1,144 @@
-export interface GeoLocationData {
-    ip: string;
-    location: {
-        country_code: string;
-        country_name: string;
-        city: string;
-        region: string;
-        timezone: string;
-    };
-    currency: {
-        code: string;
-        symbol: string;
-    };
-    regional_config: {
-        cost_of_living_tier: number;
-        budget_hints: {
-            low: number;
-            high: number;
-        };
-    };
-}
+import { supabase } from '../supabase'
 
 export interface LocationData {
-    country: string;
-    country_code: string;
-    city: string;
-    currency: string;
-    currency_symbol: string;
-    timezone: string;
-    language: string;
+  country_code: string
+  country_name: string
+  city?: string
+  currency?: string
+  currency_symbol?: string
+  timezone?: string
+  languages?: string[]
+  method?: 'EDGE' | 'BROWSER' | 'CACHE' | 'FALLBACK'
 }
 
-let cachedGeoData: GeoLocationData | null = null;
-let fetchPromise: Promise<GeoLocationData> | null = null;
+let pendingRequest: Promise<LocationData | null> | null = null;
 
-export const getUserLocation = async (): Promise<GeoLocationData> => {
-    // Return memory cache if present
-    if (cachedGeoData) return cachedGeoData;
-
-    // Check localStorage
-    try {
-        const localCache = localStorage.getItem('geo_location_data');
-        if (localCache) {
-            const parsed = JSON.parse(localCache);
-            cachedGeoData = parsed;
-            return parsed;
-        }
-    } catch (e) {
-        console.warn('Failed to parse geo location from local storage');
+export const detectLocation = async (forceRefresh = false): Promise<LocationData | null> => {
+  // 1. Strict Caching (sessionStorage + localStorage for persistence across sessions)
+  const CACHE_KEY = 'vicalary_location_v2';
+  if (!forceRefresh) {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      // Cache for 24 hours
+      if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+        return { ...data, method: 'CACHE' };
+      }
     }
+  }
 
-    // Prevent duplicate concurrent requests
-    if (fetchPromise) return fetchPromise;
+  if (pendingRequest) return pendingRequest;
 
-    fetchPromise = (async () => {
+  pendingRequest = (async () => {
+    try {
+      // Priority 1: High-quality IP API (IPGeolocation.io)
+      const apiKey = process.env.NEXT_PUBLIC_IPGEO_API_KEY;
+      if (apiKey) {
         try {
-            console.log('[Location API] Fetching user location...');
-            const res = await fetch('/api/location');
-            if (!res.ok) throw new Error('Location API failed');
+          const res = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${apiKey}&include=security`);
+          if (res.ok) {
             const data = await res.json();
+            console.log("[Location] IPGeolocation.io Response:", data);
+            
+            // Check for VPN/Proxy if security info is available (premium keys only, but we check)
+            const isVpn = data.security?.is_vpn || data.is_vpn || false;
+            const confidence = data.security?.proxy_score || 0;
 
-            cachedGeoData = data;
-
-            try {
-                localStorage.setItem('geo_location_data', JSON.stringify(data));
-            } catch (e) { }
-
-            return data as GeoLocationData;
-        } catch (error) {
-            console.error('[Location API] Error detecting location:', error);
-
-            // Fallback
-            const fallback: GeoLocationData = {
-                ip: 'unknown',
-                location: { country_code: 'US', country_name: 'United States', city: 'Unknown', region: 'Unknown', timezone: 'UTC' },
-                currency: { code: 'USD', symbol: '$' },
-                regional_config: { cost_of_living_tier: 3, budget_hints: { low: 300, high: 800 } }
+            const result: LocationData = {
+              country_code: data.country_code2?.toUpperCase() || 'US',
+              country_name: data.country_name || 'United States',
+              city: data.city || data.district || data.state_prov || 'Jakarta',
+              timezone: data.time_zone?.name || data.timezone || 'Asia/Jakarta',
+              currency: data.currency?.code || 'USD',
+              currency_symbol: data.currency?.symbol || '$',
+              languages: data.languages ? data.languages.split(',') : ['en'],
+              method: 'EDGE'
             };
-            return fallback;
-        } finally {
-            fetchPromise = null;
+
+            // If VPN detected and we have city as 'Unknown', maybe don't cache too long
+            console.log("[Location] Detected via IP (VPN:", isVpn, "):", result);
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, timestamp: Date.now() }));
+            return result;
+          }
+        } catch (err) {
+          console.warn("[Location] IPGeolocation.io failed:", err);
         }
-    })();
+      }
 
-    return fetchPromise;
-};
+      // Priority 2: Fallback IP API (ipapi.co)
+      try {
+        const res = await fetch('https://ipapi.co/json/');
+        if (res.ok) {
+          const data = await res.json();
+          const result: LocationData = {
+            country_code: data.country_code?.toUpperCase() || 'US',
+            country_name: data.country_name || 'United States',
+            city: data.city || 'Unknown',
+            timezone: data.timezone || 'UTC',
+            method: 'EDGE'
+          };
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, timestamp: Date.now() }));
+          return result;
+        }
+      } catch (e) {}
 
-export const detectLocation = async (): Promise<LocationData> => {
-    const data = await getUserLocation();
-    
-    // Expanded language mapping based on country codes
-    const countryToLang: Record<string, string> = {
-        // Arabic
-        'SA': 'ar', 'AE': 'ar', 'QA': 'ar', 'KW': 'ar', 'BH': 'ar', 'OM': 'ar', 'EG': 'ar', 'JO': 'ar', 'LB': 'ar', 'IQ': 'ar', 'LY': 'ar', 'MA': 'ar', 'TN': 'ar', 'DZ': 'ar',
-        // Indonesian / Malay
-        'ID': 'id', 'MY': 'id',
-        // Indian Subcontinent
-        'IN': 'hi', 'PK': 'ur', 'BD': 'bn',
-        // Greater China
-        'CN': 'zh', 'TW': 'zh', 'HK': 'zh',
-        // Europe
-        'FR': 'fr', 'ES': 'es', 'MX': 'es', 'DE': 'de', 'AT': 'de', 'CH': 'de', 'RU': 'ru', 'TR': 'tr',
-        // Others
-        'VN': 'vi', 'KR': 'ko', 'JP': 'ja', 'TH': 'th', 'PH': 'en', 'BR': 'pt', 'PT': 'pt'
-    };
+      // Priority 3: Browser Geolocation (Most accurate for Jakarta)
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000, enableHighAccuracy: true });
+          });
+          
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`);
+          if (res.ok) {
+            const data = await res.json();
+            const country_code = data.address?.country_code?.toUpperCase();
+            if (country_code) {
+               const result: LocationData = {
+                  country_code: country_code,
+                  country_name: data.address?.country || 'Indonesia',
+                  city: data.address?.city || data.address?.town || data.address?.village || 'Jakarta',
+                  method: 'BROWSER',
+                  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jakarta'
+               };
+               localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, timestamp: Date.now() }));
+               return result;
+            }
+          }
+        } catch (err) {
+          console.warn("[Location] Browser Geolocation failed:", err);
+        }
+      }
 
-    const detectedLang = countryToLang[data.location.country_code] || 'en';
+      // Final Fallback (US)
+      return {
+        country_code: 'US',
+        country_name: 'United States',
+        currency: 'USD',
+        currency_symbol: '$',
+        timezone: 'UTC',
+        method: 'FALLBACK'
+      };
+    } finally {
+      pendingRequest = null;
+    }
+  })();
 
-    return {
-        country: data.location.country_name,
-        country_code: data.location.country_code,
-        city: data.location.city,
-        currency: data.currency.code,
-        currency_symbol: data.currency.symbol,
-        timezone: data.location.timezone,
-        language: detectedLang
-    };
+  const result = await pendingRequest;
+  if (result && typeof window !== 'undefined' && !result.languages) {
+    result.languages = navigator.languages as string[];
+  }
+  return result;
+}
+
+export const getUserLocation = detectLocation;
+
+export const getPrimaryLanguage = (languages?: string[] | string): string => {
+  if (!languages) return 'en';
+  if (Array.isArray(languages)) {
+    if (languages.length === 0) return 'en';
+    return languages[0].split('-')[0].toLowerCase();
+  }
+  return languages.split(',')[0].split('-')[0].toLowerCase();
 };

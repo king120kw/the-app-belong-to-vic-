@@ -3,7 +3,7 @@ import { GlobalProviders } from "@/components/GlobalProviders";
 import "./global.css";
 
 export const metadata: Metadata = {
-  title: "VicCalary",
+  title: "VICALARY",
   description: "AI-powered nutrition tracking",
   icons: {
     icon: "/app logo.png",

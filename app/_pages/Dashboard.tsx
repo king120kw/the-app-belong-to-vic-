@@ -11,6 +11,7 @@ import { ProductDetails } from "@/components/ProductDetails";
 import FoodCarousel from "@/components/FoodCarousel";
 import { getUserProfile } from "@/lib/api/auth";
 import { getDailyProgress, logMeal, getDailySummary } from "@/lib/api/progress";
+import { generateDailySummary } from "@/lib/api/coach";
 import { getDailyMealSuggestions } from "@/lib/api/recipes";
 import { analyzeFoodImage as apiAnalyzeFoodImage } from "@/lib/api/food";
 import { toast } from "sonner";
@@ -124,7 +125,7 @@ export default function Dashboard() {
   // Update active meal type when suggestions load (backend logic takes precedence)
   useEffect(() => {
     if (suggestions?.currentSession) {
-      setActiveMealType(suggestions.currentSession);
+      setActiveMealType(suggestions.currentSession as "breakfast" | "lunch" | "dinner");
     }
   }, [suggestions]);
 
@@ -143,7 +144,12 @@ export default function Dashboard() {
       console.log("[Dashboard] Profile incomplete. Redirecting to onboarding.");
       router.push("/onboarding");
     }
-  }, [profile, authLoading, router]);
+    
+    // Strategic trigger for daily summary if user is active
+    if (user?.id && dailyProgress) {
+        generateDailySummary(user.id);
+    }
+  }, [profile, authLoading, router, dailyProgress, user?.id]);
 
   const toggleTheme = () => {
     const newMode = !darkMode;

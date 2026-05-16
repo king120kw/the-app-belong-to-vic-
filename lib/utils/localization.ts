@@ -19,14 +19,14 @@ export async function detectUserLocation(): Promise<GeoLocationData | null> {
         const data = await detectLocation();
         
         return {
-            city: 'Unknown', // detectLocation doesn't provide city currently
-            country: data.country,
+            city: data.city || 'Unknown',
+            country: data.country_name,
             country_code: data.country_code,
-            currency: data.currency,
-            languages: data.language,
+            currency: data.currency || 'USD',
+            languages: Array.isArray(data.languages) ? data.languages[0] || 'en' : (data.languages || 'en'),
             latitude: 0,
             longitude: 0,
-            timezone: data.timezone,
+            timezone: data.timezone || 'UTC',
         };
     } catch (error) {
         console.warn('Geolocation detection failed:', error);

@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import { detectLocation } from './location'
+import { detectLocation, getPrimaryLanguage } from './location'
 
 // ============================================================================
 // AUTHENTICATION & SYNC
@@ -267,9 +267,10 @@ export const saveOnboardingResponses = async (userId: string, responses: any) =>
             const loc = await detectLocation();
             await supabase.from('user_settings').upsert({
                 user_id: userId,
-                language: loc.language,
-                currency: loc.currency,
-                timezone: loc.timezone,
+                language: getPrimaryLanguage(loc?.languages),
+                currency: loc?.currency || 'USD',
+                timezone: loc?.timezone || 'UTC',
+                country_code: loc?.country_code,
                 updated_at: new Date().toISOString()
             }, { onConflict: 'user_id' });
         } catch (err) {

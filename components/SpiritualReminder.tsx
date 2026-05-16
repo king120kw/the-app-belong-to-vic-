@@ -11,7 +11,7 @@ interface SpiritualReminderProps {
 
 export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
     const { t } = useTranslation();
-    const [reminder, setReminder] = useState<{ type: 'quran' | 'hadith', content: string, reference: string } | null>(null);
+    const [reminder, setReminder] = useState<{ type: 'quran' | 'hadith', content: string, content_ar?: string, reference: string } | null>(null);
     const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
@@ -58,7 +58,7 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
                 <div className="absolute -bottom-10 -left-10 size-40 bg-vic-pink/10 rounded-full blur-3xl group-hover:bg-vic-pink/20 transition-colors duration-700" />
 
                 <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3">
                             <div className="size-10 rounded-2xl bg-vic-green/20 flex items-center justify-center">
                                 <BookOpen className="text-vic-green" size={22} />
@@ -78,9 +78,16 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
                         </button>
                     </div>
 
-                    <p className="text-slate-200 text-lg font-medium leading-relaxed italic mb-4 font-serif">
+                    {reminder.content_ar && (
+                        <p className="text-white text-2xl font-serif text-right leading-loose mb-6 drop-shadow-md" dir="rtl">
+                            {reminder.content_ar}
+                        </p>
+                    )}
+
+                    <p className="text-slate-200 text-lg font-medium leading-relaxed italic mb-6 font-serif border-l-2 border-vic-green/30 pl-4">
                         "{reminder.content}"
                     </p>
+
 
                     <div className="flex items-center justify-between">
                         <div className="flex flex-col gap-1">

@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'Invalid sender' })
     }
 
-    const safeFetch = async (promise: Promise<any>, label: string) => {
+    const safeFetch = async (promise: PromiseLike<any>, label: string) => {
       try {
         const res = await promise;
         if (res.error) {

@@ -1,6 +1,7 @@
-# VicCalary - AI-Powered Nutrition & Spiritual Wellness
+# VICALARY - AI-Powered Nutrition & Spiritual Wellness
 
-VicCalary is a next-generation health, nutrition, and spiritual wellness application. It combines advanced AI-powered food analysis with spiritual mindfulness, providing users with a holistic approach to their daily routines.
+VICALARY is a next-generation health, nutrition, and spiritual wellness application. It combines advanced AI-powered food analysis with spiritual mindfulness, providing users with a holistic approach to their daily routines.
+
 
 ## 🌟 Key Features
 

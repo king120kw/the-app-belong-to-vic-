@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../AuthContext';
-import { detectLocation } from './location';
+import { detectLocation, getPrimaryLanguage } from './location';
 import { updateSettings } from './settings';
 import { toast } from 'sonner';
 
@@ -76,11 +76,12 @@ export const useTranslation = () => {
     // If auto is on, detected location wins, then settings, then cache.
     const rawLang = !isAuto
         ? ((settings as any)?.language || cachedLang || 'en')
-        : (detectedLoc?.language || (settings as any)?.language || cachedLang || 'en');
+        : (getPrimaryLanguage(detectedLoc?.languages) || (settings as any)?.language || cachedLang || 'en');
 
     useEffect(() => {
-        if (detectedLoc?.language) {
-            localStorage.setItem('app_lang', detectedLoc.language);
+        const primaryLang = getPrimaryLanguage(detectedLoc?.languages);
+        if (primaryLang && primaryLang !== 'en') {
+            localStorage.setItem('app_lang', primaryLang);
         }
     }, [detectedLoc]);
 
@@ -97,24 +98,24 @@ export const useTranslation = () => {
             const s = settings as any;
             // Sync if any core location attribute is missing or different
             const needsSync = !s ||
-                s.language !== detectedLoc.language ||
-                s.country_code !== detectedLoc.country_code ||
-                s.currency !== detectedLoc.currency ||
-                (s.timezone !== detectedLoc.timezone);
+                s.language !== getPrimaryLanguage(detectedLoc?.languages) ||
+                s.country_code !== detectedLoc?.country_code ||
+                s.currency !== detectedLoc?.currency ||
+                (s.timezone !== detectedLoc?.timezone);
 
             if (needsSync) {
                 updateSettings(user.id, {
-                    language: detectedLoc.language,
-                    currency: detectedLoc.currency,
-                    timezone: detectedLoc.timezone,
-                    country_code: detectedLoc.country_code,
+                    language: getPrimaryLanguage(detectedLoc?.languages),
+                    currency: detectedLoc?.currency,
+                    timezone: detectedLoc?.timezone,
+                    country_code: detectedLoc?.country_code,
                     is_language_auto: true
                 }).then(() => {
                     queryClient.invalidateQueries({ queryKey: ['settings', user.id] });
 
                     // Only toast if it's a significant change and we haven't toasted recently
-                    if (s && s.country_code !== detectedLoc.country_code && !localStorage.getItem(toastKey)) {
-                        toast.success(t('location_updated_toast').replace('%s', detectedLoc.country), {
+                    if (s && s.country_code !== detectedLoc?.country_code && !localStorage.getItem(toastKey)) {
+                        toast.success(t('location_updated_toast').replace('%s', detectedLoc?.country_name || ''), {
                             icon: '🌎',
                             duration: 5000
                         });
@@ -144,7 +145,7 @@ export const useTranslation = () => {
     const lang = finalLang;
     const currency = (settings as any)?.currency || detectedLoc?.currency || 'USD';
     const timezone = (settings as any)?.timezone || detectedLoc?.timezone || 'UTC';
-    const country = (settings as any)?.country || detectedLoc?.country || 'Global';
+    const country = (settings as any)?.country || detectedLoc?.country_name || 'Global';
 
     const currencySymbols: Record<string, string> = {
         'USD': '$', 'GBP': '£', 'EUR': '€', 'IDR': 'Rp', 'NGN': '₦', 'MYR': 'RM', 'INR': '₹',

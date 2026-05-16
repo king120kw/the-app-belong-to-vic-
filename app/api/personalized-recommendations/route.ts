@@ -8,21 +8,52 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServerSupabaseClient()
 
-    const [profileRes, onboardingRes] = await Promise.all([
+    const [profileRes, onboardingRes, settingsRes] = await Promise.all([
       supabase.from('user_profiles').select('*').eq('id', userId).maybeSingle(),
       supabase.from('onboarding_responses').select('*').eq('user_id', userId).maybeSingle(),
+      supabase.from('user_settings').select('*').eq('user_id', userId).maybeSingle(),
     ])
 
     const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
+    const spoonacularKey = process.env.SPOONACULAR_API_KEY
     if (!apiKey) throw new Error('NEXT_PUBLIC_OPENAI_API_KEY not set')
+
+    // Geolocation Mapping
+    const countryCode = settingsRes.data?.country_code || 'US';
+    const countryToQueryMap: Record<string, string> = {
+        'ID': 'Indonesian', 'MY': 'Malaysian', 'SG': 'Singaporean', 'TH': 'Thai', 'VN': 'Vietnamese',
+        'US': 'American', 'GB': 'British', 'IT': 'Italian', 'FR': 'French', 'ES': 'Spanish',
+        'MX': 'Mexican', 'IN': 'Indian', 'CN': 'Chinese', 'JP': 'Japanese', 'KR': 'Korean',
+        'GR': 'Greek', 'TR': 'Turkish', 'DE': 'German', 'BR': 'Brazilian', 'AR': 'Argentinian'
+    };
+    const regionalQuery = countryToQueryMap[countryCode] || 'Healthy';
+
+    let spoonacularContext = '';
+    if (spoonacularKey) {
+        try {
+            const spoonRes = await fetch(`https://api.spoonacular.com/recipes/complexSearch?apiKey=${spoonacularKey}&query=${regionalQuery}&number=3&addRecipeInformation=true&addRecipeNutrition=true`);
+            if (spoonRes.ok) {
+                const spoonData = await spoonRes.json();
+                if (spoonData.results && spoonData.results.length > 0) {
+                    spoonacularContext = `\nUse these locally sourced regional recipes as your foundation:\n` + spoonData.results.map((r: any) => 
+                        `- ${r.title} (Calories: ${r.nutrition?.nutrients?.find((n:any)=>n.name==='Calories')?.amount || 'N/A'}, Ready in ${r.readyInMinutes}m)\n  Summary: ${r.summary?.replace(/<[^>]*>?/gm, '').substring(0, 200)}...`
+                    ).join('\n');
+                }
+            }
+        } catch (e) {
+            console.error("Spoonacular fetch failed:", e);
+        }
+    }
 
     const prompt = `You are a PhD Clinical Nutritionist and Michelin-star healthy chef.
 User: ${profileRes.data?.full_name || 'User'}
 Goal: ${onboardingRes.data?.goal || 'General Health'}
 Lifestyle: ${onboardingRes.data?.dietary_lifestyle || 'Balanced'}
+Region Context: ${regionalQuery} (${countryCode})
+${spoonacularContext}
 
 TASKS:
-1. Suggest 3 elite, personalized recipes that specifically target the user's goal.
+1. Suggest 3 elite, personalized recipes that specifically target the user's goal and perfectly match their local cuisine (${regionalQuery}). If Spoonacular recipes were provided above, USE THEM and expand upon them.
 2. For each recipe, provide a "Clinical Justification" (2-3 sentences) explaining the biochemical advantage of the chosen ingredients.
 3. Include precise macro counts.
 

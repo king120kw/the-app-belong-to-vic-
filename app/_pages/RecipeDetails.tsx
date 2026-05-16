@@ -1,12 +1,17 @@
 "use client"
 import { useState, useEffect, useRef } from "react";
-import { useParams, useRouter, usePathname } from "next/navigation";
-import { AlertCircle, ArrowLeft, Volume2, Mic } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { 
+    AlertCircle, ArrowLeft, Volume2, Mic, Play, Pause, 
+    ChevronRight, ChevronLeft, Timer, Flame, Droplets, 
+    Wheat, Beef, Share2, Heart 
+} from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { getRecipeDetails, toggleFavoriteRecipe } from "@/lib/api/recipes";
 import { useTranslation } from "@/lib/api/translation";
 import { toast } from "sonner";
+import { FavoriteButton } from "@/components/FavoriteButton";
 
 export default function RecipeDetails() {
     const { id } = useParams() as { id: string };
@@ -15,29 +20,35 @@ export default function RecipeDetails() {
     const { user } = useAuth();
     const { lang } = useTranslation();
 
-    const pathname = usePathname();
-    const initialData = undefined;
+    // Voice State
+    const [isVoiceMode, setIsVoiceMode] = useState(false);
+    const [currentStepIdx, setCurrentStepIdx] = useState(0);
+    const [isSpeaking, setIsSpeaking] = useState(false);
+
+    // Timer State
+    const [isTimerRunning, setIsTimerRunning] = useState(false);
+    const [timeLeft, setTimeLeft] = useState(0);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
 
     // Fetch recipe details
     const { data: recipe, isLoading } = useQuery<any>({
         queryKey: ['recipe', id],
         queryFn: () => getRecipeDetails(id!),
         enabled: !!id,
-        initialData: initialData,
-        retry: false
+        retry: 1
     });
 
-    const [isTimerRunning, setIsTimerRunning] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(20 * 60); // Default 20 mins
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-    // Initialize timer when recipe loads
     useEffect(() => {
         if (recipe) {
-            const totalMinutes = (recipe.prep_time_minutes || 10) + (recipe.cook_time_minutes || 10);
-            setTimeLeft(totalMinutes * 60);
+            setTimeLeft((recipe.prep_time_minutes || 10) * 60);
         }
     }, [recipe]);
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    };
 
     const toggleTimer = () => {
         if (isTimerRunning) {
@@ -59,205 +70,241 @@ export default function RecipeDetails() {
         }
     };
 
-    useEffect(() => {
-        return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-        };
-    }, []);
-
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-    };
-
-    // Speak helper
+    // Voice Interaction
     const speak = (text: string) => {
         if (!text) return;
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = lang === 'id' ? 'id-ID' : 'en-US';
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => setIsSpeaking(false);
         window.speechSynthesis.speak(utterance);
     };
 
-    // Toggle favorite mutation
-    const favoriteMutation = useMutation({
-        mutationFn: () => toggleFavoriteRecipe(user!.id, id!),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['recipe', id] });
-            toast.success("Favorites updated");
-        }
-    });
+    const startVoiceGuidance = () => {
+        setIsVoiceMode(true);
+        const welcome = lang === 'id' 
+            ? `Halo! Saya asisten masak Anda. Mari kita buat ${recipe.title}. Langkah pertama: ${recipe.instructions[0]}`
+            : `Hello! I'm your personal chef. Let's make ${recipe.title}. Step one: ${recipe.instructions[0]}`;
+        speak(welcome);
+        setCurrentStepIdx(0);
+    };
 
-    // Safety timeout: If loading takes too long, force show error or fallback
-    useEffect(() => {
-        let timeout: NodeJS.Timeout;
-        if (isLoading && !recipe) {
-            timeout = setTimeout(() => {
-                if (isLoading) {
-                    toast.error("Loading taking longer than expected...");
-                }
-            }, 8000);
+    const nextStep = () => {
+        if (currentStepIdx < (recipe.instructions?.length || 0) - 1) {
+            const nextIdx = currentStepIdx + 1;
+            setCurrentStepIdx(nextIdx);
+            speak(recipe.instructions[nextIdx]);
+        } else {
+            speak(lang === 'id' ? "Selesai! Selamat menikmati makanan Anda." : "All done! Enjoy your meal.");
+            setIsVoiceMode(false);
         }
-        return () => clearTimeout(timeout);
-    }, [isLoading, recipe]);
+    };
 
-    if (isLoading && !recipe) {
+    const prevStep = () => {
+        if (currentStepIdx > 0) {
+            const nextIdx = currentStepIdx - 1;
+            setCurrentStepIdx(nextIdx);
+            speak(recipe.instructions[nextIdx]);
+        }
+    };
+
+    if (isLoading) {
         return (
-            <div className="flex items-center justify-center h-screen bg-[#FDFBF7] dark:bg-[#0d1418]">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#8B4513]"></div>
+            <div className="flex items-center justify-center h-screen bg-white dark:bg-[#0d1418]">
+                <div className="animate-pulse flex flex-col items-center">
+                    <div className="size-20 bg-vic-green/20 rounded-full mb-4" />
+                    <div className="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded" />
+                </div>
             </div>
         );
     }
 
-    if (!recipe && !isLoading) {
+    if (!recipe) {
         return (
-            <div className="flex flex-col items-center justify-center h-screen bg-[#FDFBF7] dark:bg-[#0d1418] p-8 text-center">
-                <div className="size-24 bg-vic-pink/10 rounded-full flex items-center justify-center mb-6">
-                    <AlertCircle className="text-vic-pink" size={44} />
-                </div>
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Recipe not found</h2>
-                <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-xs">
-                    We couldn't load this recipe. It might have been removed or there was a connection error.
-                </p>
-                <div className="flex flex-col w-full max-w-xs gap-3">
-                    <button
-                        onClick={() => queryClient.invalidateQueries({ queryKey: ['recipe', id] })}
-                        className="py-4 bg-vic-green text-slate-900 font-bold rounded-2xl shadow-lg"
-                    >
-                        Try Again
-                    </button>
-                    <button
-                        onClick={() => router.back()}
-                        className="py-4 text-slate-500 font-bold"
-                    >
-                        Go Back
-                    </button>
-                </div>
+            <div className="flex flex-col items-center justify-center h-screen p-8 text-center bg-white dark:bg-[#0d1418]">
+                <AlertCircle className="text-vic-pink mb-4" size={48} />
+                <h2 className="text-xl font-bold mb-2">Recipe Missing</h2>
+                <button onClick={() => router.back()} className="text-vic-green font-bold">Go Back</button>
             </div>
         );
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex flex-col h-screen max-w-2xl mx-auto w-full bg-[#FDFBF7] dark:bg-[#0d1418] overflow-hidden">
-            {/* Header */}
-            <header className="flex items-center justify-between p-4 absolute top-0 left-0 right-0 z-10">
-                <button
-                    onClick={() => router.back()}
-                    className="size-10 flex items-center justify-center bg-black/20 backdrop-blur-sm rounded-full text-white"
-                >
-                    <ArrowLeft size={20} />
-                </button>
-                <h1 className="text-sm font-bold tracking-widest uppercase text-[#8B4513] bg-[#FDFBF7]/90 px-4 py-1 rounded-full shadow-sm">
-                    {recipe.title}
-                </h1>
-                <div className="size-10"></div>
-            </header>
-
-            {/* Main Content Scrollable */}
-            <main className="flex-1 overflow-y-auto no-scrollbar">
-
-                {/* Image Section (Plate) */}
-                <section className="relative h-[45vh] bg-[#E8E8E8] dark:bg-[#1a1a1a] flex items-center justify-center">
-                    {/* Background Blur Image */}
-                    <div
-                        className="absolute inset-0 bg-cover bg-center opacity-30 blur-xl"
-                        style={{ backgroundImage: `url(${recipe.image_url})` }}
-                    />
-
-                    {/* Main Circular Plate Image */}
-                    <div className="relative size-64 rounded-full border-8 border-white dark:border-[#2a2a2a] shadow-2xl overflow-hidden z-0">
-                        <img
-                            src={recipe.image_url}
-                            alt={recipe.title}
-                            className="w-full h-full object-cover"
-                        />
-                    </div>
-                </section>
-
-                {/* Brown Details Card */}
-                <section className="relative bg-[#8B4513] text-[#FDFBF7] min-h-[55vh] rounded-t-[40px] -mt-8 p-8 pb-32 z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.2)]">
-
-                    {/* Timer Circle Floating/Absolute */}
-                    <button
-                        onClick={toggleTimer}
-                        className="absolute right-8 -top-12 size-24 bg-[#5D2E0C] border-4 border-[#FDFBF7] rounded-full flex flex-col items-center justify-center shadow-xl hover:scale-105 transition-transform active:scale-95"
-                    >
-                        <span className="text-xl font-bold font-mono">{formatTime(timeLeft)}</span>
-                        <span className="text-[9px] uppercase tracking-wide opacity-80">
-                            {isTimerRunning ? 'Pause' : 'Start Timer'}
-                        </span>
+        <div className="flex flex-col h-screen max-w-2xl mx-auto w-full bg-white dark:bg-[#0d1418] overflow-hidden">
+            {/* Immersive Header */}
+            <div className="relative h-80 shrink-0">
+                <img 
+                    src={recipe.image_url} 
+                    alt={recipe.title} 
+                    className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
+                
+                <div className="absolute top-6 left-6 right-6 flex justify-between items-center">
+                    <button onClick={() => router.back()} className="size-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white">
+                        <ArrowLeft size={20} />
                     </button>
-
-                    {/* Ingredients Header */}
-                    <h2 className="text-2xl font-serif font-bold mb-6">Ingredients</h2>
-
-                    {/* Ingredients List */}
-                    <div className="space-y-4 mb-10">
-                        {recipe.ingredients?.map((ing: any, idx: number) => (
-                            <div key={idx} className="flex items-center gap-4">
-                                <div className="size-10 bg-[#A05C2B] rounded-full flex items-center justify-center shrink-0">
-                                    {/* Simple icon logic based on name */}
-                                    <span className="text-xl opacity-80">
-                                        {ing.item?.toLowerCase().includes('salt') ? '🧂' :
-                                            ing.item?.toLowerCase().includes('toast') || ing.item?.toLowerCase().includes('bread') ? '🍞' :
-                                                ing.item?.toLowerCase().includes('avocado') ? '🥑' :
-                                                    '🍽️'}
-                                    </span>
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-lg font-medium leading-none">{ing.amount} {ing.unit} {ing.item}</p>
-                                    <p className="text-sm opacity-60 mt-1">{ing.notes || ""}</p>
-                                </div>
-                            </div>
-                        ))}
-                        {(!recipe.ingredients || recipe.ingredients.length === 0) && (
-                            <p className="opacity-60 italic">No ingredients listed.</p>
-                        )}
+                    <div className="flex gap-2">
+                        <button className="size-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white">
+                            <Share2 size={18} />
+                        </button>
+                        <FavoriteButton recipeId={id} className="relative !bg-white/20 !backdrop-blur-md" />
                     </div>
+                </div>
 
-                    {/* Steps Header */}
-                    <h2 className="text-2xl font-serif font-bold mb-6">Steps</h2>
-
-                    {/* Steps List */}
-                    <div className="space-y-8 relative">
-                        {/* Connecting Line */}
-                        <div className="absolute left-[19px] top-4 bottom-4 w-0.5 bg-[#A05C2B]/50" />
-
-                        {recipe.instructions?.map((step: string, idx: number) => (
-                            <div key={idx} className="relative flex gap-6 group">
-                                <div className="size-10 rounded-full bg-[#D4A373] text-[#5D2E0C] font-bold text-lg flex items-center justify-center shrink-0 z-10 border-4 border-[#8B4513]">
-                                    {idx + 1}
-                                </div>
-                                <div className="flex-1 pt-1">
-                                    <p className="text-lg leading-relaxed opacity-90 group-hover:opacity-100 transition-opacity">
-                                        {step}
-                                    </p>
-                                    <button
-                                        onClick={() => speak(step)}
-                                        className="mt-2 text-[#D4A373] text-sm flex items-center gap-1 hover:text-white"
-                                    >
-                                        <Volume2 size={16} />
-                                        Listen
-                                    </button>
-                                </div>
-                            </div>
+                <div className="absolute bottom-6 left-6 right-6">
+                    <div className="flex gap-2 mb-2">
+                        {recipe.dietary_tags?.slice(0, 3).map((tag: string) => (
+                            <span key={tag} className="text-[10px] font-bold uppercase tracking-widest bg-vic-green text-slate-900 px-2 py-1 rounded">
+                                {tag}
+                            </span>
                         ))}
-                        {(!recipe.instructions || recipe.instructions.length === 0) && (
-                            <p className="opacity-60 italic">No instructions available.</p>
-                        )}
                     </div>
-
-                </section>
-            </main>
-
-            {/* Voice Command Footer (Optional/Floating) */}
-            <div className="absolute bottom-8 right-8 z-20">
-                <div className="flex flex-col items-center gap-1">
-                    <Mic className="text-white drop-shadow-md animate-bounce" size={36} />
-                    <span className="text-[10px] text-white font-bold opacity-80 uppercase tracking-wider drop-shadow-md">Voice Commands</span>
+                    <h1 className="text-3xl font-black text-white uppercase tracking-tighter leading-tight">
+                        {recipe.title}
+                    </h1>
                 </div>
             </div>
+
+            {/* Content Dashboard */}
+            <main className="flex-1 overflow-y-auto no-scrollbar bg-slate-50 dark:bg-[#0d1418] rounded-t-[40px] -mt-10 relative z-10 p-6">
+                
+                {/* Nutritional Dashboard */}
+                <div className="grid grid-cols-4 gap-4 mb-8">
+                    <div className="bg-white dark:bg-[#1f2c34] p-3 rounded-2xl shadow-sm text-center">
+                        <Flame className="mx-auto text-vic-orange mb-1" size={20} />
+                        <div className="text-lg font-black dark:text-white leading-none">{recipe.total_calories || 0}</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Kcal</div>
+                    </div>
+                    <div className="bg-white dark:bg-[#1f2c34] p-3 rounded-2xl shadow-sm text-center">
+                        <Beef className="mx-auto text-vic-red mb-1" size={20} />
+                        <div className="text-lg font-black dark:text-white leading-none">{recipe.protein_g || 0}g</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Prot</div>
+                    </div>
+                    <div className="bg-white dark:bg-[#1f2c34] p-3 rounded-2xl shadow-sm text-center">
+                        <Wheat className="mx-auto text-vic-green mb-1" size={20} />
+                        <div className="text-lg font-black dark:text-white leading-none">{recipe.carbs_g || 0}g</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Carb</div>
+                    </div>
+                    <div className="bg-white dark:bg-[#1f2c34] p-3 rounded-2xl shadow-sm text-center">
+                        <Droplets className="mx-auto text-vic-blue mb-1" size={20} />
+                        <div className="text-lg font-black dark:text-white leading-none">{recipe.fat_g || 0}g</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Fat</div>
+                    </div>
+                </div>
+
+                <div className="flex gap-4 mb-8">
+                    <div className="flex-1 bg-white dark:bg-[#1f2c34] p-4 rounded-3xl shadow-sm flex items-center gap-4">
+                        <div className="size-12 bg-slate-100 dark:bg-white/5 rounded-2xl flex items-center justify-center text-slate-500">
+                            <Timer size={24} />
+                        </div>
+                        <div>
+                            <div className="text-sm font-black dark:text-white leading-none">
+                                {(recipe.prep_time_minutes || 0) + (recipe.cook_time_minutes || 0)} MIN
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Total Time</div>
+                        </div>
+                    </div>
+                    <div className="flex-1 bg-white dark:bg-[#1f2c34] p-4 rounded-3xl shadow-sm flex items-center gap-4">
+                        <div className="size-12 bg-slate-100 dark:bg-white/5 rounded-2xl flex items-center justify-center text-slate-500">
+                            <Timer size={24} />
+                        </div>
+                        <div>
+                            <div className="text-sm font-black dark:text-white leading-none">
+                                {recipe.servings || 2} PERS
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Servings</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Voice Guidance Toggle */}
+                <button 
+                    onClick={startVoiceGuidance}
+                    className="w-full bg-vic-green text-slate-900 py-4 rounded-3xl font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 mb-8 hover:scale-[1.02] active:scale-95 transition-all"
+                >
+                    <Mic size={20} />
+                    Start Voice Guidance
+                </button>
+
+                {/* Ingredients */}
+                <h3 className="text-xl font-black dark:text-white mb-4 uppercase tracking-tight">Ingredients</h3>
+                <div className="bg-white dark:bg-[#1f2c34] rounded-3xl p-6 shadow-sm mb-8">
+                    <div className="space-y-4">
+                        {recipe.ingredients?.map((ing: any, i: number) => (
+                            <div key={i} className="flex justify-between items-center border-b border-slate-50 dark:border-white/5 pb-3 last:border-none">
+                                <span className="text-slate-700 dark:text-slate-300 font-medium">{ing.item}</span>
+                                <span className="text-sm font-black dark:text-white">{ing.amount} {ing.unit}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Instructions */}
+                <h3 className="text-xl font-black dark:text-white mb-4 uppercase tracking-tight">Instructions</h3>
+                <div className="space-y-6 mb-20">
+                    {recipe.instructions?.map((step: string, i: number) => (
+                        <div key={i} className="flex gap-4">
+                            <div className="size-8 rounded-xl bg-vic-green/10 text-vic-green flex items-center justify-center font-black shrink-0">
+                                {i + 1}
+                            </div>
+                            <p className="text-slate-600 dark:text-slate-400 leading-relaxed pt-1">
+                                {step}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            </main>
+
+            {/* Voice Guidance Mode Overlay */}
+            {isVoiceMode && (
+                <div className="fixed inset-0 z-[100] bg-slate-900 flex flex-col p-8 text-white">
+                    <div className="flex justify-between items-center mb-12">
+                        <div className="flex flex-col">
+                            <h2 className="text-vic-green font-black uppercase tracking-widest text-xs">Cooking Mode</h2>
+                            <p className="text-2xl font-black uppercase tracking-tighter">{recipe.title}</p>
+                        </div>
+                        <button onClick={() => setIsVoiceMode(false)} className="size-10 bg-white/10 rounded-full flex items-center justify-center">
+                            <AlertCircle size={20} />
+                        </button>
+                    </div>
+
+                    <div className="flex-1 flex flex-col items-center justify-center text-center">
+                        <div className="size-32 bg-vic-green/20 rounded-full flex items-center justify-center mb-12 animate-pulse">
+                            <Mic className="text-vic-green" size={48} />
+                        </div>
+                        
+                        <div className="mb-4 text-vic-green font-black uppercase tracking-widest text-sm">
+                            Step {currentStepIdx + 1} of {recipe.instructions.length}
+                        </div>
+                        
+                        <p className="text-3xl font-black leading-tight uppercase tracking-tighter mb-8">
+                            {recipe.instructions[currentStepIdx]}
+                        </p>
+
+                        <div className="flex items-center gap-8">
+                            <button onClick={prevStep} disabled={currentStepIdx === 0} className="size-16 bg-white/10 rounded-full flex items-center justify-center disabled:opacity-20">
+                                <ChevronLeft size={32} />
+                            </button>
+                            <button onClick={() => speak(recipe.instructions[currentStepIdx])} className="size-24 bg-vic-green text-slate-900 rounded-full flex items-center justify-center">
+                                {isSpeaking ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" />}
+                            </button>
+                            <button onClick={nextStep} className="size-16 bg-white/10 rounded-full flex items-center justify-center">
+                                <ChevronRight size={32} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Timer in Voice Mode */}
+                    <div className="mt-auto flex flex-col items-center bg-white/5 p-6 rounded-3xl">
+                        <div className="text-4xl font-black font-mono mb-2">{formatTime(timeLeft)}</div>
+                        <button onClick={toggleTimer} className="text-xs font-black uppercase tracking-widest text-vic-green">
+                            {isTimerRunning ? "Pause Timer" : "Start 20:00 Timer"}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

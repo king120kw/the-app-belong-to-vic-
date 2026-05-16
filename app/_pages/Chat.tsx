@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { MessageCircle, ArrowLeft, MoreVertical, Search, Bookmark, CheckCheck, Image, Mic, Video, FileText, MessageSquarePlus, Trash2, X, ScanLine, UserSearch, UserPlus, UserRound } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
-import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByIdentifier, softDeleteConversation, getMyQRCodeData, getContacts, addContactPure } from "@/lib/api/chat";
+import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByIdentifier, softDeleteConversation, getMyQRCodeData, getContacts, addContactPure, markAllMessagesRead, archiveConversation, muteConversation, clearChatHistory } from "@/lib/api/chat";
 import { searchUsers, getUserProfile } from "@/lib/api/auth";
 import { MyQRCode } from "@/components/MyQRCode";
 import { useTranslation } from "@/lib/api/translation";
@@ -109,6 +109,9 @@ export default function Chat() {
       router.replace(pathname);
     }
 
+    // Force refresh on mount to sync read status
+    queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
+
     // Online presence
     const presenceChannel = supabase.channel('online-users');
     presenceChannel
@@ -139,13 +142,11 @@ export default function Chat() {
         queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
       })
       .on('postgres_changes', {
-        event: 'INSERT',
+        event: '*', // Listen to INSERT and UPDATE to catch read status changes
         schema: 'public',
         table: 'messages'
       }, (payload: any) => {
-        // We still listen to messages to catch new ones, but maybe we can filter better?
-        // For now, only refresh if it's a message that could be in one of our conversations.
-        // Actually, invalidating 'conversations' is correct to update the preview.
+        // A message was added or updated (e.g. read status)
         queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
       })
       .on('postgres_changes', {
@@ -197,7 +198,7 @@ export default function Chat() {
     onError: (err: any) => toast.error(`Failed to add contact: ${err.message}`)
   });
 
-  const deleteConversationMutation = useMutation({
+    const deleteConversationMutation = useMutation({
     mutationFn: (convId: string) => softDeleteConversation(convId, user!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conversations', user?.id] });
@@ -205,6 +206,36 @@ export default function Chat() {
       toast.success("Conversation deleted");
     },
     onError: () => toast.error("Failed to delete conversation")
+  });
+
+  const clearHistoryMutation = useMutation({
+    mutationFn: (convId: string) => clearChatHistory(user!.id, convId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations', user?.id] });
+      setLongPressConv(null);
+      toast.success("Chat history cleared");
+    },
+    onError: () => toast.error("Failed to clear history")
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: ({ convId, archive }: { convId: string, archive: boolean }) => archiveConversation(user!.id, convId, archive),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['conversations', user?.id] });
+      setLongPressConv(null);
+      toast.success(vars.archive ? "Chat archived" : "Chat unarchived");
+    },
+    onError: () => toast.error("Failed to update archive status")
+  });
+
+  const muteMutation = useMutation({
+    mutationFn: ({ convId, mute }: { convId: string, mute: boolean }) => muteConversation(user!.id, convId, mute),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['conversations', user?.id] });
+      setLongPressConv(null);
+      toast.success(vars.mute ? "Notifications muted" : "Notifications unmuted");
+    },
+    onError: () => toast.error("Failed to update mute status")
   });
 
   // ── Long-press handlers ──────────────────────────────────────────
@@ -445,50 +476,60 @@ export default function Chat() {
 
   return (
     <div className="flex flex-col max-w-2xl mx-auto w-full bg-white dark:bg-[#0b141a] h-[100dvh] font-sans">
-      <header className="px-4 py-3 bg-white dark:bg-[#0d1418] sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-vic-deep-blue dark:text-vic-green hover:opacity-70 transition-opacity">
+    <header className="px-4 py-3 bg-white dark:bg-[#0d1418] sticky top-0 z-20 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="text-vic-deep-blue dark:text-vic-green hover:bg-black/5 p-2 rounded-full transition-colors">
               <ArrowLeft size={22} />
             </Link>
-            <div>
-              <h1 className="text-2xl font-black text-vic-deep-blue dark:text-white tracking-tight">VicCalary</h1>
-              <p className="text-[10px] font-bold text-vic-green uppercase tracking-widest">{t('messages')}</p>
-            </div>
+            <h1 className="text-2xl font-black text-vic-deep-blue dark:text-white tracking-tight">VICALARY</h1>
           </div>
-          <div className="flex items-center gap-4">
+          
+          <div className="flex items-center gap-1">
+            <Link href="/camera" className="text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full p-2 transition-colors">
+              <Video size={22} />
+            </Link>
             <div className="relative">
-              <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full p-2 transition-colors">
-                <MoreVertical size={20} />
+              <button 
+                onClick={() => setIsMenuOpen(!isMenuOpen)} 
+                className={`text-[#54656F] dark:text-[#8696A0] hover:bg-black/5 rounded-full p-2 transition-colors ${isMenuOpen ? 'bg-black/5' : ''}`}
+              >
+                <MoreVertical size={22} />
               </button>
+              
               {isMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-[#233138] rounded-xl shadow-xl border border-slate-100 dark:border-white/5 z-50 py-2">
-                  <button onClick={() => { setIsDiscoveryOpen(true); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm dark:text-white hover:bg-slate-50 dark:hover:bg-white/5">New Chat</button>
-                  <button onClick={async () => {
-                    const data = await getMyQRCodeData(user!.id);
-                    setQrData(data);
-                    setShowMyQR(true);
-                    setIsMenuOpen(false);
-                  }} className="w-full text-left px-4 py-2 text-sm dark:text-white hover:bg-slate-50 dark:hover:bg-white/5">My VicCode (QR)</button>
-                  <button onClick={() => { router.push('/profile'); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm dark:text-white hover:bg-slate-50 dark:hover:bg-white/5">Profile</button>
-                </div>
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#233138] rounded-xl shadow-2xl border border-slate-100 dark:border-white/5 z-50 py-2 animate-in fade-in zoom-in duration-100">
+                    <button onClick={() => { setIsDiscoveryOpen(true); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">New Group</button>
+                    <button onClick={() => { toast.info("Communities coming soon!"); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">New Community</button>
+                    <button onClick={() => { toast.info("Broadcast lists coming soon!"); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">Broadcast Lists</button>
+                    <button onClick={() => { toast.info("Linked devices settings..."); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">Linked Devices</button>
+                    <button onClick={() => { toast.info("Starred messages..."); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">Starred Messages</button>
+                    <div className="h-[1px] bg-slate-100 dark:bg-white/5 my-1" />
+                    <button 
+                      onClick={async () => { 
+                        if (user?.id) {
+                          const success = await markAllMessagesRead(user.id);
+                          if (success) {
+                            queryClient.invalidateQueries({ queryKey: ['conversations', user.id] });
+                            toast.success("All messages marked as read");
+                          }
+                        }
+                        setIsMenuOpen(false); 
+                      }} 
+                      className="w-full text-left px-4 py-3 text-sm dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                    >
+                      Mark All as Read
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>
         </div>
-
-
-        {currentView === 'chats' && (
-          <div className="grid grid-cols-3 gap-2 mt-2 pb-1">
-            {['All', 'Unread', 'Groups'].map((tab) => (
-              <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`py-2 rounded-full text-xs font-bold transition-all ${activeTab === tab ? 'bg-vic-green/20 text-vic-green border border-vic-green/30' : 'bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400'}`}>
-                {tab}
-              </button>
-            ))}
-          </div>
-        )}
       </header>
+
 
       {/* Search bar */}
       <div className="px-4 py-2 bg-white dark:bg-[#0d1418] border-b border-slate-50 dark:border-white/[0.02]">
@@ -613,8 +654,12 @@ export default function Chat() {
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col justify-center">
                     <div className="flex justify-between items-center mb-0.5">
-                      <h3 className={`truncate dark:text-white ${isUnread ? 'font-black' : 'font-bold'}`}>{conv.display_name}</h3>
-                      <span className={`text-[10px] ${isUnread ? 'text-vic-green font-bold' : 'text-slate-400'}`}>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <h3 className={`truncate dark:text-white ${isUnread ? 'font-black' : 'font-bold'}`}>{conv.display_name}</h3>
+                        {conv.is_muted && <Mic size={14} className="text-slate-400 shrink-0 opacity-60" />}
+                        {conv.is_archived && <Bookmark size={14} className="text-vic-green fill-current shrink-0" />}
+                      </div>
+                      <span className={`text-[10px] shrink-0 ${isUnread ? 'text-vic-green font-bold' : 'text-slate-400'}`}>
                         {new Date(conv.last_message?.created_at || conv.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
@@ -677,15 +722,37 @@ export default function Chat() {
               </div>
             </div>
             <button
+              onClick={() => archiveMutation.mutate({ convId: longPressConv.id, archive: !longPressConv.is_archived })}
+              className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300 transition-colors"
+            >
+              <Bookmark size={20} className={longPressConv.is_archived ? "fill-current text-vic-green" : ""} />
+              <span className="font-semibold">{longPressConv.is_archived ? "Unarchive Chat" : "Archive Chat"}</span>
+            </button>
+            <button
+              onClick={() => muteMutation.mutate({ convId: longPressConv.id, mute: !longPressConv.is_muted })}
+              className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300 transition-colors"
+            >
+              <Mic size={20} className={longPressConv.is_muted ? "opacity-50" : ""} />
+              <span className="font-semibold">{longPressConv.is_muted ? "Unmute Notifications" : "Mute Notifications"}</span>
+            </button>
+            <button
+              onClick={() => clearHistoryMutation.mutate(longPressConv.id)}
+              className="w-full flex items-center gap-4 px-6 py-4 hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 transition-colors"
+            >
+              <Trash2 size={20} />
+              <span className="font-semibold">Clear History</span>
+            </button>
+            <button
               onClick={() => deleteConversationMutation.mutate(longPressConv.id)}
               className="w-full flex items-center gap-4 px-6 py-4 hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 transition-colors"
             >
               <Trash2 size={20} />
               <span className="font-semibold">Delete Conversation</span>
             </button>
+            <div className="h-[1px] bg-slate-100 dark:bg-white/5 my-2" />
             <button
               onClick={() => setLongPressConv(null)}
-              className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 text-slate-500 transition-colors"
+              className="w-full flex items-center justify-center gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 text-slate-500 transition-colors"
             >
               <X size={20} />
               <span className="font-semibold">Cancel</span>

@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { MessageCircle, ArrowLeft, MoreVertical, Search, Bookmark, CheckCheck, Image, Mic, Video, FileText, MessageSquarePlus, Trash2, X, ScanLine, UserSearch, UserPlus, UserRound } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
-import { getConversationsV2, isChatVerified, createPrivateConversation, findUserByIdentifier, softDeleteConversation, getMyQRCodeData, getContacts, addContactPure, markAllMessagesRead, archiveConversation, muteConversation, clearChatHistory } from "@/lib/api/chat";
+import { getConversationsV2, isChatVerified, findUserByIdentifier, softDeleteConversation, getMyQRCodeData, getContacts, addContactPure, markAllMessagesRead, archiveConversation, muteConversation, clearChatHistory } from "@/lib/api/chat";
 import { searchUsers, getUserProfile } from "@/lib/api/auth";
 import { MyQRCode } from "@/components/MyQRCode";
 import { useTranslation } from "@/lib/api/translation";

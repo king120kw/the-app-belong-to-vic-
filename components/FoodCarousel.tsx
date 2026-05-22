@@ -222,8 +222,8 @@ export default function FoodCarousel({
                         </>
                     ) : (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 italic text-center">
-                            <UtensilsCrossed className="text-vic-green mb-2" size={36} />
-                            <p>{t('checking_kitchen')}</p>
+                            <img src="/clock.gif" alt="Loading" className="w-16 h-16 mb-2 object-contain" />
+                            <p>{t('checking_kitchen') || "Checking the kitchen for today's best meals..."}</p>
                         </div>
                     )}
                 </div>

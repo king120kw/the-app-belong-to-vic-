@@ -22,21 +22,22 @@ export async function GET(req: NextRequest) {
     if (cachedGeo && new Date(cachedGeo.expires_at) > new Date()) {
       geoData = cachedGeo
     } else {
-      const geoRes = await fetch(`https://ipapi.co/${clientIp}/json/`)
+      const geoApiKey = process.env.IPGEOLOCATION_API_KEY || process.env.NEXT_PUBLIC_IPGEO_API_KEY || '673294bd8a6549a3aa58e727e4e1a069';
+      const geoRes = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${geoApiKey}&ip=${clientIp}`);
       if (!geoRes.ok) throw new Error('Failed to fetch geo data')
       const data = await geoRes.json()
 
       geoData = {
         ip_address: clientIp,
-        country_code: data.country_code || 'US',
+        country_code: data.country_code2 || 'US',
         country_name: data.country_name || 'United States',
-        city: data.city || 'Unknown',
-        region: data.region || 'Unknown',
-        currency_code: data.currency || 'USD',
-        currency_name: data.currency_name || 'US Dollar',
-        timezone: data.timezone || 'UTC',
-        latitude: data.latitude || 0,
-        longitude: data.longitude || 0,
+        city: data.city || data.state_prov || 'Unknown',
+        region: data.state_prov || 'Unknown',
+        currency_code: data.currency?.code || 'USD',
+        currency_name: data.currency?.name || 'US Dollar',
+        timezone: data.time_zone?.name || 'UTC',
+        latitude: parseFloat(data.latitude) || 0,
+        longitude: parseFloat(data.longitude) || 0,
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       }
 

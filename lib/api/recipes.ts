@@ -276,10 +276,11 @@ export const getPersonalizedSuggestions = async (userId: string) => {
 export const getCookbookSuggestions = async (userId: string) => {
     const fetchFromApi = async (type: string) => {
         try {
+            const count = (type === 'breakfast' || type === 'main course') ? 24 : 4; 
             const res = await fetch('/api/search-recipes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type: type || 'main course', number: 10, userId })
+                body: JSON.stringify({ type: type || 'main course', number: count, userId })
             });
             if (!res.ok) return [];
             const data = await res.json();
@@ -301,8 +302,8 @@ export const getCookbookSuggestions = async (userId: string) => {
     const uuidMap = await ensureRecipesUuids(allFetched);
     const mapWithUuid = (list: any[]) => list.map(m => ({ ...m, internal_id: uuidMap[m.id] }));
 
-    const lunch = m.slice(0, 5);
-    const dinner = m.slice(5, 10);
+    const lunch = m.slice(0, 12);
+    const dinner = m.slice(12, 24);
 
     return { 
         breakfast: mapWithUuid(b), 
@@ -315,97 +316,93 @@ export const getCookbookSuggestions = async (userId: string) => {
 }
 
 export const getDailyMealSuggestions = async (userId: string) => {
-    const today = new Date().toISOString().split('T')[0];
-    
-    const { data: existing, error: existingError } = await supabase
-        .from('user_recipe_interactions')
-        .select('recipe_id, metadata')
-        .eq('user_id', userId)
-        .eq('interaction_type', 'suggested')
-        .gte('interacted_at', today);
+    // 1. Fetch user timezone from settings
+    const { data: settings } = await supabase.from('user_settings').select('timezone').eq('user_id', userId).maybeSingle();
+    const userTz = settings?.timezone || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC');
 
-    if (existingError) {
-        console.error("[Recipes] getDailyMealSuggestions fetch error:", existingError);
+    // 2. Calculate current hour based on user's timezone
+    const now = new Date();
+    const localDateStr = now.toLocaleString("en-US", { timeZone: userTz });
+    const localHour = new Date(localDateStr).getHours();
+    
+    let currentSession = 'breakfast';
+    if (localHour >= 11 && localHour < 16) currentSession = 'lunch';
+    else if (localHour >= 16 || localHour < 5) currentSession = 'dinner';
+
+    const today = now.toISOString().split('T')[0];
+    
+    // 3. Check if a plan exists for today
+    const { data: existingPlan, error: existingError } = await (supabase as any)
+        .from('user_daily_meal_plans')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('plan_date', today)
+        .maybeSingle();
+
+    if (existingError && existingError.code !== 'PGRST116') {
+        console.error("[Recipes] Error fetching daily plan:", existingError);
     }
 
-    if (existing && existing.length > 0) {
-        const mapByType = (type: string) => (existing as any[]).filter(s => (s.metadata as any)?.meal_type === type).map(s => (s.metadata as any)?.meal_data);
-        const hour = new Date().getHours();
-        let currentSession = 'breakfast';
-        if (hour >= 11 && hour < 16) currentSession = 'lunch';
-        else if (hour >= 16 || hour < 5) currentSession = 'dinner';
-
+    if (existingPlan) {
         return {
-            breakfast: mapByType('breakfast'),
-            lunch: mapByType('lunch'),
-            dinner: mapByType('dinner'),
-            snacks: mapByType('snack'),
-            drinks: mapByType('drink'),
-            desserts: mapByType('dessert'),
+            breakfast: (existingPlan as any).breakfast || [],
+            lunch: (existingPlan as any).lunch || [],
+            dinner: (existingPlan as any).dinner || [],
+            snacks: (existingPlan as any).snacks || [],
+            drinks: (existingPlan as any).drinks || [],
+            desserts: (existingPlan as any).desserts || [],
             currentSession
         };
     }
 
-    const { data: expired } = await supabase.from('user_recipe_interactions').select('recipe_id').eq('user_id', userId).eq('interaction_type', 'expired');
-    const expiredIds = new Set(expired?.map(e => String(e.recipe_id)) || []);
+    // 4. Generate new plan via unified API
+    try {
+        const res = await fetch('/api/daily-meal-plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId })
+        });
+        
+        if (!res.ok) throw new Error("Failed to generate plan");
+        const data = await res.json();
+        
+        // Ensure UUIDs for all generated recipes
+        const allFetched = [
+            ...(data.breakfast || []),
+            ...(data.lunch || []),
+            ...(data.dinner || []),
+            ...(data.snacks || []),
+            ...(data.drinks || []),
+            ...(data.desserts || [])
+        ];
+        
+        const uuidMap = await ensureRecipesUuids(allFetched);
+        const mapWithUuid = (list: any[]) => (list || []).map(m => ({ ...m, internal_id: uuidMap[m.id || m.spoonacular_id] || uuidMap[String(m.id)] || m.id }));
+        
+        const planToInsert = {
+            user_id: userId,
+            plan_date: today,
+            breakfast: mapWithUuid(data.breakfast),
+            lunch: mapWithUuid(data.lunch),
+            dinner: mapWithUuid(data.dinner),
+            snacks: mapWithUuid(data.snacks),
+            drinks: mapWithUuid(data.drinks),
+            desserts: mapWithUuid(data.desserts)
+        };
 
-    const fetchFromApi = async (type: string) => {
-        try {
-            const res = await fetch('/api/search-recipes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type, number: 10, userId })
-            });
-            const data = await res.json();
-            return (data?.results || []).map((m: any) => ({
-                ...m,
-                id: String(m.id),
-                name: m.title,
-                calories: m.calories,
-                subtitle: `${m.calories} cal`,
-                image: m.image
-            }));
-        } catch (e) { return []; }
-    };
+        // Insert into DB
+        await (supabase as any).from('user_daily_meal_plans').upsert([planToInsert], { onConflict: 'user_id,plan_date' });
 
-    const [b, l, s, dr, ds] = await Promise.all(['breakfast', 'main course', 'snack', 'drink', 'dessert'].map(fetchFromApi));
-    
-    const allFetched = [...b, ...l, ...s, ...dr, ...ds];
-    const uuidMap = await ensureRecipesUuids(allFetched);
-
-    const lunch = l.slice(0, 3);
-    const dinner = l.slice(3, 6);
-    const mapWithUuid = (list: any[]) => list.map(m => ({ ...m, internal_id: uuidMap[m.id] }));
-
-    const toInsert = [
-        ...b.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'breakfast', meal_data: { ...m, internal_id: uuidMap[m.id] } } })),
-        ...lunch.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'lunch', meal_data: { ...m, internal_id: uuidMap[m.id] } } })),
-        ...dinner.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'dinner', meal_data: { ...m, internal_id: uuidMap[m.id] } } })),
-        ...s.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'snack', meal_data: { ...m, internal_id: uuidMap[m.id] } } })),
-        ...dr.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'drink', meal_data: { ...m, internal_id: uuidMap[m.id] } } })),
-        ...ds.map(m => ({ user_id: userId, recipe_id: uuidMap[m.id], interaction_type: 'suggested', metadata: { meal_type: 'dessert', meal_data: { ...m, internal_id: uuidMap[m.id] } } }))
-    ].filter(item => item.recipe_id);
-
-    if (toInsert.length > 0) {
-        await supabase.from('user_recipe_interactions').upsert(toInsert, { onConflict: 'user_id,recipe_id,interaction_type' });
+        return {
+            ...planToInsert,
+            currentSession
+        };
+    } catch (err) {
+        console.error("[Recipes] Error generating daily meal plan:", err);
+        return {
+            breakfast: [], lunch: [], dinner: [], snacks: [], drinks: [], desserts: [], currentSession
+        };
     }
-
-    (supabase.rpc as any)('expire_old_suggestions', { p_user_id: userId }).catch(() => {});
-
-    const hour = new Date().getHours();
-    let currentSession = 'breakfast';
-    if (hour >= 11 && hour < 16) currentSession = 'lunch';
-    else if (hour >= 16 || hour < 5) currentSession = 'dinner';
-
-    return { 
-        breakfast: mapWithUuid(b), 
-        lunch: mapWithUuid(lunch), 
-        dinner: mapWithUuid(dinner), 
-        snacks: mapWithUuid(s), 
-        drinks: mapWithUuid(dr), 
-        desserts: mapWithUuid(ds), 
-        currentSession
-    };
 }
 
 const updateDailyRecipeCount = async (userId: string) => {

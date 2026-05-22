@@ -515,6 +515,7 @@ export default function ChatConversation() {
 
 
     const displayName = useMemo(() => {
+        if (conversation?.display_name) return conversation.display_name;
         if (isAI) return 'Health Coach';
         if (isSelf) return (profile?.full_name ? `${profile.full_name} (Me)` : 'Personal Notes');
         
@@ -531,16 +532,17 @@ export default function ChatConversation() {
         if (currentConv?.display_name) return currentConv.display_name;
 
         return 'User';
-    }, [isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile, queryClient, user?.id, localActiveId]);
+    }, [conversation, isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile, queryClient, user?.id, localActiveId]);
 
     const displayAvatar = useMemo(() => {
+        if (conversation?.display_avatar !== undefined && conversation?.display_avatar !== null) return conversation.display_avatar;
         if (isAI) return '/app logo.png';
         if (isSelf) return profile?.avatar_url || null;
         if (isVirtual) return virtualProfile?.avatar_url || null;
         const rawP = otherUserProfile || otherParticipant?.user_profiles;
         const p = Array.isArray(rawP) ? rawP[0] : rawP;
         return p?.avatar_url || null;
-    }, [isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile]);
+    }, [conversation, isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile]);
 
     // Handle initial scroll
     useEffect(() => {
@@ -603,7 +605,8 @@ export default function ChatConversation() {
     }, [user?.id]);
 
 
-    const isOnline = otherParticipant && onlineUsers.has(otherParticipant.user_id);
+    const resolvedOtherUserId = otherParticipant?.user_id || virtualTargetId;
+    const isOnline = resolvedOtherUserId && onlineUsers.has(resolvedOtherUserId);
     const displayStatus = isOnline ? "online" : "offline";
 
     // --- Actions ---
@@ -1047,7 +1050,7 @@ export default function ChatConversation() {
                 }
 
                 // 1. Update local cache with deduplication
-                queryClient.setQueryData(['messages', activeId], (old: any) => {
+                queryClient.setQueryData(['messages', localActiveId], (old: any) => {
                     const base = Array.isArray(old) ? old : [];
 
                     // Already have this real message? (Check by ID)
@@ -1071,7 +1074,7 @@ export default function ChatConversation() {
                         return updated;
                     }
 
-                    console.log(`[Chat] Appending new message ${newMessage.id} to conversation ${activeId}`);
+                    console.log(`[Chat] Appending new message ${newMessage.id} to conversation ${localActiveId}`);
                     const next = [...base, newMessage].sort((a, b) =>
                         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                     );
@@ -1085,8 +1088,8 @@ export default function ChatConversation() {
                 }
 
                 // 2. Mark as read if not from us
-                if (newMessage.sender_id !== user?.id && activeId) {
-                    markConversationAsReadLocal(activeId, true); // TRUE: Force read for new message
+                if (newMessage.sender_id !== user?.id && localActiveId) {
+                    markConversationAsReadLocal(localActiveId, true); // TRUE: Force read for new message
                 }
 
                 // --- Sidebar Sync ---
@@ -1099,7 +1102,7 @@ export default function ChatConversation() {
                     setOtherUserTyping(false);
                 }
 
-                queryClient.setQueryData(['messages', activeId], (old: any) => {
+                queryClient.setQueryData(['messages', localActiveId], (old: any) => {
                     if (!old) return old;
                     return old.map((m: any) => m.id === updatedMessage.id ? { ...m, ...updatedMessage } : m);
                 });
@@ -1277,11 +1280,18 @@ export default function ChatConversation() {
                 return { id: 'new', realId: newId };
             }
 
-            // Inject context if sending to AI
+            // Inject context and location if sending to AI
             const { latestAnalysis, clearLatestAnalysis } = useCoachInjectionStore.getState();
+            let userLocation = null;
+            try {
+                const locCache = localStorage.getItem('vicalary_location_v2');
+                if (locCache) userLocation = JSON.parse(locCache).data;
+            } catch(e) {}
+
             const messageMetadata = {
                 ...args.metadata,
-                latest_analysis: isAI ? latestAnalysis : null
+                latest_analysis: isAI ? latestAnalysis : null,
+                user_location: isAI ? userLocation : null
             };
 
             // Clear analysis after injection to prevent stale context next time
@@ -1313,9 +1323,23 @@ export default function ChatConversation() {
                 is_optimistic: true
             };
 
-            queryClient.setQueryData(['messages', localActiveId], (old: any) => [...(old || []), optimisticMsg]);
+            if (isAI) {
+                const optimisticAiId = `opt-ai-${Date.now()}`;
+                const optimisticAiMsg = {
+                    id: optimisticAiId,
+                    content: 'Thinking...',
+                    sender_id: COACH_ID,
+                    conversation_id: localActiveId,
+                    created_at: new Date(Date.now() + 10).toISOString(),
+                    message_type: 'text',
+                    is_optimistic: true
+                };
+                queryClient.setQueryData(['messages', localActiveId], (old: any) => [...(old || []), optimisticMsg, optimisticAiMsg]);
+            } else {
+                queryClient.setQueryData(['messages', localActiveId], (old: any) => [...(old || []), optimisticMsg]);
+            }
 
-            // V18: Optimistically update the sidebar conversation list to prevent "stale" previews
+            // --- Optimistic Sidebar Sync ---
             queryClient.setQueryData(['conversations', user?.id], (old: any) => {
                 if (!Array.isArray(old)) return old;
                 return old.map((conv: any) => {
@@ -1370,6 +1394,7 @@ export default function ChatConversation() {
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ['messages', localActiveId] });
             queryClient.invalidateQueries({ queryKey: ['conversations', user?.id] });
+            queryClient.invalidateQueries({ queryKey: ['contacts', user?.id] });
         }
     });
 

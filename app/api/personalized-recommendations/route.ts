@@ -15,7 +15,6 @@ export async function POST(req: NextRequest) {
     ])
 
     const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
-    const spoonacularKey = process.env.SPOONACULAR_API_KEY
     if (!apiKey) throw new Error('NEXT_PUBLIC_OPENAI_API_KEY not set')
 
     // Geolocation Mapping
@@ -28,6 +27,7 @@ export async function POST(req: NextRequest) {
     };
     const regionalQuery = countryToQueryMap[countryCode] || 'Healthy';
 
+    const spoonacularKey = process.env.SPOONACULAR_API_KEY;
     let spoonacularContext = '';
     if (spoonacularKey) {
         try {

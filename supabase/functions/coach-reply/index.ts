@@ -44,22 +44,37 @@ serve(async (req) => {
     const onboarding = onboardingRes.data || {};
     const recentMessages = (messagesRes.data || []).reverse();
     const userName = profile?.full_name || 'there';
+    
+    const loc = record.metadata?.user_location;
+    const locationString = loc ? `Current Location: ${loc.city}, ${loc.country_name} (Timezone: ${loc.timezone})` : 'Location unknown';
 
-    const systemPrompt = `You are Vicalary Health Intelligence, a sophisticated health coach for ${userName}.
-Respond in natural paragraphs. No markdown headers or bullet points. 
+    const systemPrompt = `You are Vicalary Health Intelligence, an elite health coach and concierge for ${userName}.
+You MUST provide highly detailed, comprehensive information. DO NOT paraphrase. Give actionable, specific places, recipes, or advice.
+If the user asks where to buy something or asks for places, USE their exact location to give real-world recommendations.
 User Goal: ${onboarding.goal || 'General Wellness'}.
-Dietary: ${(onboarding.dietary_lifestyle || []).join(', ') || 'None'}.`;
+Dietary: ${(onboarding.dietary_lifestyle || []).join(', ') || 'None'}.
+${locationString}.`;
 
-    const chatContext = recentMessages.map((m: any) => ({
-      role: m.sender_id === COACH_ID ? 'assistant' : 'user',
-      content: m.content || ''
-    })).filter(m => m.content);
+    const chatContext = recentMessages.map((m: any) => {
+      const role = m.sender_id === COACH_ID ? 'assistant' : 'user';
+      let content: any = m.content || '';
+
+      // Multimodal Vision Support for images
+      if (m.message_type === 'image' && m.metadata?.url) {
+        content = [
+          { type: 'text', text: m.content || 'Please analyze this image.' },
+          { type: 'image_url', image_url: { url: m.metadata.url } }
+        ];
+      }
+
+      return { role, content };
+    }).filter(m => m.content);
 
     // 2. Create placeholder
     const { data: newMsg, error: insertErr } = await supabaseAdmin.from('messages').insert({
       conversation_id: conversationId,
       sender_id: COACH_ID,
-      content: '...',
+      content: 'Thinking...',
       message_type: 'text',
       is_read: false,
       metadata: { replying_to: record.id },

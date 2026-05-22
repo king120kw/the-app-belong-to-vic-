@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import OpenAI from 'openai'
-
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-})
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,74 +8,62 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServerSupabaseClient()
 
-    // 1. Check local DB cache first
-    const { data: existing } = await supabase
-      .from('recipes')
-      .select('*')
-      .or(`id.eq.${id},spoonacular_id.eq.${id}`)
-      .maybeSingle()
-
-    if (existing && existing.ingredients?.length > 0 && existing.instructions?.length > 0) {
-      return NextResponse.json(existing)
+    let parsedId = parseInt(id)
+    if (isNaN(parsedId)) {
+      console.warn(`ID ${id} is not numeric, skipping cache check.`)
+      parsedId = 0
     }
 
-    // 2. If it's an AI ID or missing details, use OpenAI to generate full details
-    const isAiGen = String(id).startsWith('ai_gen_')
-    const titleHint = existing?.title || id
-
-    const prompt = `
-Generate full recipe details for: "${titleHint}".
-Provide ingredients with exact quantities, step-by-step instructions, nutritional information, prep time, cook time, and servings.
-
-Output ONLY valid JSON in this format:
-{
-  "title": "Exact Dish Name",
-  "description": "Short appetizing description",
-  "prep_time_minutes": 15,
-  "cook_time_minutes": 20,
-  "total_calories": 450,
-  "protein_g": 25,
-  "carbs_g": 55,
-  "fat_g": 12,
-  "servings": 2,
-  "ingredients": [
-    { "item": "Ingredient Name", "amount": "1", "unit": "cup", "notes": "finely chopped" }
-  ],
-  "instructions": [
-    "Step 1 details",
-    "Step 2 details"
-  ],
-  "cuisine_type": "Indonesian/International",
-  "difficulty": "Easy/Medium/Hard",
-  "dietary_tags": ["Healthy", "Protein-rich"]
-}
-`
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "system", content: "You are a professional personal cook and nutritionist." }, { role: "user", content: prompt }],
-      response_format: { type: "json_object" }
-    })
-
-    const details = JSON.parse(response.choices[0].message.content || '{}')
-    
-    // 3. Upsert to DB for caching
-    const recipeToCache = {
-      ...details,
-      spoonacular_id: isAiGen ? null : id,
-      image_url: existing?.image_url || details.image_url || `https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80`
+    if (parsedId > 0) {
+      const { data: existing } = await supabase.from('recipes').select('*').eq('spoonacular_id', parsedId).single()
+      if (existing) return NextResponse.json(existing)
     }
 
-    const { data: saved, error: saveError } = await supabase
-      .from('recipes')
-      .upsert(recipeToCache, { onConflict: isAiGen ? undefined : 'spoonacular_id' })
-      .select()
-      .single()
+    const res = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${id}`)
+    const data = await res.json()
 
-    if (saveError) console.error("Error caching recipe:", saveError)
+    if (!data.meals || data.meals.length === 0) {
+      return NextResponse.json({ error: 'Recipe not found' }, { status: 404 })
+    }
 
-    return NextResponse.json(saved || recipeToCache)
+    const meal = data.meals[0]
 
+    const ingredients = []
+    for (let i = 1; i <= 20; i++) {
+      const item = meal[`strIngredient${i}`]
+      const measure = meal[`strMeasure${i}`]
+      if (item && item.trim()) {
+        ingredients.push({ item: item.trim(), amount: 0, unit: measure ? measure.trim() : '', notes: '' })
+      }
+    }
+
+    const instructions = meal.strInstructions
+      ? meal.strInstructions.split(/\r\n|\n|\r/).filter((s: string) => s.trim().length > 0)
+      : []
+
+    const newRecipe = {
+      title: meal.strMeal,
+      description: `A delicious ${meal.strArea} ${meal.strCategory} dish.`,
+      prep_time_minutes: 30,
+      cook_time_minutes: 30,
+      total_calories: 0,
+      protein_g: 0,
+      carbs_g: 0,
+      fat_g: 0,
+      image_url: meal.strMealThumb,
+      cuisine_type: meal.strArea || 'International',
+      difficulty: 'Medium',
+      dietary_tags: [meal.strCategory || 'Main'],
+      ingredients,
+      instructions,
+      spoonacular_id: parsedId > 0 ? parsedId : null,
+    }
+
+    if (parsedId > 0) {
+      supabase.from('recipes').upsert(newRecipe, { onConflict: 'spoonacular_id' }).then()
+    }
+
+    return NextResponse.json({ ...newRecipe, id })
   } catch (error: any) {
     console.error('recipe-details error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

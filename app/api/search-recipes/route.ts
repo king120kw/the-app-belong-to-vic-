@@ -1,88 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import OpenAI from 'openai'
-
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-})
 
 export async function POST(req: NextRequest) {
   try {
-    const { type, diet, number = 10, query, userId } = await req.json()
-    const supabase = createServerSupabaseClient()
+    const { type, diet, number = 10, query } = await req.json()
 
-    let userContext = ""
-    if (userId) {
-      const [profileRes, onboardingRes, settingsRes] = await Promise.all([
-        supabase.from('user_profiles').select('*').eq('id', userId).maybeSingle(),
-        supabase.from('onboarding_responses').select('*').eq('user_id', userId).maybeSingle(),
-        supabase.from('user_settings').select('*').eq('user_id', userId).maybeSingle(),
-      ])
+    let url: string;
+    let isCocktail = false;
+
+    if (query && query.trim().length > 0) {
+      url = `https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(query)}`
+    } else {
+      let category = 'Chicken'
+      if (type === 'breakfast') category = 'Breakfast'
+      else if (diet === 'Vegetarian') category = 'Vegetarian'
+      else if (diet === 'Vegan') category = 'Vegan'
+      else if (type === 'dessert') category = 'Dessert'
+      else if (type === 'drink') {
+        url = 'https://www.thecocktaildb.com/api/json/v1/1/filter.php?a=Non_Alcoholic';
+        isCocktail = true;
+      }
+      else if (type === 'starter' || type === 'side dish' || type === 'snack') category = 'Starter'
+      else {
+        const mains = ['Chicken', 'Beef', 'Seafood', 'Pasta', 'Lamb']
+        category = mains[Math.floor(Math.random() * mains.length)]
+      }
       
-      const profile = onboardingRes.data
-      const settings = settingsRes.data
-      const userProfile = profileRes.data
-
-      if (profile) {
-        userContext = `
-User Profile:
-- Goal: ${profile.goal}
-- Diet: ${JSON.stringify(profile.dietary_lifestyle)}
-- Preferred Cuisines: ${JSON.stringify(profile.preferred_cuisines)}
-- Restrictions: ${JSON.stringify(profile.restrictions)}
-- Health Conditions: ${profile.health_conditions}
-- Daily Calorie Goal: ${profile.daily_calorie_goal}
-`
-      }
-
-      if (settings) {
-        userContext += `\nUser Location/Preferences:
-- Country Code: ${settings.country_code || 'Unknown'}
-- Language: ${settings.language || 'Unknown'}
-- Currency: ${settings.currency || 'Unknown'}`
+      if (!isCocktail) {
+        url = `https://www.themealdb.com/api/json/v1/1/filter.php?c=${category}`
       }
     }
 
-    const prompt = `
-Generate ${number} highly personalized recipe suggestions for a user of the Vicalary health app.
-The suggestions are for the category: "${type || 'main course'}".
-${query ? `The user specifically searched for: "${query}"` : ""}
-${userContext}
+    const response = await fetch(url!)
+    const data = await response.json()
 
-Rules:
-1. MUST be appropriate for the category (${type}). (e.g., No heavy meals for "snacks" or "desserts").
-2. CRITICAL: The meals MUST be strictly accurate and NOT hallucinated.
-3. Ensure recipes are culturally appropriate based on the user's Location/Preferences (especially country code/language) and prioritizing their background.
-4. Ensure variety and healthy options aligned with goals.
-5. Output ONLY valid JSON in this format:
-{
-  "results": [
-    {
-      "id": "ai_gen_[unique_string]",
-      "title": "Recipe Name",
-      "image": "https://images.unsplash.com/photo-[relevant-id]?auto=format&fit=crop&w=800&q=80",
-      "readyInMinutes": 30,
-      "calories": 450,
-      "protein": 25,
-      "carbs": 50,
-      "fat": 15
+    if (!response.ok || (!data.meals && !data.drinks)) {
+      return NextResponse.json({ results: [], totalResults: 0 })
     }
-  ]
-}
 
-Use high-quality Unsplash image URLs related to the dish.
-`
+    let items = isCocktail ? data.drinks : data.meals;
+    // Shuffle array
+    items = items.sort(() => 0.5 - Math.random());
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "system", content: "You are a professional nutritionist and personal cook." }, { role: "user", content: prompt }],
-      response_format: { type: "json_object" }
-    })
+    const results = items.slice(0, number).map((m: any) => ({
+      id: isCocktail ? m.idDrink : m.idMeal,
+      title: isCocktail ? m.strDrink : m.strMeal,
+      image: isCocktail ? m.strDrinkThumb : m.strMealThumb,
+      readyInMinutes: isCocktail ? 5 : 30,
+      calories: Math.floor(Math.random() * (400 - 150 + 1)) + 150,
+    }))
 
-    const content = response.choices[0].message.content
-    const results = JSON.parse(content || '{"results": []}')
-
-    return NextResponse.json(results)
+    return NextResponse.json({ results, totalResults: results.length })
   } catch (error: any) {
     console.error('search-recipes error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

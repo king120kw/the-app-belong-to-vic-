@@ -286,19 +286,26 @@ export const getContacts = async (userId: string) => {
         return [];
     }
 
-    return data.map((c: any) => {
-        const rawProfile = c.user_profiles;
-        const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
-        const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
+    return data
+        .filter((c: any) => {
+            const rawProfile = c.user_profiles;
+            const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
+            const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
+            return !!chatUser?.is_verified;
+        })
+        .map((c: any) => {
+            const rawProfile = c.user_profiles;
+            const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
+            const chatUser = Array.isArray(profile?.chat_users) ? profile.chat_users[0] : profile?.chat_users;
 
-        return {
-            id: String(c.contact_user_id),
-            full_name: profile?.full_name || profile?.username || chatUser?.phone_number || 'Unknown',
-            avatar_url: profile?.avatar_url,
-            phone_number: chatUser?.phone_number,
-            is_verified: !!chatUser?.is_verified
-        };
-    }).filter(c => c.is_verified);
+            return {
+                id: String(c.contact_user_id),
+                full_name: profile?.full_name || profile?.username || chatUser?.phone_number || 'Unknown',
+                avatar_url: profile?.avatar_url,
+                phone_number: chatUser?.phone_number,
+                is_verified: !!chatUser?.is_verified
+            };
+        });
 }
 
 export const getMyQRCodeData = async (userId: string) => {

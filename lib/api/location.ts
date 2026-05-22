@@ -31,41 +31,7 @@ export const detectLocation = async (forceRefresh = false): Promise<LocationData
 
   pendingRequest = (async () => {
     try {
-      // Priority 1: High-quality IP API (IPGeolocation.io)
-      const apiKey = process.env.NEXT_PUBLIC_IPGEO_API_KEY;
-      if (apiKey) {
-        try {
-          const res = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${apiKey}&include=security`);
-          if (res.ok) {
-            const data = await res.json();
-            console.log("[Location] IPGeolocation.io Response:", data);
-            
-            // Check for VPN/Proxy if security info is available (premium keys only, but we check)
-            const isVpn = data.security?.is_vpn || data.is_vpn || false;
-            const confidence = data.security?.proxy_score || 0;
-
-            const result: LocationData = {
-              country_code: data.country_code2?.toUpperCase() || 'US',
-              country_name: data.country_name || 'United States',
-              city: data.city || data.district || data.state_prov || 'Jakarta',
-              timezone: data.time_zone?.name || data.timezone || 'Asia/Jakarta',
-              currency: data.currency?.code || 'USD',
-              currency_symbol: data.currency?.symbol || '$',
-              languages: data.languages ? data.languages.split(',') : ['en'],
-              method: 'EDGE'
-            };
-
-            // If VPN detected and we have city as 'Unknown', maybe don't cache too long
-            console.log("[Location] Detected via IP (VPN:", isVpn, "):", result);
-            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, timestamp: Date.now() }));
-            return result;
-          }
-        } catch (err) {
-          console.warn("[Location] IPGeolocation.io failed:", err);
-        }
-      }
-
-      // Priority 2: Fallback IP API (ipapi.co)
+      // Priority 1: Fallback IP API (ipapi.co)
       try {
         const res = await fetch('https://ipapi.co/json/');
         if (res.ok) {

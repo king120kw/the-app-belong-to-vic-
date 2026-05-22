@@ -845,7 +845,7 @@ export default function Dashboard() {
           lunchMeals={suggestions?.lunch || []}
           dinnerMeals={suggestions?.dinner || []}
           initialMealType={activeMealType}
-          strictMode={true}
+          strictMode={false}
         />
       </div>
 

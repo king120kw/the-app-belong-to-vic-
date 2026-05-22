@@ -11,12 +11,12 @@ import { FavoriteButton } from "@/components/FavoriteButton";
 import { getFavoriteRecipes } from "@/lib/api/recipes";
 
 const CATEGORIES = [
-    { id: 'breakfast', label: 'Breakfast', icon: Coffee },
-    { id: 'lunch', label: 'Lunch', icon: Utensils },
-    { id: 'dinner', label: 'Dinner', icon: ChefHat },
-    { id: 'snacks', label: 'Snacks', icon: Cookie },
-    { id: 'drinks', label: 'Drinks', icon: GlassWater },
-    { id: 'desserts', label: 'Desserts', icon: Candy },
+    { id: 'breakfast', label: 'Breakfast', fallbackIcon: Coffee, animUrl: '/oat.gif' },
+    { id: 'lunch', label: 'Lunch', fallbackIcon: Utensils, animUrl: '/lunch-box.gif' },
+    { id: 'dinner', label: 'Dinner', fallbackIcon: ChefHat, animUrl: '/dinner.gif' },
+    { id: 'snacks', label: 'Snacks', fallbackIcon: Cookie, animUrl: '/cookie.gif' },
+    { id: 'drinks', label: 'Drinks', fallbackIcon: GlassWater, animUrl: '/mineral-water.gif' },
+    { id: 'desserts', label: 'Desserts', fallbackIcon: Candy, animUrl: '/ice-cream.gif' },
 ] as const;
 
 export default function Cookbook() {
@@ -27,24 +27,23 @@ export default function Cookbook() {
     const [currentSession, setCurrentSession] = useState<'breakfast' | 'lunch' | 'dinner'>('breakfast');
     const { t } = useTranslation();
 
-    useEffect(() => {
-        const hour = new Date().getHours();
-        if (hour >= 5 && hour < 11) setCurrentSession('breakfast');
-        else if (hour >= 11 && hour < 16) setCurrentSession('lunch');
-        else setCurrentSession('dinner');
-    }, []);
-
     const { data: cookbookData } = useQuery({
-        queryKey: ['cookbook-suggestions', user?.id],
+        queryKey: ['cookbook-suggestions-v2', user?.id],
         queryFn: () => getCookbookSuggestions(user!.id),
         enabled: !!user?.id
     });
 
     const { data: suggestions } = useQuery({
-        queryKey: ['suggestions', user?.id],
+        queryKey: ['suggestions-v2', user?.id],
         queryFn: () => getDailyMealSuggestions(user!.id),
         enabled: !!user?.id
     });
+
+    useEffect(() => {
+        if (suggestions?.currentSession) {
+            setCurrentSession(suggestions.currentSession as 'breakfast' | 'lunch' | 'dinner');
+        }
+    }, [suggestions?.currentSession]);
 
     const { data: favorites } = useQuery({
         queryKey: ['favorite-recipes', user?.id],
@@ -59,8 +58,8 @@ export default function Cookbook() {
     });
 
     return (
-        <div className="flex flex-col h-screen max-w-2xl mx-auto w-full bg-slate-50 dark:bg-[#0d1418]">
-            <header className="p-6 bg-white dark:bg-[#0d1418] sticky top-0 z-20">
+        <div className="flex flex-col min-h-screen max-w-2xl mx-auto w-full bg-slate-50 dark:bg-[#0d1418]">
+            <header className="p-6 bg-white dark:bg-[#0d1418] relative z-20">
                 <div className="flex items-center gap-4 mb-6">
                     <Link href="/dashboard" className="text-slate-900 dark:text-white">
                         <ArrowLeft size={24} />
@@ -86,22 +85,33 @@ export default function Cookbook() {
                             <span className="text-[10px] font-black text-vic-green uppercase tracking-widest">Swipe for more</span>
                         </div>
                         <div className="flex overflow-x-auto no-scrollbar gap-3 pb-2 -mx-6 px-6">
-                            {CATEGORIES.map(cat => {
+                            {CATEGORIES.filter(cat => {
                                 const isMainMeal = ['breakfast', 'lunch', 'dinner'].includes(cat.id);
-                                // For main meals, we might want to highlight the current session but show all?
-                                // User said "ensure daily tailored meal suggestions load correctly... for Breakfast, Lunch, Dinner, Snacks, Drinks, and Desserts"
-                                
+                                if (isMainMeal && cat.id !== currentSession) return false;
+                                return true;
+                            }).map(cat => {
                                 return (
+                                    <div key={cat.id} className="flex flex-col items-center gap-2">
                                     <button
-                                        key={cat.id}
                                         onClick={() => setSelectedCategory(cat.id)}
-                                        className={`flex flex-col items-center justify-center min-w-[100px] aspect-square p-4 rounded-[24px] border-2 transition-all shrink-0 ${selectedCategory === cat.id ? 'border-vic-green bg-vic-green/10 shadow-lg shadow-vic-green/10' : 'border-transparent bg-white dark:bg-[#1f2c34] shadow-sm hover:scale-105'}`}
+                                        className={`aspect-square min-w-[88px] w-[88px] rounded-2xl flex items-center justify-center transition-all hover:brightness-95 active:scale-95 border-none shadow-none overflow-hidden relative group ${selectedCategory === cat.id ? 'bg-[#D1F7C4] dark:bg-[#1a2e21]' : 'bg-white dark:bg-[#1f2c34]'}`}
                                     >
-                                        <div className={`p-3 rounded-2xl ${selectedCategory === cat.id ? 'bg-vic-green text-white' : 'bg-slate-100 dark:bg-black/20 text-vic-green'}`}>
-                                            <cat.icon size={24} />
+                                        <div className="absolute inset-0 bg-black/5 opacity-0 dark:group-hover:opacity-20 transition-opacity" />
+                                        <img 
+                                            src={cat.animUrl} 
+                                            alt={cat.label} 
+                                            className="w-[110%] h-[110%] object-contain"
+                                            onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.nextElementSibling!.classList.remove('hidden');
+                                            }}
+                                        />
+                                        <div className={`hidden ${selectedCategory === cat.id ? 'text-vic-green' : 'text-slate-400 dark:text-slate-500'}`}>
+                                            <cat.fallbackIcon size={36} />
                                         </div>
-                                        <span className={`text-[11px] mt-3 font-bold uppercase tracking-wide ${selectedCategory === cat.id ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>{cat.label}</span>
                                     </button>
+                                    <span className={`text-[10px] font-bold uppercase tracking-tighter ${selectedCategory === cat.id ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>{cat.label}</span>
+                                </div>
                                 );
                             })}
                         </div>
@@ -126,7 +136,7 @@ export default function Cookbook() {
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+            <main className="p-6 pb-24">
                 <div className="space-y-6">
                     {searchQuery ? (
                         <div className="grid grid-cols-1 gap-6">
@@ -136,7 +146,7 @@ export default function Cookbook() {
                         </div>
                     ) : selectedCategory ? (
                         <div className="grid grid-cols-1 gap-4">
-                            {((cookbookData as any)?.[selectedCategory] || []).map((meal: any, index: number) => (
+                            {((suggestions as any)?.[selectedCategory] || []).map((meal: any, index: number) => (
                                 <CookbookCard key={`${meal.id}-${index}`} item={meal} />
                             ))}
                         </div>
@@ -155,12 +165,24 @@ export default function Cookbook() {
                         </div>
                     ) : activeTab === "for you" ? (
                         <div className="space-y-8 -mx-6">
-                            <FoodCarousel 
-                                breakfastMeals={suggestions?.breakfast}
-                                lunchMeals={suggestions?.lunch}
-                                dinnerMeals={suggestions?.dinner}
-                                initialMealType={currentSession}
-                            />
+                            <div>
+                                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4 px-6">
+                                    {currentSession} Suggestions
+                                </h3>
+                                <div className="flex overflow-x-auto gap-4 pb-4 px-6 snap-x no-scrollbar">
+                                    {((suggestions as any)?.[currentSession] || []).length > 0 ? (
+                                        ((suggestions as any)?.[currentSession] || []).map((meal: any, index: number) => (
+                                            <div key={`${meal.id}-${index}`} className="w-[85%] shrink-0 snap-center">
+                                                <CookbookCard item={meal} />
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="w-full text-center py-12 text-slate-400 italic">
+                                            Cooking up some suggestions...
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                             
                             <div className="px-6">
                                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Snacks & More</h3>

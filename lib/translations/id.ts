@@ -300,5 +300,12 @@ export const id = {
     bank_linked_success: "Bank berhasil ditautkan.",
     bank_network_error: "Kesalahan jaringan. Penyedia perbankan langsung saat ini tidak dapat dihubungi.",
     keto: "Keto",
-    view_recipe: "Lihat Resep"
+    view_recipe: "Lihat Resep",
+    swipe_for_more: "Geser untuk selengkapnya",
+    saved_recipes_appear_here: "Resep yang Anda simpan akan muncul di sini.",
+    suggestions_label: "Saran",
+    cooking_suggestions: "Menyiapkan saran makanan...",
+    snacks_and_more: "Camilan & Lainnya",
+    untitled_recipe: "Resep Tanpa Judul",
+    minutes_label: "Menit"
 };

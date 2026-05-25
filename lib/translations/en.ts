@@ -325,5 +325,12 @@ export const en = {
     bank_linked_success: "Bank linked successfully.",
     bank_network_error: "Network error. The live banking provider is currently unreachable.",
     keto: "Keto",
-    view_recipe: "View Recipe"
+    view_recipe: "View Recipe",
+    swipe_for_more: "Swipe for more",
+    saved_recipes_appear_here: "Your saved recipes will appear here.",
+    suggestions_label: "Suggestions",
+    cooking_suggestions: "Cooking up some suggestions...",
+    snacks_and_more: "Snacks & More",
+    untitled_recipe: "Untitled Recipe",
+    minutes_label: "Minutes"
 };

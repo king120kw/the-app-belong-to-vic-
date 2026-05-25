@@ -3,6 +3,14 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 const COACH_ID = '00000000-0000-0000-0000-000000000001'
 
+const countryToLangMap: Record<string, string[]> = {
+  'ID': ['id', 'en'], 'US': ['en'], 'GB': ['en'], 'FR': ['fr', 'en'],
+  'DE': ['de', 'en'], 'ES': ['es', 'en'], 'SA': ['ar', 'en'],
+  'AE': ['ar', 'en'], 'IN': ['hi', 'en'], 'BD': ['bn', 'en'],
+  'PK': ['ur', 'en'], 'CN': ['zh', 'en'], 'RU': ['ru', 'en'],
+  'BR': ['pt', 'en'], 'VN': ['vi', 'en'], 'TR': ['tr', 'en']
+};
+
 function extractMediaUrl(record: any): string | null {
   const meta = record.metadata
   if (!meta) return null
@@ -97,18 +105,22 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    const [onboardingRes, profileRes, nutritionRes, messagesRes, scannedProductsRes] = await Promise.all([
+    const [onboardingRes, profileRes, nutritionRes, messagesRes, scannedProductsRes, settingsRes] = await Promise.all([
       safeFetch(supabase.from('onboarding_responses').select('*').eq('user_id', userId).maybeSingle(), 'onboarding'),
       safeFetch(supabase.from('user_profiles').select('*').eq('id', userId).maybeSingle(), 'profile'),
       safeFetch(supabase.from('food_analysis_history').select('*').eq('user_id', userId).order('analyzed_at', { ascending: false }).limit(7), 'nutrition'),
       safeFetch(supabase.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(20), 'messages'),
       safeFetch(supabase.from('food_analysis_history').select('food_name, calories, protein, carbs, fat, analyzed_at').eq('user_id', userId).order('analyzed_at', { ascending: false }).limit(3), 'scans'),
+      safeFetch(supabase.from('user_settings').select('*').eq('user_id', userId).maybeSingle(), 'settings')
     ])
 
     const profile = profileRes.data
     const onboarding = onboardingRes.data || {}
     const recentMessages = ((messagesRes.data || []) as any[]).reverse()
     const recentScans = scannedProductsRes.data || []
+    const userSettings = settingsRes.data || {}
+    const userLanguage = userSettings.language || (geoInfo.country_code ? countryToLangMap[geoInfo.country_code]?.[0] : null) || 'en'
+    const userCurrency = userSettings.currency || geoInfo.currency_code || 'USD'
 
     const userName = profile?.full_name || 'there'
     const rawTime = system_context?.current_time || new Date().toISOString()
@@ -151,7 +163,7 @@ MULTIMODAL & CONTEXTUAL REASONING:
 
 INTELLIGENCE DIRECTIVES:
 - MAPS AND LOCATIONS: If suggesting a physical location, clinic, or restaurant, you MUST emit a special tag in your response formatted exactly like this: [LOCATION: lat,lng,Place Name]. Do not write out coordinates or links, just emit the tag. The system will convert it into an interactive map.
-- LANGUAGE: Auto-detect the user's language. If they speak Arabic, Urdu, Hindi, Indonesian, Spanish, French, or Portuguese, respond fluently in that language to create a premium, localized experience.
+- LANGUAGE: The user's preferred language code is '${userLanguage}' and currency is '${userCurrency}'. You MUST write your entire response fluently in this language ('${userLanguage}') and format prices/monetary units in their currency. Do NOT reply in English unless their language code is 'en'.
 - REASONING: Before you reply, internally evaluate the user's intent. Are they asking for motivation, data analysis, or a recommendation? Tailor your depth to their specific need.
 - CONSISTENCY: If they ask about a previous meal or scan mentioned in the history, you know exactly what they are referring to.
 

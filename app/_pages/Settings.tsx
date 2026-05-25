@@ -68,14 +68,26 @@ export default function Settings() {
     { code: 'de', name: 'German', native: 'Deutsch', flag: '🇩🇪' },
   ];
 
-  // Update settings mutation
+  // Update settings mutation with optimistic updates for instantaneous language/theme transitions
   const updateSettingsMutation = useMutation({
     mutationFn: (updates: any) => updateSettings(user!.id, updates),
+    onMutate: async (updates) => {
+      await queryClient.cancelQueries({ queryKey: ['settings', user?.id] });
+      const previousSettings = queryClient.getQueryData(['settings', user?.id]);
+      queryClient.setQueryData(['settings', user?.id], (old: any) => {
+        if (!old) return updates;
+        return { ...old, ...updates };
+      });
+      return { previousSettings };
+    },
+    onError: (error: any, updates, context: any) => {
+      if (context?.previousSettings) {
+        queryClient.setQueryData(['settings', user?.id], context.previousSettings);
+      }
+      toast.error(`Failed to update settings: ${error.message}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings', user?.id] });
-    },
-    onError: (error: any) => {
-      toast.error(`Failed to update settings: ${error.message}`);
     }
   });
 
@@ -183,6 +195,9 @@ export default function Settings() {
                   <button
                     key={l.code}
                     onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('app_lang', l.code);
+                      }
                       updateSettingsMutation.mutate({ language: l.code, is_language_auto: false });
                       setShowLanguageModal(false);
                     }}

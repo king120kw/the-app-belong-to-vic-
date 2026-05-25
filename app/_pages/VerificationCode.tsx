@@ -17,6 +17,7 @@ export default function VerificationCode() {
     const { t } = useTranslation();
     const [code, setCode] = useState(["", "", "", "", "", ""]);
     const [loading, setLoading] = useState(false);
+    const [focusedIndex, setFocusedIndex] = useState<number | null>(0);
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
     const phoneNumber = (typeof window !== 'undefined' ? localStorage.getItem("phoneNumber") : null) || "your phone";
     const localPhoneNumber = (typeof window !== 'undefined' ? localStorage.getItem("localPhoneNumber") : null) || "";
@@ -61,33 +62,50 @@ export default function VerificationCode() {
     }, [user, router, t, queryClient]);
 
     const handleChange = (index: number, value: string) => {
-        if (value.length > 1) {
-            // Handle paste
-            const digits = value.slice(0, 6).split("");
-            const newCode = [...code];
-            digits.forEach((d, i) => {
-                if (index + i < 6) newCode[index + i] = d;
-            });
-            setCode(newCode);
-            inputRefs.current[Math.min(index + digits.length, 5)]?.focus();
-            return;
-        }
         if (!/^\d*$/.test(value)) return;
 
         const newCode = [...code];
-        newCode[index] = value;
+        // Take the last character if value.length > 1 (e.g. mobile auto-fill or keyboard quirks)
+        const char = value.slice(-1);
+        newCode[index] = char;
         setCode(newCode);
 
         // Auto-focus next input
-        if (value && index < 5) {
+        if (char && index < 5) {
             inputRefs.current[index + 1]?.focus();
         }
     };
 
     const handleKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === "Backspace" && !code[index] && index > 0) {
-            inputRefs.current[index - 1]?.focus();
+        if (e.key === "Backspace") {
+            e.preventDefault(); // Prevent default backspace behavior
+            const newCode = [...code];
+            if (code[index] !== "") {
+                newCode[index] = "";
+                setCode(newCode);
+            } else if (index > 0) {
+                newCode[index - 1] = "";
+                setCode(newCode);
+                inputRefs.current[index - 1]?.focus();
+            }
         }
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+        e.preventDefault();
+        const pastedData = e.clipboardData.getData("text").trim();
+        if (!/^\d+$/.test(pastedData)) return; // Only allow digits
+
+        const digits = pastedData.slice(0, 6).split("");
+        const newCode = [...code];
+        digits.forEach((d, i) => {
+            newCode[i] = d;
+        });
+        setCode(newCode);
+
+        // Focus the last filled box or last box if all filled
+        const nextFocus = Math.min(digits.length, 5);
+        inputRefs.current[nextFocus]?.focus();
     };
 
     const handleVerify = async () => {
@@ -162,7 +180,7 @@ export default function VerificationCode() {
                 </p>
 
                 {/* Code Inputs */}
-                <div className="flex justify-center gap-2 sm:gap-3 mb-10">
+                <div className="flex justify-center gap-2 sm:gap-3 mb-10" onPaste={handlePaste}>
                     {code.map((digit, index) => (
                         <motion.input
                             key={index}
@@ -176,8 +194,15 @@ export default function VerificationCode() {
                             value={digit}
                             onChange={(e) => handleChange(index, e.target.value)}
                             onKeyDown={(e) => handleKeyDown(index, e)}
+                            onFocus={() => setFocusedIndex(index)}
+                            onBlur={() => setFocusedIndex(null)}
                             className={`size-12 sm:size-14 text-center text-2xl font-black rounded-2xl border bg-white dark:bg-[#1f2c34] text-slate-900 dark:text-white shadow-sm outline-none transition-all
-                                ${digit ? 'border-vic-green ring-2 ring-vic-green/20' : 'border-slate-200 dark:border-slate-800 focus:border-vic-green'}
+                                ${focusedIndex === index 
+                                    ? 'border-vic-green ring-2 ring-vic-green/20' 
+                                    : digit 
+                                        ? 'border-vic-green/50 dark:border-vic-green/30' 
+                                        : 'border-slate-200 dark:border-slate-800'
+                                }
                             `}
                         />
                     ))}

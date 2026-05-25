@@ -70,14 +70,14 @@ export default function Cookbook() {
                     <Link href="/dashboard" className="text-slate-900 dark:text-white">
                         <ArrowLeft size={24} />
                     </Link>
-                    <h1 className="text-xl font-bold text-slate-900 dark:text-white">Cookbook</h1>
+                    <h1 className="text-xl font-bold text-slate-900 dark:text-white">{t('cookbook')}</h1>
                 </div>
 
                 <div className="relative mb-6">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
                         type="text"
-                        placeholder="Search recipes, ingredients..."
+                        placeholder={t('search_placeholder')}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-12 pr-4 py-3 bg-slate-100 dark:bg-[#1f2c34] rounded-2xl border-none focus:ring-2 focus:ring-vic-green text-slate-900 dark:text-white font-medium placeholder:text-slate-400"
@@ -87,8 +87,8 @@ export default function Cookbook() {
                 {!searchQuery && (
                     <div className="mb-6">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Categories</h2>
-                            <span className="text-[10px] font-black text-vic-green uppercase tracking-widest">Swipe for more</span>
+                            <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">{t('categories')}</h2>
+                            <span className="text-[10px] font-black text-vic-green uppercase tracking-widest">{t('swipe_for_more')}</span>
                         </div>
                         <div className="flex overflow-x-auto no-scrollbar gap-3 pb-2 -mx-6 px-6">
                             {CATEGORIES.map(cat => {
@@ -108,7 +108,7 @@ export default function Cookbook() {
                                         {!isNotActive && <div className="absolute inset-0 bg-black/5 opacity-0 dark:group-hover:opacity-20 transition-opacity" />}
                                         <img 
                                             src={cat.animUrl} 
-                                            alt={cat.label} 
+                                            alt={t(cat.id)} 
                                             className="w-[110%] h-[110%] object-contain"
                                             onError={(e) => {
                                                 e.currentTarget.style.display = 'none';
@@ -119,7 +119,7 @@ export default function Cookbook() {
                                             <cat.fallbackIcon size={36} />
                                         </div>
                                     </button>
-                                    <span className={`text-[10px] font-bold uppercase tracking-tighter ${selectedCategory === cat.id ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'} ${isNotActive ? 'opacity-50' : ''}`}>{cat.label}</span>
+                                    <span className={`text-[10px] font-bold uppercase tracking-tighter ${selectedCategory === cat.id ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'} ${isNotActive ? 'opacity-50' : ''}`}>{t(cat.id)}</span>
                                 </div>
                                 );
                             })}
@@ -136,7 +136,7 @@ export default function Cookbook() {
                                 ? 'text-vic-green' 
                                 : 'text-slate-400'}`}
                         >
-                            {tab === 'all' ? 'All Recipes' : tab}
+                            {tab === 'all' ? t('all_recipes') : tab === 'for you' ? t('for_you') : t('favorites')}
                             {activeTab === tab && !selectedCategory && (
                                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-vic-green rounded-t-full" />
                             )}
@@ -168,7 +168,7 @@ export default function Cookbook() {
                             ) : (
                                 <div className="text-center py-24 text-slate-400 italic">
                                     <Heart className="mx-auto mb-4 opacity-20" size={48} />
-                                    <p>Your saved recipes will appear here.</p>
+                                    <p>{t('saved_recipes_appear_here')}</p>
                                 </div>
                             )}
                         </div>
@@ -176,7 +176,7 @@ export default function Cookbook() {
                         <div className="space-y-8 -mx-6">
                             <div>
                                 <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4 px-6">
-                                    {currentSession} Suggestions
+                                    {t(currentSession)} {t('suggestions_label')}
                                 </h3>
                                 <div className="flex overflow-x-auto gap-4 pb-4 px-6 snap-x no-scrollbar">
                                     {((suggestions as any)?.[currentSession] || []).length > 0 ? (
@@ -187,14 +187,14 @@ export default function Cookbook() {
                                         ))
                                     ) : (
                                         <div className="w-full text-center py-12 text-slate-400 italic">
-                                            Cooking up some suggestions...
+                                            {t('cooking_suggestions')}
                                         </div>
                                     )}
                                 </div>
                             </div>
                             
                             <div className="px-6">
-                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Snacks & More</h3>
+                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">{t('snacks_and_more')}</h3>
                                 <div className="grid grid-cols-1 gap-4">
                                     {[...(suggestions?.snacks || []), ...(suggestions?.drinks || []), ...(suggestions?.desserts || [])].map((meal: any, index: number) => (
                                         <CookbookCard key={`${meal.id}-${index}`} item={meal} />
@@ -221,7 +221,7 @@ function CookbookCard({ item }: { item: any }) {
     const { t } = useTranslation();
     if (!item) return null;
     const id = item.internal_id || item.id;
-    const title = item.title || item.name || "Untitled Recipe";
+    const title = item.title || item.name || t('untitled_recipe');
     const image = item.image_url || item.image;
     const calories = item.total_calories || item.calories;
     const time = item.prep_time_minutes || item.prep_time || "20";
@@ -239,14 +239,14 @@ function CookbookCard({ item }: { item: any }) {
                 
                 {/* Calories Pill */}
                 <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white tracking-wide">
-                    {calories} Cal
+                    {calories} {t('cal_unit')}
                 </div>
 
                 {/* Bottom Content */}
                 <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
                     <div className="flex-1 pr-4">
                         <h3 className="text-xl font-black text-white leading-tight mb-1 line-clamp-2">{title}</h3>
-                        <p className="text-sm text-white/90 font-medium">{time} Minutes</p>
+                        <p className="text-sm text-white/90 font-medium">{time} {t('minutes_label')}</p>
                     </div>
                     <div className="bg-[#a5e076] text-[#1c2e22] px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shadow-sm hover:bg-[#92cc63] transition-colors">
                         {t('view_recipe')}

@@ -92,12 +92,7 @@ export const useTranslation = () => {
         ? ((settings as any)?.language || cachedLang || 'en')
         : (getPrimaryLanguage(detectedLoc?.languages) || (settings as any)?.language || cachedLang || 'en');
 
-    useEffect(() => {
-        const primaryLang = getPrimaryLanguage(detectedLoc?.languages);
-        if (primaryLang && primaryLang !== 'en' && typeof window !== 'undefined') {
-            localStorage.setItem('app_lang', primaryLang);
-        }
-    }, [detectedLoc]);
+    // Location-only effect removed in favor of direct finalLang syncing to app_lang below
 
     useEffect(() => {
         if (user && detectedLoc && isAuto) {
@@ -157,6 +152,9 @@ export const useTranslation = () => {
     useEffect(() => {
         if (i18n.language !== finalLang) {
             i18n.changeLanguage(finalLang);
+        }
+        if (typeof window !== 'undefined' && finalLang) {
+            localStorage.setItem('app_lang', finalLang);
         }
     }, [finalLang]);
 

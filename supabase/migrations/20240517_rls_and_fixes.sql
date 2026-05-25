@@ -61,7 +61,7 @@ BEGIN
     INSERT INTO contacts (user_id, contact_user_id, status)
     VALUES (p_user_id, p_contact_id, 'active')
     ON CONFLICT (user_id, contact_user_id) DO UPDATE 
-    SET status = 'active', updated_at = now();
+    SET status = 'active';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

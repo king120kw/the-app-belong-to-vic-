@@ -1459,7 +1459,7 @@ export default function ChatConversation() {
         const contextMetadata = isAI && pendingAnalysisContext
             ? { 
                 scannedProductContext: pendingAnalysisContext,
-                url: pendingAnalysisContext.productImage || pendingAnalysisContext.image
+                url: pendingAnalysisContext.productImage
               }
             : undefined;
 
@@ -1491,7 +1491,7 @@ export default function ChatConversation() {
             const contextMetadata = isAI && pendingAnalysisContext
                 ? { 
                     scannedProductContext: pendingAnalysisContext,
-                    url: pendingAnalysisContext.productImage || pendingAnalysisContext.image
+                    url: pendingAnalysisContext.productImage
                   }
                 : undefined;
 
@@ -1682,7 +1682,7 @@ export default function ChatConversation() {
             case 'link':
                 return (
                     <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline flex items-center gap-1">
-                        <Link size={14} />
+                        <LinkIcon size={14} />
                         {msg.content}
                     </a>
                 );

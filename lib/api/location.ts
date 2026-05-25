@@ -10,6 +10,8 @@ export interface LocationData {
   languages?: string[]
   flag?: string
   method?: 'EDGE' | 'BROWSER' | 'CACHE' | 'FALLBACK'
+  latitude?: number
+  longitude?: number
 }
 
 let pendingRequest: Promise<LocationData | null> | null = null;
@@ -69,7 +71,9 @@ export const detectLocation = async (forceRefresh = false): Promise<LocationData
               currency: data.currency?.code || currencyInfo.code,
               currency_symbol: data.currency?.symbol || currencyInfo.symbol,
               languages: langInfo,
-              method: 'EDGE'
+              method: 'EDGE',
+              latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
+              longitude: typeof data.longitude === 'number' ? data.longitude : undefined
             };
             
             if (typeof window !== 'undefined') {
@@ -100,7 +104,9 @@ export const detectLocation = async (forceRefresh = false): Promise<LocationData
             currency: data.currency || currencyInfo.code,
             currency_symbol: currencyInfo.symbol,
             languages: data.languages ? data.languages.split(',') : langInfo,
-            method: 'EDGE'
+            method: 'EDGE',
+            latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
+            longitude: typeof data.longitude === 'number' ? data.longitude : undefined
           };
           
           if (typeof window !== 'undefined') {

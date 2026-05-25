@@ -194,18 +194,22 @@ export function GlobalShell({ children }: { children: React.ReactNode }) {
     const checkAndTriggerSummary = async () => {
       try {
         const now = new Date();
-        const today = now.toISOString().split('T')[0];
+        
+        // ONLY trigger at 12:00 a.m. (hour 0)
+        if (now.getHours() !== 0) return;
+
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const targetDate = yesterday.toISOString().split('T')[0];
+
         const lastCheckKey = `vicalary_summary_check_${user.id}`;
         const lastChecked = localStorage.getItem(lastCheckKey);
 
-        if (lastChecked !== today) {
-          // If it's early morning (e.g., just after midnight), we trigger for "yesterday"
-          // If they open later, we trigger for "today" to give them a wrap-up.
-          // The user specifically asked for "at midnight".
-          console.log("[Coach] Checking daily summary trigger...");
+        if (lastChecked !== targetDate) {
+          console.log("[Coach] Triggering daily summary for yesterday:", targetDate);
           const { generateDailySummary } = await import("@/lib/api/coach");
-          await generateDailySummary(user.id, today); 
-          localStorage.setItem(lastCheckKey, today);
+          await generateDailySummary(user.id, targetDate); 
+          localStorage.setItem(lastCheckKey, targetDate);
         }
       } catch (e) {
         console.error("[Coach] Trigger failed:", e);
@@ -213,7 +217,7 @@ export function GlobalShell({ children }: { children: React.ReactNode }) {
     };
 
     checkAndTriggerSummary();
-    const interval = setInterval(checkAndTriggerSummary, 60 * 60 * 1000); // Check hourly
+    const interval = setInterval(checkAndTriggerSummary, 15 * 60 * 1000); // Check every 15 minutes to catch crossover
     return () => clearInterval(interval);
   }, [user?.id]);
 

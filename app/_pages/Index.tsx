@@ -82,14 +82,18 @@ const SplashSequence = ({ onComplete }: { onComplete: () => void }) => {
 export default function Welcome() {
   const [animationPhase, setAnimationPhase] = useState<"idle" | "zooming" | "welcome" | "complete">("idle");
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const { t } = useTranslation();
 
   useEffect(() => {
     if (!loading && user) {
-      router.push("/dashboard");
+      if (profile && !profile.onboarding_completed) {
+        router.push("/onboarding");
+      } else {
+        router.push("/dashboard");
+      }
     }
-  }, [user, loading, router]);
+  }, [user, profile, loading, router]);
 
   const handleGetStarted = () => {
     setAnimationPhase("zooming");

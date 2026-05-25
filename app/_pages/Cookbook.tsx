@@ -218,6 +218,7 @@ export default function Cookbook() {
 }
 
 function CookbookCard({ item }: { item: any }) {
+    const { t } = useTranslation();
     if (!item) return null;
     const id = item.internal_id || item.id;
     const title = item.title || item.name || "Untitled Recipe";
@@ -248,7 +249,7 @@ function CookbookCard({ item }: { item: any }) {
                         <p className="text-sm text-white/90 font-medium">{time} Minutes</p>
                     </div>
                     <div className="bg-[#a5e076] text-[#1c2e22] px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shadow-sm hover:bg-[#92cc63] transition-colors">
-                        View Recipe
+                        {t('view_recipe')}
                     </div>
                 </div>
             </Link>

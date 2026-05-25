@@ -35,6 +35,17 @@ export async function POST(req: NextRequest) {
       const rawFullNumber = `${countryCode}${phoneNumber}`
       const cleanPhone = rawFullNumber.replace(/\D/g, '')
       
+      // Check if phone number is already registered to another user
+      const { data: existingUser } = await supabase
+        .from('chat_users')
+        .select('user_id')
+        .eq('phone_number', cleanPhone)
+        .maybeSingle();
+
+      if (existingUser && existingUser.user_id !== userId) {
+        return NextResponse.json({ success: false, message: 'This phone number is already in use by another account.' }, { status: 400 })
+      }
+      
       const { error: dbError } = await supabase
         .from('chat_users')
         .upsert([{ 

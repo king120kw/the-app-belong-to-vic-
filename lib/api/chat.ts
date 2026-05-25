@@ -263,7 +263,7 @@ export const getContacts = async (userId: string) => {
                 full_name,
                 username,
                 avatar_url,
-                chat_users(phone_number, is_verified)
+                chat_users!chat_users_user_id_fkey(phone_number, is_verified)
             )
         `)
         .eq('user_id', userId);

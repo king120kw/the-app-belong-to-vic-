@@ -263,7 +263,7 @@ export default function Onboarding() {
                   setSyncFailed(true);
                   return;
                 }
-                toast.error("Failed to initialize your profile. Please try refreshing the page.");
+                toast.error(t('failed_init_profile'));
               });
             });
           }
@@ -292,7 +292,7 @@ export default function Onboarding() {
     },
     onError: (error: any) => {
       console.error("Onboarding Save Error:", error);
-      toast.error(`Failed to save onboarding: ${error.message || 'Check console for details'}`);
+      toast.error(t('failed_save_onboarding').replace('%s', error.message || 'Check console for details'));
     }
   });
 
@@ -341,10 +341,10 @@ export default function Onboarding() {
   if (syncFailed) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-white text-center px-4">
-        <h2 className="text-2xl font-bold text-red-600 mb-4">Profile Setup Failed</h2>
-        <p className="text-gray-600 mb-6">We encountered a database error. Please ensure the backend migration has run successfully.</p>
+        <h2 className="text-2xl font-bold text-red-600 mb-4">{t('profile_setup_failed')}</h2>
+        <p className="text-gray-600 mb-6">{t('db_error_onboarding')}</p>
         <button onClick={() => window.location.reload()} className="px-6 py-2 bg-vic-blue text-white rounded-lg font-bold hover:bg-vic-blue/90 transition-colors">
-          Reload Page
+          {t('reload_page')}
         </button>
       </div>
     );

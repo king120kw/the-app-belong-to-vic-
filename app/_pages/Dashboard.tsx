@@ -158,12 +158,7 @@ export default function Dashboard() {
         router.push("/onboarding");
       }
     }
-    
-    // Strategic trigger for daily summary if user is active
-    if (user?.id && dailyProgress) {
-        generateDailySummary(user.id);
-    }
-  }, [profile, authLoading, router, dailyProgress, user?.id]);
+  }, [profile, authLoading, router]);
 
   const toggleTheme = () => {
     const newMode = !darkMode;
@@ -624,7 +619,7 @@ export default function Dashboard() {
     }
   };
 
-  if (authLoading) {
+  if (authLoading || profile === undefined) {
     return <DashboardSkeleton />;
   }
 

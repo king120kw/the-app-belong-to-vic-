@@ -1302,7 +1302,8 @@ export default function ChatConversation() {
         // --- Verification Check ---
         // Ensure we are calling a verified expert or user
         const otherUserProfile = otherParticipant.user_profiles;
-        const isVerified = otherUserProfile?.chat_users?.is_verified;
+        const chatUser = Array.isArray(otherUserProfile?.chat_users) ? otherUserProfile.chat_users[0] : otherUserProfile?.chat_users;
+        const isVerified = chatUser?.is_verified;
 
         if (!isVerified) {
             toast.error("Calls are only available for verified contacts.", { duration: 3000 });

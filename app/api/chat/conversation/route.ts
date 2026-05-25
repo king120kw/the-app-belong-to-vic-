@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
                     username,
                     avatar_url,
                     updated_at,
-                    chat_users(phone_number, is_verified)
+                    chat_users!chat_users_user_id_fkey(phone_number, is_verified)
                 )
             )
         `)

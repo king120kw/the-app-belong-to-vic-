@@ -118,12 +118,12 @@ export default function Budget() {
                         <div className="space-y-4">
                             <div className="bg-white/10 rounded-xl p-4 flex justify-between items-center">
                                 <div>
-                                    <p className="text-xs text-white/70 uppercase tracking-widest font-bold">Dynamic Daily Target</p>
+                                    <p className="text-xs text-white/70 uppercase tracking-widest font-bold">{t('dynamic_daily_target')}</p>
                                     <p className="text-xl font-bold text-vic-green">{formatCurrency(getDynamicDailyBudget(activeBudget))}</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-xs text-white/70 uppercase tracking-widest font-bold">Health Coaching</p>
-                                    <p className="text-xs font-bold text-white">Active</p>
+                                    <p className="text-xs text-white/70 uppercase tracking-widest font-bold">{t('health_coaching')}</p>
+                                    <p className="text-xs font-bold text-white">{t('active')}</p>
                                 </div>
                             </div>
                             <div className="flex justify-between text-sm">

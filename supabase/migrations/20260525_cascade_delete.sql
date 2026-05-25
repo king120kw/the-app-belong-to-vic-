@@ -8,6 +8,9 @@ BEGIN
   -- Delete all files uploaded by this user in the storage buckets
   DELETE FROM storage.objects WHERE owner = OLD.id;
   
+  -- Delete the user's chat_users record (freeing their phone number)
+  DELETE FROM public.chat_users WHERE user_id = OLD.id;
+  
   -- Delete the user's profile (if it doesn't already Cascade automatically)
   DELETE FROM public.user_profiles WHERE id = OLD.id;
   

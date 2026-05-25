@@ -36,7 +36,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const { data: { session } } = await supabase.auth.getSession();
             setSession(session);
             setUser(session?.user ?? null);
-            setLoading(false);
+            if (!session) {
+                setLoading(false);
+            }
         };
 
         getInitialSession();
@@ -45,7 +47,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
             setUser(session?.user ?? null);
-            setLoading(false);
+            if (!session) {
+                setLoading(false);
+                setProfile(null);
+            }
         });
 
         return () => subscription.unsubscribe();
@@ -55,18 +60,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         if (!user) {
             setProfile(null);
+            setLoading(false);
             return;
         }
 
+        setLoading(true);
+
         // Initial profile fetch
         const fetchProfile = async () => {
-            const { data } = await supabase
-                .from('user_profiles')
-                .select('*, chat_users!chat_users_user_id_fkey(phone_number, is_verified)')
-                .eq('id', user.id)
-                .maybeSingle();
+            try {
+                const { data } = await supabase
+                    .from('user_profiles')
+                    .select('*, chat_users!chat_users_user_id_fkey(phone_number, is_verified)')
+                    .eq('id', user.id)
+                    .maybeSingle();
 
-            if (data) setProfile(data);
+                if (data) {
+                    setProfile(data);
+                } else {
+                    setProfile(null);
+                }
+            } catch (err) {
+                console.error("Profile fetch error in AuthContext:", err);
+            } finally {
+                setLoading(false);
+            }
         };
 
         const handleLocationConfig = async (uid: string) => {

@@ -219,7 +219,7 @@ export default function Chat() {
       setIsSearchingIdentifier(true);
       const targetUser = await findUserByIdentifier(identifier);
 
-      if (!targetUser) {
+      if (!targetUser || !targetUser.is_verified) {
         toast.error("User not found or not verified for chat");
         return;
       }
@@ -272,7 +272,7 @@ export default function Chat() {
       toast.loading("Resolving contact...", { id: 'qr-resolve' });
       const targetUser = await findUserByIdentifier(targetId);
 
-      if (!targetUser) {
+      if (!targetUser || !targetUser.is_verified) {
         toast.error("User not found or not verified", { id: 'qr-resolve' });
         return;
       }

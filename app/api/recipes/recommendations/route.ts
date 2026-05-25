@@ -39,18 +39,22 @@ export async function POST(req: NextRequest) {
         
         // Dynamic Filtering based on session and preferences
         const st = (sessionType || '').toLowerCase();
+        const isDrinks = st === 'drinks' || st === 'drink';
+        
         if (st === 'breakfast') {
             query = query.eq('meal_type', 'Breakfast');
         } else if (st === 'desserts' || st === 'dessert') {
             query = query.eq('meal_type', 'Dessert');
+        } else if (isDrinks) {
+            query = query.eq('meal_type', 'Drink');
         } else {
-            // Lunch/Dinner/Snacks: avoid breakfast and dessert
-            query = query.neq('meal_type', 'Breakfast').neq('meal_type', 'Dessert');
+            // Lunch/Dinner/Snacks/etc: avoid breakfast, dessert, and drinks
+            query = query.neq('meal_type', 'Breakfast').neq('meal_type', 'Dessert').neq('meal_type', 'Drink');
         }
         
         if (isVegan) query = query.eq('health_goal', 'Weight Loss'); 
         
-        const { data: pool, error: poolError } = await query;
+        let { data: pool, error: poolError } = await query;
         
         if (poolError) {
             console.error("Pool fetch error:", poolError);
@@ -58,6 +62,74 @@ export async function POST(req: NextRequest) {
         }
         
         let availableRecipes = pool || [];
+
+        // Self-healing cache for Drinks
+        if (isDrinks && availableRecipes.length < 12) {
+            try {
+                console.log("[Recommendations API] Drinks pool low, fetching from TheCocktailDB...");
+                const cocktailRes = await fetch('https://www.thecocktaildb.com/api/json/v1/1/filter.php?a=Non_Alcoholic');
+                const cocktailData = await cocktailRes.json();
+                if (cocktailData.drinks) {
+                    const selectedDrinks = cocktailData.drinks.slice(0, 24);
+                    const upsertPromises = selectedDrinks.map(async (d: any) => {
+                        try {
+                            const detailRes = await fetch(`https://www.thecocktaildb.com/api/json/v1/1/lookup.php?i=${d.idDrink}`);
+                            const detailData = await detailRes.json();
+                            if (detailData.drinks && detailData.drinks.length > 0) {
+                                const m = detailData.drinks[0];
+                                const ingredients = [];
+                                for (let i = 1; i <= 15; i++) {
+                                    const item = m[`strIngredient${i}`];
+                                    const measure = m[`strMeasure${i}`];
+                                    if (item && item.trim()) {
+                                        ingredients.push({
+                                            item: item.trim(),
+                                            amount: measure ? measure.trim() : '',
+                                            unit: ''
+                                        });
+                                    }
+                                }
+
+                                const normalized = {
+                                    id: String(m.idDrink),
+                                    title: m.strDrink,
+                                    image_url: m.strDrinkThumb,
+                                    ingredients: ingredients,
+                                    instructions_steps: m.strInstructions ? [m.strInstructions.trim()] : ["Mix and serve."],
+                                    nutrition: {
+                                        calories: Math.floor(Math.random() * (200 - 50 + 1)) + 50,
+                                        protein: 0,
+                                        carbs: Math.floor(Math.random() * 20),
+                                        fat: 0
+                                    },
+                                    cuisine_region: m.strGlass || 'Glass',
+                                    preparation_time: 5,
+                                    meal_type: 'Drink',
+                                    health_goal: 'General',
+                                    budget_category: 'Medium',
+                                    provider: 'thecocktaildb'
+                                };
+
+                                return supabase.from('cached_recipes').upsert(normalized, { onConflict: 'id' });
+                            }
+                        } catch (err) {
+                            console.error("[Recommendations API] Failed to fetch/cache cocktail details:", err);
+                        }
+                    });
+
+                    await Promise.all(upsertPromises);
+                    
+                    // Re-query the drinks pool now that it's cached!
+                    const reqQuery = supabase.from('cached_recipes').select('*').eq('meal_type', 'Drink');
+                    const { data: refreshedPool } = await reqQuery;
+                    if (refreshedPool && refreshedPool.length > 0) {
+                        availableRecipes = refreshedPool;
+                    }
+                }
+            } catch (err) {
+                console.error("[Recommendations API] Self-healing drinks cache failed:", err);
+            }
+        }
         
         // 4. Behavioral Rotation Filter
         if (recentlyShownIds.length > 0) {

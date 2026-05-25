@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { useCurrency } from "@/lib/CurrencyContext";
 import { useTranslation } from "@/lib/api/translation";
@@ -106,7 +106,7 @@ export const BankConnectionWidget = () => {
                     setPlaidToken(data.link_token);
                     setIsConnecting(false);
                 } else {
-                    toast.error(data.error || "Failed to initiate Plaid connection");
+                    toast.error(data.error || t('bank_secure_failed'));
                     setIsConnecting(false);
                 }
             } else {
@@ -124,22 +124,22 @@ export const BankConnectionWidget = () => {
                 if (data.success && data.account) {
                     setConnectedAccount(data.account);
                     setStep('CONNECTED');
-                    toast.success("Bank linked successfully.");
+                    toast.success(t('bank_linked_success'));
                 } else if (data.success && data.redirect_url) {
                     window.location.href = data.redirect_url;
                 } else {
-                    toast.error(data.error || "Failed to initiate secure connection.");
+                    toast.error(data.error || t('bank_secure_failed'));
                     setIsConnecting(false);
                 }
             }
         } catch (err: any) {
-            toast.error("Network error. The live banking provider is currently unreachable.");
+            toast.error(t('bank_network_error'));
             setIsConnecting(false);
         }
     };
 
     const handlePlaidSuccess = async (public_token: string, metadata: any) => {
-        toast.loading("Securing bank connection...", { id: 'plaid-exchange' });
+        toast.loading(t('securing_bank_connection'), { id: 'plaid-exchange' });
         try {
             const res = await fetch('/api/banking/plaid/exchange-token', {
                 method: 'POST',
@@ -154,14 +154,14 @@ export const BankConnectionWidget = () => {
             const data = await res.json();
             
             if (data.success) {
-                toast.success("Bank account connected securely!", { id: 'plaid-exchange' });
+                toast.success(t('bank_connected_success'), { id: 'plaid-exchange' });
                 setConnectedAccount(data.account);
                 setStep('CONNECTED');
             } else {
-                toast.error("Failed to secure connection.", { id: 'plaid-exchange' });
+                toast.error(t('bank_secure_failed'), { id: 'plaid-exchange' });
             }
         } catch (err) {
-            toast.error("Network error during token exchange.", { id: 'plaid-exchange' });
+            toast.error(t('bank_exchange_error'), { id: 'plaid-exchange' });
         } finally {
             setPlaidToken(null);
             setSelectedInstitution(null);
@@ -177,7 +177,7 @@ export const BankConnectionWidget = () => {
         if (!user || !connectedAccount) return;
         const amount = Number(allocation);
         if (isNaN(amount) || amount <= 0 || amount > connectedAccount.balance) {
-            toast.error("Please enter a valid amount within your balance");
+            toast.error(t('bank_valid_amount'));
             return;
         }
 
@@ -188,11 +188,11 @@ export const BankConnectionWidget = () => {
             
             await createBudget(user.id, amount, startDate, endDate, currencyCode, currencySymbol);
             
-            toast.success("Budget allocated successfully!");
+            toast.success(t('budget_allocated_success'));
             queryClient.invalidateQueries({ queryKey: ['active-budget', user.id] });
             queryClient.invalidateQueries({ queryKey: ['budget-history', user.id] });
         } catch (err: any) {
-            toast.error(`Allocation failed: ${err.message}`);
+            toast.error(t('budget_allocation_failed').replace('%s', err.message));
         } finally {
             setIsCreatingBudget(false);
         }
@@ -208,22 +208,22 @@ export const BankConnectionWidget = () => {
                         <CheckCircle2 size={24} />
                     </div>
                     <div>
-                        <h3 className="text-lg font-bold text-vic-green">Approved</h3>
+                        <h3 className="text-lg font-bold text-vic-green">{t('approved')}</h3>
                         <p className="text-sm text-slate-500">
-                            {connectedAccount.account_name || 'Checking Account'} • {connectedAccount.bank_name || 'Open Banking'}
+                            {connectedAccount.account_name || t('checking_account')} • {connectedAccount.bank_name || t('open_banking')}
                         </p>
                     </div>
                 </div>
 
                 <div className="bg-white dark:bg-[#0d1418] p-4 rounded-xl border border-slate-200 dark:border-slate-800 mb-6">
-                    <p className="text-sm text-slate-500 mb-1">Available Balance</p>
+                    <p className="text-sm text-slate-500 mb-1">{t('available_balance')}</p>
                     <p className="text-3xl font-black text-slate-900 dark:text-white">
                         {formatCurrency(connectedAccount.balance)}
                     </p>
                 </div>
 
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-2">
-                    How much of your balance would you like to allocate toward your monthly wellness objective?
+                    {t('bank_allocate_prompt')}
                 </h4>
                 
                 <div className="flex gap-3 mb-6">
@@ -239,7 +239,7 @@ export const BankConnectionWidget = () => {
                         disabled={isCreatingBudget || !allocation}
                         className="px-6 bg-vic-green text-slate-900 font-bold rounded-xl flex items-center gap-2 hover:bg-opacity-90 transition-opacity disabled:opacity-50"
                     >
-                        {isCreatingBudget ? <Loader2 size={20} className="animate-spin" /> : "Allocate"}
+                        {isCreatingBudget ? <Loader2 size={20} className="animate-spin" /> : t('allocate')}
                         {!isCreatingBudget && <ArrowRight size={18} />}
                     </button>
                 </div>
@@ -247,8 +247,8 @@ export const BankConnectionWidget = () => {
                 {Number(allocation) > 0 && (
                     <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-xl flex justify-between items-center animate-in fade-in slide-in-from-bottom-2">
                         <div>
-                            <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-0.5">Your Daily Allowance</p>
-                            <p className="text-sm text-slate-600 dark:text-slate-400">Based on a 30-day month</p>
+                            <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-0.5">{t('daily_allowance')}</p>
+                            <p className="text-sm text-slate-600 dark:text-slate-400">{t('based_on_30_day')}</p>
                         </div>
                         <p className="text-2xl font-black text-blue-900 dark:text-blue-100">{formatCurrency(Number(dailyBudget))}</p>
                     </div>
@@ -269,11 +269,11 @@ export const BankConnectionWidget = () => {
 
             <div className="flex items-center gap-2 mb-2 text-vic-green font-bold text-sm uppercase tracking-wider">
                 <ShieldCheck size={18} />
-                Secure Open Banking
+                {t('secure_open_banking')}
             </div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Connect Your Bank</h3>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">{t('connect_your_bank')}</h3>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-                Link your bank account to intelligently allocate your wellness budget and receive real-time financial health coaching.
+                {t('bank_connect_desc')}
             </p>
 
             <div className="relative mb-4">
@@ -282,7 +282,7 @@ export const BankConnectionWidget = () => {
                 </div>
                 <input
                     type="text"
-                    placeholder="Search for your bank..."
+                    placeholder={t('search_bank_placeholder')}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0d1418] text-slate-900 dark:text-white outline-none focus:border-vic-green focus:ring-1 focus:ring-vic-green transition-all"
@@ -305,7 +305,7 @@ export const BankConnectionWidget = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                     {banks.filter(b => b.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 ? (
                         <div className="col-span-1 sm:col-span-2 text-center py-8 text-slate-500">
-                            No institutions found matching "{searchTerm}"
+                            {t('no_institutions_found').replace('%s', searchTerm)}
                         </div>
                     ) : (
                         banks.filter(b => b.name.toLowerCase().includes(searchTerm.toLowerCase())).map((bank) => (
@@ -333,7 +333,7 @@ export const BankConnectionWidget = () => {
                                     <p className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-vic-green transition-colors line-clamp-1">
                                         {bank.name}
                                     </p>
-                                    <p className="text-[10px] text-slate-500 uppercase">via secure connection</p>
+                                    <p className="text-[10px] text-slate-500 uppercase">{t('via_secure_connection')}</p>
                                 </div>
                             </button>
                         ))

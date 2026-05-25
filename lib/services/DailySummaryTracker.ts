@@ -8,6 +8,9 @@ export function useDailySummaryTracker(userId: string | null) {
             try {
                 const now = new Date();
                 
+                // ONLY trigger at 12:00 a.m. (hour 0)
+                if (now.getHours() !== 0) return;
+                
                 // We trigger the summary for *yesterday* strictly after midnight.
                 // It ensures the user gets yesterday's full logical summary.
                 const yesterday = new Date(now);

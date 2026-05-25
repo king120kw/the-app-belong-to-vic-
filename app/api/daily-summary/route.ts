@@ -3,13 +3,15 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await req.json()
+    const { userId, targetDate } = await req.json()
     const supabase = createServerSupabaseClient()
-    const today = new Date().toISOString().split('T')[0]
+    
+    // If targetDate is provided (e.g., from a midnight cron asking for yesterday), use it. Otherwise use today.
+    const queryDate = targetDate || new Date().toISOString().split('T')[0]
 
     const [{ data: progress }, { data: mealHistory }, { data: onboarding }] = await Promise.all([
-      supabase.from('daily_progress').select('*').eq('user_id', userId).eq('progress_date', today).maybeSingle(),
-      supabase.from('food_analysis_history').select('*, food_items(*)').eq('user_id', userId).gte('analyzed_at', today),
+      supabase.from('daily_progress').select('*').eq('user_id', userId).eq('progress_date', queryDate).maybeSingle(),
+      supabase.from('food_analysis_history').select('*, food_items(*)').eq('user_id', userId).gte('analyzed_at', queryDate),
       supabase.from('onboarding_responses').select('*').eq('user_id', userId).maybeSingle(),
     ])
 
@@ -17,24 +19,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'No progress found for today' })
     }
 
-    // Check if summary already exists for today to avoid duplicates
+    // Check if summary already exists for this specific date to avoid duplicates
     const { data: existingSummary } = await supabase
       .from('messages')
       .select('id')
-      .contains('metadata', { type: 'daily_summary', date: today })
+      .contains('metadata', { type: 'daily_summary', date: queryDate })
       .limit(1)
       .maybeSingle();
 
     if (existingSummary) {
-      return NextResponse.json({ message: 'Summary already sent for today', alreadySent: true })
+      return NextResponse.json({ message: 'Summary already sent for this date', alreadySent: true })
     }
 
     const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
-    const prompt = `You are a helpful and professional Health Coach.
-Generate a concise, encouraging end-of-day summary for the user.
-Today's Stats: ${progress.calories_consumed}/${progress.calories_goal} kcal.
-Meals: ${mealHistory?.map((m: any) => m.food_items?.name).join(', ')}.
-User Goal: ${onboarding?.goal}.
+    const prompt = `You are a helpful and professional Health Coach for the VicAlary App.
+Generate a concise, encouraging end-of-day summary for the user based on their activities on ${queryDate}.
+Stats: ${progress.calories_consumed}/${progress.calories_goal} kcal.
+Meals Logged: ${mealHistory?.length ? mealHistory.map((m: any) => m.food_items?.name).join(', ') : 'None'}.
+User Goal: ${onboarding?.goal || 'General Wellness'}.
 
 Instructions:
 1. Praise their progress.
@@ -49,7 +51,10 @@ Instructions:
     })
 
     const aiData = await aiRes.json()
-    const summary = aiData.choices[0].message.content
+    let summary = aiData.choices[0].message.content
+
+    // Strip markdown symbols to prevent them from showing in the UI
+    summary = summary.replace(/[*#]/g, '');
 
     const { data: convs } = await supabase
       .from('conversations')
@@ -60,10 +65,10 @@ Instructions:
     if (convs && convs.length > 0) {
       await supabase.from('messages').insert({
         conversation_id: convs[0].id,
-        sender_id: '00000000-0000-0000-0000-000000000000',
+        sender_id: '00000000-0000-0000-0000-000000000001',
         message_type: 'system',
-        content: `🌙 DAILY SUMMARY: ${summary}`,
-        metadata: { type: 'daily_summary', date: today, stats: progress },
+        content: `🌙 DAILY SUMMARY (${queryDate}):\n\n${summary}`,
+        metadata: { type: 'daily_summary', date: queryDate, stats: progress },
       })
     }
 

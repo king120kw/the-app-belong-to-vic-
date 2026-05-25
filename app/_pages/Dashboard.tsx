@@ -37,7 +37,7 @@ export default function Dashboard() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user, loading: authLoading } = useAuth();
-  const { t, country, lang, localHour, speak } = useTranslation();
+  const { t, country, countryFlag, lang, localHour, speak } = useTranslation();
   const [currentView, setCurrentView] = useState<"dashboard" | "progress">("dashboard");
   const [darkMode, setDarkMode] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
@@ -92,6 +92,9 @@ export default function Dashboard() {
     queryKey: ['daily-progress', user?.id, today],
     queryFn: () => getDailyProgress(user?.id || '', today),
     enabled: !!user?.id,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    refetchOnWindowFocus: false,
+    retry: 1
   });
 
   // Fetch onboarding info for calorie goals
@@ -106,20 +109,29 @@ export default function Dashboard() {
       if (error) throw error;
       return rows && rows.length > 0 ? rows[0] : null;
     },
-    enabled: !!user?.id
+    enabled: !!user?.id,
+    staleTime: Infinity, // Onboarding data rarely changes
+    refetchOnWindowFocus: false,
+    retry: 1
   });
 
   const { data: dailySummary } = useQuery({
     queryKey: ['daily-summary', user?.id, today],
     queryFn: () => getDailySummary(user?.id || ''),
-    enabled: !!user?.id
+    enabled: !!user?.id,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    refetchOnWindowFocus: false,
+    retry: 1
   });
 
   // Fetch suggestions
   const { data: suggestions } = useQuery({
     queryKey: ['suggestions', user?.id, today],
     queryFn: () => getDailyMealSuggestions(user?.id || ''),
-    enabled: !!user?.id
+    enabled: !!user?.id,
+    staleTime: 1000 * 60 * 60, // 1 hour
+    refetchOnWindowFocus: false,
+    retry: 1
   });
 
   // Update active meal type when suggestions load (backend logic takes precedence)
@@ -138,11 +150,13 @@ export default function Dashboard() {
     }
   }, [user, profile, authLoading]);
 
-  // Route Guard: Redirect to onboarding if profile is incomplete
+  // Route Guard: Redirect to onboarding if profile is incomplete or missing
   useEffect(() => {
-    if (profile && !profile.onboarding_completed && !authLoading) {
-      console.log("[Dashboard] Profile incomplete. Redirecting to onboarding.");
-      router.push("/onboarding");
+    if (!authLoading) {
+      if (profile === null || (profile && !profile.onboarding_completed)) {
+        console.log("[Dashboard] Profile incomplete or missing. Redirecting to onboarding.");
+        router.push("/onboarding");
+      }
     }
     
     // Strategic trigger for daily summary if user is active
@@ -728,13 +742,21 @@ export default function Dashboard() {
       )}
 
       <header className="flex items-center bg-background-light dark:bg-[#0d1418] p-4 pb-2 justify-between sticky top-0 z-10">
-        <Link href="/settings">
+        <Link href="/settings" className="relative group block">
           <div
-            className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 border border-vic-green"
+            className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-11 border-[1.5px] border-vic-green/40 shadow-sm transition-transform group-hover:scale-105"
             style={{ backgroundImage: `url("${(profile as any)?.avatar_url || user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent((profile as any)?.full_name || user.user_metadata?.full_name || 'User')}&background=13ec37&color=fff&size=128`}")` }}
-          ></div>
+          />
+          {countryFlag && (
+            <div 
+              className="absolute -bottom-0.5 -right-0.5 size-5 rounded-full overflow-hidden border-2 border-background-light dark:border-[#0d1418] shadow-[0_2px_6px_rgba(0,0,0,0.15)] dark:shadow-[0_2px_6px_rgba(255,255,255,0.08)] group-hover:shadow-[0_0_8px_rgba(19,236,55,0.3)] transition-all bg-slate-100 dark:bg-slate-800 flex items-center justify-center z-10"
+              title={`${country} • ${lang.toUpperCase()}`}
+            >
+              <img src={countryFlag} alt={country} className="w-full h-full object-cover" />
+            </div>
+          )}
         </Link>
-        <button onClick={toggleTheme} className="text-[#111812] dark:text-white">
+        <button onClick={toggleTheme} className="text-[#111812] dark:text-white p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
           {darkMode ? <Sun size={22} /> : <Moon size={22} />}
         </button>
       </header>

@@ -326,8 +326,9 @@ export const getDailyMealSuggestions = async (userId: string) => {
     const localHour = new Date(localDateStr).getHours();
     
     let currentSession = 'breakfast';
-    if (localHour >= 11 && localHour < 16) currentSession = 'lunch';
-    else if (localHour >= 16 || localHour < 5) currentSession = 'dinner';
+    if (localHour >= 4 && localHour < 11) currentSession = 'breakfast';
+    else if (localHour >= 11 && localHour < 16) currentSession = 'lunch';
+    else currentSession = 'dinner';
 
     const today = now.toISOString().split('T')[0];
     
@@ -343,7 +344,7 @@ export const getDailyMealSuggestions = async (userId: string) => {
         console.error("[Recipes] Error fetching daily plan:", existingError);
     }
 
-    if (existingPlan) {
+    if (existingPlan && Array.isArray((existingPlan as any).breakfast) && (existingPlan as any).breakfast.length > 0) {
         return {
             breakfast: (existingPlan as any).breakfast || [],
             lunch: (existingPlan as any).lunch || [],
@@ -355,39 +356,37 @@ export const getDailyMealSuggestions = async (userId: string) => {
         };
     }
 
-    // 4. Generate new plan via unified API
+    // 4. Generate new plan via unified recommendation API
     try {
-        const res = await fetch('/api/daily-meal-plan', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId })
-        });
-        
-        if (!res.ok) throw new Error("Failed to generate plan");
-        const data = await res.json();
-        
-        // Ensure UUIDs for all generated recipes
-        const allFetched = [
-            ...(data.breakfast || []),
-            ...(data.lunch || []),
-            ...(data.dinner || []),
-            ...(data.snacks || []),
-            ...(data.drinks || []),
-            ...(data.desserts || [])
-        ];
-        
-        const uuidMap = await ensureRecipesUuids(allFetched);
-        const mapWithUuid = (list: any[]) => (list || []).map(m => ({ ...m, internal_id: uuidMap[m.id || m.spoonacular_id] || uuidMap[String(m.id)] || m.id }));
+        const fetchSession = async (sessionType: string) => {
+            const res = await fetch('/api/recipes/recommendations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, sessionType })
+            });
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.recipes || [];
+        };
+
+        // Fetch all categories SEQUENTIALLY to prevent Edamam 10 requests/minute burst limit.
+        // This ensures the daily plan is fully populated without hitting rate limits.
+        const breakfast = await fetchSession('breakfast');
+        const lunch = await fetchSession('lunch');
+        const dinner = await fetchSession('dinner');
+        const snacks = await fetchSession('snacks');
+        const drinks = await fetchSession('drinks');
+        const desserts = await fetchSession('desserts');
         
         const planToInsert = {
             user_id: userId,
             plan_date: today,
-            breakfast: mapWithUuid(data.breakfast),
-            lunch: mapWithUuid(data.lunch),
-            dinner: mapWithUuid(data.dinner),
-            snacks: mapWithUuid(data.snacks),
-            drinks: mapWithUuid(data.drinks),
-            desserts: mapWithUuid(data.desserts)
+            breakfast,
+            lunch,
+            dinner,
+            snacks,
+            drinks,
+            desserts
         };
 
         // Insert into DB

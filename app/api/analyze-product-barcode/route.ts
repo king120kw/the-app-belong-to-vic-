@@ -175,6 +175,27 @@ export async function POST(req: NextRequest) {
     const brandForCheck = productData?.brand || ''
     const political = await checkPoliticalAffiliation(supabase, brandForCheck)
 
+    let dailyBudgetStr = 'No specific financial constraints on file.';
+    if (userId) {
+      const { data: budgetData } = await supabase
+        .from('user_budgets')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (budgetData) {
+        const today = new Date();
+        const end = new Date(budgetData.period_end);
+        if (today <= end) {
+            const diffTime = Math.abs(end.getTime() - today.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const dailyAllocation = diffDays > 0 ? budgetData.remaining_budget / diffDays : budgetData.remaining_budget;
+            dailyBudgetStr = `Remaining Daily Budget is ${currencySymbol}${dailyAllocation.toFixed(2)}. Evaluate affordability based on this limit.`;
+        }
+      }
+    }
+
     let prompt: string
 
     if (productData?.type === 'medication') {
@@ -191,6 +212,7 @@ Provide a JSON response. All fields required:
 PRODUCT DETAILS: ${JSON.stringify(productData || { barcode })}
 POLITICAL STATUS: invest_israel=${political.invest_israel}, invest_uae=${political.invest_uae}
 USER LOCATION: ${geoInfo.city}, ${geoInfo.country_name} | CURRENCY: ${currencySymbol}
+FINANCIAL CONTEXT: ${dailyBudgetStr}
 REGIONAL STANDARDS: Use ${['US', 'UK', 'CA', 'AU'].includes(geoInfo.country_name) ? 'Imperial (oz/lbs)' : 'Metric (g/kg)'} units. Factor in ${geoInfo.country_name} food safety regulations.
 
 RULES:
@@ -220,6 +242,18 @@ LANGUAGE MANDATE: Auto-detect language based on location (${geoInfo.country_name
     if (!aiRes.ok) throw new Error(`OpenAI error: ${await aiRes.text()}`)
     const aiData = await aiRes.json()
     const result = JSON.parse(aiData.choices[0].message.content)
+
+    // Strip markdown symbols to prevent them from showing in the UI
+    const stripSymbols = (obj: any) => {
+        for (const key in obj) {
+            if (typeof obj[key] === 'string') {
+                obj[key] = obj[key].replace(/[*#]/g, '');
+            } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+                stripSymbols(obj[key]);
+            }
+        }
+    };
+    stripSymbols(result);
 
     if (political.invest_israel && !result.political_warning) {
       result.political_warning = political.warning

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { GlobalProviders } from "@/components/GlobalProviders";
 import "./global.css";
+import Script from "next/script";
 
 export const metadata: Metadata = {
   title: "VICALARY",
@@ -21,6 +22,15 @@ export default function RootLayout({
       <head>
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script src="https://cdn.lordicon.com/lordicon.js" async />
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            const originalWarn = console.warn;
+            console.warn = (...args) => {
+              if (args[0] && typeof args[0] === 'string' && args[0].includes('The Plaid link-initialize.js script was embedded more than once')) return;
+              originalWarn(...args);
+            };
+          `
+        }} />
       </head>
       <body>
         <GlobalProviders>{children}</GlobalProviders>

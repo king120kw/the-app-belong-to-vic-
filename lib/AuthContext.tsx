@@ -4,6 +4,8 @@ import { supabase } from './supabase';
 import type { User, Session } from '@supabase/supabase-js';
 import { detectLocation, getPrimaryLanguage } from './api/location';
 import { getUserSettings, updateSettings } from './api/settings';
+import { useSpiritualScheduler } from './services/SpiritualScheduler';
+import { useDailySummaryTracker } from './services/DailySummaryTracker';
 import { toast } from 'sonner';
 
 interface AuthContextType {
@@ -21,6 +23,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [profile, setProfile] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
+
+    // Initialize the Daily Spiritual Scheduler globally
+    useSpiritualScheduler(user?.id ?? null);
+    
+    // Initialize the End of Day summary tracker
+    useDailySummaryTracker(user?.id ?? null);
 
     useEffect(() => {
         // Check active sessions and sets the user

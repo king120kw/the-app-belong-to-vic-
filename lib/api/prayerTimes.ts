@@ -19,14 +19,33 @@ export const getPrayerTimes = async (location?: LocationData): Promise<PrayerTim
         const loc = location || await detectLocation();
         if (!loc) return null;
         const date = new Date().toISOString().split('T')[0];
+        const cacheKey = `prayer_times_${loc.city}_${date}`;
+        
+        if (typeof window !== 'undefined') {
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) return JSON.parse(cached);
+        }
 
-        // Aladhan API for prayer times - using timingsByCity for faster lookups
-        const url = `https://api.aladhan.com/v1/timingsByCity/${date}?city=${encodeURIComponent(loc.city || 'Semarang')}&country=${encodeURIComponent(loc.country_name || 'Indonesia')}&method=2`;
+        // Ensure valid coordinates to prevent Aladhan API geocoding timeouts
+        // Fallback to Jakarta coordinates if location doesn't have lat/lon
+        const lat = loc.latitude || -6.2088;
+        const lon = loc.longitude || 106.8456;
+
+        // Aladhan API for prayer times - using precise coordinates avoids their slow internal geocoding which causes 504 Timeouts
+        const timestamp = Math.floor(Date.now() / 1000);
+        const url = `https://api.aladhan.com/v1/timings/${timestamp}?latitude=${lat}&longitude=${lon}&method=2`;
 
         const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
         if (!response.ok) throw new Error("API failure");
         const data = await response.json();
-        return data.code === 200 ? data.data.timings : null;
+        
+        if (data.code === 200) {
+            if (typeof window !== 'undefined') {
+                localStorage.setItem(cacheKey, JSON.stringify(data.data.timings));
+            }
+            return data.data.timings;
+        }
+        return null;
     } catch (error) {
         console.warn("[PrayerTimes] Fetch failed, using fallback:", error);
         // Fallback to static times for Semarang if API fails (as requested for regional accuracy)
@@ -37,7 +56,7 @@ export const getPrayerTimes = async (location?: LocationData): Promise<PrayerTim
     }
 };
 
-export const getPersonalizedSpiritualReminder = async (userId: string): Promise<{ 
+export const getPersonalizedSpiritualReminder = async (userId: string, phase: 'pre-prayer' | 'post-prayer'): Promise<{ 
     type: 'quran' | 'hadith', 
     content: string, 
     content_ar?: string,
@@ -45,19 +64,19 @@ export const getPersonalizedSpiritualReminder = async (userId: string): Promise<
     verifyUrl?: string 
 } | null> => {
     try {
-        const prayerTimes = await getPrayerTimes();
-        const isInPrayerWindow = prayerTimes ? isPrayerTime(prayerTimes) : false;
+        // Post-prayer = Quranic verse, Pre-prayer = Hadith
+        if (phase === 'post-prayer') {
+            // Seed randomness based on user + day so it stays consistent for the session but unique to user
+            const dateStr = new Date().toISOString().split('T')[0];
+            const hashStr = userId + dateStr;
+            let hash = 0;
+            for (let i = 0; i < hashStr.length; i++) hash = hashStr.charCodeAt(i) + ((hash << 5) - hash);
+            const randomAyah = (Math.abs(hash) % 6236) + 1;
 
-        // Determine type based on prayer window
-        const typeFilter = isInPrayerWindow ? 'quran' : 'hadith';
-
-        // 1. Try public APIs for dual-language content
-        if (isInPrayerWindow) {
-            const randomAyah = Math.floor(Math.random() * 6236) + 1;
-            // Fetch English (Asad) and Arabic
+            // Fetch English (Asad) and Arabic with timeout
             const [resEn, resAr] = await Promise.all([
-                fetch(`https://api.alquran.cloud/v1/ayah/${randomAyah}/en.asad`),
-                fetch(`https://api.alquran.cloud/v1/ayah/${randomAyah}/ar.alafasy`)
+                fetch(`https://api.alquran.cloud/v1/ayah/${randomAyah}/en.asad`, { signal: AbortSignal.timeout(3000) }),
+                fetch(`https://api.alquran.cloud/v1/ayah/${randomAyah}/ar.alafasy`, { signal: AbortSignal.timeout(3000) })
             ]);
             const dataEn = await resEn.json();
             const dataAr = await resAr.json();
@@ -69,20 +88,36 @@ export const getPersonalizedSpiritualReminder = async (userId: string): Promise<
                 reference: `Quran ${dataEn.data.surah.numberOfSurah}:${dataEn.data.numberInSurah}`
             };
         } else {
-            // Public Hadith APIs are often English-only. 
-            // We'll try to find a source with Arabic or use a fallback.
-            const res = await fetch('https://random-hadith-generator.vercel.app/bukhari');
-            const data = await res.json();
+            // Public Hadith APIs are often unstable or block CORS.
+            // Using a reliable, curated local list for instant, zero-latency rendering.
+            const HADITHS = [
+                { content: "The best among you are those who have the best manners and character.", content_ar: "خياركم أحسنكم أخلاقا", reference: "Sahih Bukhari 6029", url: "https://sunnah.com/bukhari:6029" },
+                { content: "God does not look at your forms and possessions but he looks at your hearts and your deeds.", content_ar: "إن الله لا ينظر إلى صوركم وأموالكم، ولكن ينظر إلى قلوبكم وأعمالكم", reference: "Sahih Muslim 2564", url: "https://sunnah.com/muslim:2564" },
+                { content: "He who does not show mercy to others, will not be shown mercy.", content_ar: "من لا يرحم لا يرحم", reference: "Sahih Bukhari 5997", url: "https://sunnah.com/bukhari:5997" },
+                { content: "Make things easy for people and not difficult.", content_ar: "يسروا ولا تعسروا", reference: "Sahih Bukhari 69", url: "https://sunnah.com/bukhari:69" },
+                { content: "A kind word is a form of charity.", content_ar: "والكلمة الطيبة صدقة", reference: "Sahih Bukhari 2989", url: "https://sunnah.com/bukhari:2989" },
+                { content: "The strong man is not the one who can wrestle, but the one who controls himself in a fit of anger.", content_ar: "ليس الشديد بالصرعة، إنما الشديد الذي يملك نفسه عند الغضب", reference: "Sahih Bukhari 6114", url: "https://sunnah.com/bukhari:6114" }
+            ];
+            
+            // Generate a random index based on user ID and current day for consistency across the day
+            const dateStr = new Date().toISOString().split('T')[0];
+            const hashStr = userId + dateStr + "hadith";
+            let hash = 0;
+            for (let i = 0; i < hashStr.length; i++) hash = hashStr.charCodeAt(i) + ((hash << 5) - hash);
+            const selected = HADITHS[Math.abs(hash) % HADITHS.length];
+
             return {
                 type: 'hadith',
-                content: data.data.hadith_english,
-                content_ar: data.data.hadith_arabic || "", // Some APIs provide this
-                reference: `Sahih Bukhari, Hadith ${data.data.hadith_number}`,
-                verifyUrl: `https://sunnah.com/bukhari:${data.data.hadith_number}`
+                content: selected.content,
+                content_ar: selected.content_ar,
+                reference: selected.reference,
+                verifyUrl: selected.url
             };
         }
-    } catch (error) {
-        console.error("Spiritual reminder error:", error);
+    } catch (error: any) {
+        if (error.name !== 'TimeoutError') {
+            console.error("Spiritual reminder error:", error);
+        }
         return {
             type: 'hadith',
             content: "The best among you are those who have the best manners and character.",
@@ -94,7 +129,7 @@ export const getPersonalizedSpiritualReminder = async (userId: string): Promise<
 };
 
 
-export const isPrayerTime = (prayerTimes: PrayerTimes): boolean => {
+export const getPrayerWindow = (prayerTimes: PrayerTimes): { inWindow: boolean, phase: 'pre-prayer' | 'post-prayer' | 'none' } => {
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
 
@@ -108,9 +143,20 @@ export const isPrayerTime = (prayerTimes: PrayerTimes): boolean => {
         minutes: timeToMinutes(time)
     }));
 
-    // Check if within 10 minutes window for any prayer (strictly limited as requested)
-    return timings.some(t => {
-        const diff = Math.abs(t.minutes - currentTime);
-        return diff <= 10; // 10 mins before or after
-    });
+    for (const t of timings) {
+        // Skip Sunrise/Sunset which are non-standard prayer bounds if you want strictly the 5 prayers, 
+        // but typically users want reminders around all of them.
+        if (t.name === 'Imsak' || t.name === 'Midnight') continue;
+
+        const diff = currentTime - t.minutes;
+        if (diff >= -15 && diff < 0) {
+            // 15 mins before up to exactly prayer time -> Hadith
+            return { inWindow: true, phase: 'pre-prayer' };
+        } else if (diff >= 0 && diff <= 15) {
+            // exactly prayer time to 15 mins after -> Quran
+            return { inWindow: true, phase: 'post-prayer' };
+        }
+    }
+
+    return { inWindow: false, phase: 'none' };
 };

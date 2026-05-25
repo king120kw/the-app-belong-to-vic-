@@ -8,62 +8,44 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServerSupabaseClient()
 
-    let parsedId = parseInt(id)
-    if (isNaN(parsedId)) {
-      console.warn(`ID ${id} is not numeric, skipping cache check.`)
-      parsedId = 0
+    // 1. Check unified cache first
+    const { data: existing, error } = await supabase
+        .from('cached_recipes')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle()
+
+    if (existing) {
+        // Map to expected frontend schema
+        const mapped = {
+            id: existing.id,
+            title: existing.title,
+            image_url: existing.image_url,
+            cuisine_type: existing.cuisine_region,
+            dietary_tags: [],
+            ingredients: typeof existing.ingredients === 'string' ? JSON.parse(existing.ingredients) : (existing.ingredients || []),
+            instructions: typeof existing.instructions_steps === 'string' ? JSON.parse(existing.instructions_steps) : (existing.instructions_steps || []),
+            prep_time_minutes: existing.preparation_time,
+            cook_time_minutes: 0,
+            total_calories: existing.nutrition?.calories || 0,
+            protein_g: existing.nutrition?.protein || 0,
+            carbs_g: existing.nutrition?.carbs || 0,
+            fat_g: existing.nutrition?.fat || 0
+        };
+        return NextResponse.json(mapped)
     }
 
-    if (parsedId > 0) {
-      const { data: existing } = await supabase.from('recipes').select('*').eq('spoonacular_id', parsedId).single()
-      if (existing) return NextResponse.json(existing)
-    }
+    // 2. Fallback check for legacy cached entries just in case
+    const { data: legacyExisting } = await supabase
+        .from('recipes')
+        .select('*')
+        .eq('external_id', id)
+        .maybeSingle()
+        
+    if (legacyExisting) return NextResponse.json(legacyExisting)
 
-    const res = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${id}`)
-    const data = await res.json()
+    return NextResponse.json({ error: 'Recipe not found in cache. Ensure it was fetched via recommendations API first.' }, { status: 404 })
 
-    if (!data.meals || data.meals.length === 0) {
-      return NextResponse.json({ error: 'Recipe not found' }, { status: 404 })
-    }
-
-    const meal = data.meals[0]
-
-    const ingredients = []
-    for (let i = 1; i <= 20; i++) {
-      const item = meal[`strIngredient${i}`]
-      const measure = meal[`strMeasure${i}`]
-      if (item && item.trim()) {
-        ingredients.push({ item: item.trim(), amount: 0, unit: measure ? measure.trim() : '', notes: '' })
-      }
-    }
-
-    const instructions = meal.strInstructions
-      ? meal.strInstructions.split(/\r\n|\n|\r/).filter((s: string) => s.trim().length > 0)
-      : []
-
-    const newRecipe = {
-      title: meal.strMeal,
-      description: `A delicious ${meal.strArea} ${meal.strCategory} dish.`,
-      prep_time_minutes: 30,
-      cook_time_minutes: 30,
-      total_calories: 0,
-      protein_g: 0,
-      carbs_g: 0,
-      fat_g: 0,
-      image_url: meal.strMealThumb,
-      cuisine_type: meal.strArea || 'International',
-      difficulty: 'Medium',
-      dietary_tags: [meal.strCategory || 'Main'],
-      ingredients,
-      instructions,
-      spoonacular_id: parsedId > 0 ? parsedId : null,
-    }
-
-    if (parsedId > 0) {
-      supabase.from('recipes').upsert(newRecipe, { onConflict: 'spoonacular_id' }).then()
-    }
-
-    return NextResponse.json({ ...newRecipe, id })
   } catch (error: any) {
     console.error('recipe-details error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

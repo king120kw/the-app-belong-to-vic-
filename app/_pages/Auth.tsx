@@ -100,21 +100,14 @@ export default function Auth() {
           if (result.error?.includes("rate limit")) {
             throw new Error(t('rate_limit_exceeded'));
           }
+          if (result.error?.includes("already registered") || result.error?.includes("already exists")) {
+            throw new Error(t('already_account') || 'User already registered');
+          }
           throw new Error(result.error || 'Signup failed');
         }
 
-        // Automatically sign in since the email is already confirmed by the admin API
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: normalizedEmail,
-          password: password,
-        });
-
-        if (signInError) throw signInError;
-
-        if (signInData.user) {
-          toast.success(t('account_created_msg'));
-          // Navigation happens via useEffect and syncAndNavigate
-        }
+        toast.success(t('account_created_msg') || 'Check your email to verify your account!');
+        setVerificationSent(true);
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: normalizedEmail,

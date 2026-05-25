@@ -30,13 +30,19 @@ export default function Cookbook() {
     const { data: cookbookData } = useQuery({
         queryKey: ['cookbook-suggestions-v2', user?.id],
         queryFn: () => getCookbookSuggestions(user!.id),
-        enabled: !!user?.id
+        enabled: !!user?.id,
+        staleTime: 1000 * 60 * 60, // 1 hour
+        refetchOnWindowFocus: false,
+        retry: 1
     });
 
     const { data: suggestions } = useQuery({
         queryKey: ['suggestions-v2', user?.id],
         queryFn: () => getDailyMealSuggestions(user!.id),
-        enabled: !!user?.id
+        enabled: !!user?.id,
+        staleTime: 1000 * 60 * 60, // 1 hour
+        refetchOnWindowFocus: false,
+        retry: 1
     });
 
     useEffect(() => {
@@ -85,18 +91,21 @@ export default function Cookbook() {
                             <span className="text-[10px] font-black text-vic-green uppercase tracking-widest">Swipe for more</span>
                         </div>
                         <div className="flex overflow-x-auto no-scrollbar gap-3 pb-2 -mx-6 px-6">
-                            {CATEGORIES.filter(cat => {
+                            {CATEGORIES.map(cat => {
                                 const isMainMeal = ['breakfast', 'lunch', 'dinner'].includes(cat.id);
-                                if (isMainMeal && cat.id !== currentSession) return false;
-                                return true;
-                            }).map(cat => {
+                                const isNotActive = isMainMeal && cat.id !== currentSession;
+                                
                                 return (
                                     <div key={cat.id} className="flex flex-col items-center gap-2">
                                     <button
-                                        onClick={() => setSelectedCategory(cat.id)}
-                                        className={`aspect-square min-w-[88px] w-[88px] rounded-2xl flex items-center justify-center transition-all hover:brightness-95 active:scale-95 border-none shadow-none overflow-hidden relative group ${selectedCategory === cat.id ? 'bg-[#D1F7C4] dark:bg-[#1a2e21]' : 'bg-white dark:bg-[#1f2c34]'}`}
+                                        onClick={() => !isNotActive && setSelectedCategory(cat.id)}
+                                        disabled={isNotActive}
+                                        className={`aspect-square min-w-[88px] w-[88px] rounded-2xl flex items-center justify-center transition-all overflow-hidden relative group border-none shadow-none
+                                            ${isNotActive ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:brightness-95 active:scale-95'}
+                                            ${selectedCategory === cat.id ? 'bg-[#D1F7C4] dark:bg-[#1a2e21]' : 'bg-white dark:bg-[#1f2c34]'}
+                                        `}
                                     >
-                                        <div className="absolute inset-0 bg-black/5 opacity-0 dark:group-hover:opacity-20 transition-opacity" />
+                                        {!isNotActive && <div className="absolute inset-0 bg-black/5 opacity-0 dark:group-hover:opacity-20 transition-opacity" />}
                                         <img 
                                             src={cat.animUrl} 
                                             alt={cat.label} 
@@ -110,7 +119,7 @@ export default function Cookbook() {
                                             <cat.fallbackIcon size={36} />
                                         </div>
                                     </button>
-                                    <span className={`text-[10px] font-bold uppercase tracking-tighter ${selectedCategory === cat.id ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>{cat.label}</span>
+                                    <span className={`text-[10px] font-bold uppercase tracking-tighter ${selectedCategory === cat.id ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'} ${isNotActive ? 'opacity-50' : ''}`}>{cat.label}</span>
                                 </div>
                                 );
                             })}

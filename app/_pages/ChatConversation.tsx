@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useParams, usePathname, useSearchParams } from 'next/navigation';
 import { requestMicrophoneAccess } from "@/lib/api/permissions";
-import { AlertCircle, MapPin, Navigation, Plus, Link, FileText, ArrowLeft, Bookmark, Video, Phone, Trash2, MoreVertical, Smile, Paperclip, Mic, Send, CheckCheck, Lock, Image, Headphones, User, BarChart, ChevronLeft, TriangleAlert, X } from 'lucide-react';
+import { AlertCircle, MapPin, Navigation, Plus, Link as LinkIcon, FileText, ArrowLeft, Bookmark, Video, Phone, Trash2, MoreVertical, Smile, Paperclip, Mic, Send, CheckCheck, Lock, Image, Headphones, User, BarChart, ChevronLeft, TriangleAlert, X, Brain } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -294,6 +294,28 @@ export default function ChatConversation() {
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+    // V20: State to show "last seen" for 45 seconds, reverting to offline, then repeating every 1 minute
+    const [showLastSeen, setShowLastSeen] = useState(true);
+
+    useEffect(() => {
+        // Step 1: Immediately show it upon opening the chat
+        setShowLastSeen(true);
+        let timeout = setTimeout(() => setShowLastSeen(false), 45000);
+
+        // Step 2: Every 1 minute, show it again for 45 seconds
+        const interval = setInterval(() => {
+            setShowLastSeen(true);
+            clearTimeout(timeout);
+            timeout = setTimeout(() => setShowLastSeen(false), 45000);
+        }, 60000);
+
+        return () => {
+            clearTimeout(timeout);
+            clearInterval(interval);
+        };
+    }, [activeId]);
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     const shouldSendOnStopRef = useRef(false);
     const recordingStartTimeRef = useRef(0);
@@ -515,7 +537,6 @@ export default function ChatConversation() {
 
 
     const displayName = useMemo(() => {
-        if (conversation?.display_name) return conversation.display_name;
         if (isAI) return 'Health Coach';
         if (isSelf) return (profile?.full_name ? `${profile.full_name} (Me)` : 'Personal Notes');
         
@@ -524,25 +545,33 @@ export default function ChatConversation() {
         const p = Array.isArray(rawP) ? rawP[0] : rawP;
         
         if (p?.full_name || p?.username) return p.full_name || p.username;
+        if (conversation?.display_name && conversation.display_name !== 'User') return conversation.display_name;
         if (otherParticipant?.chat_users?.phone_number) return otherParticipant.chat_users.phone_number;
         
         // Final fallback: Check the conversations list cache for a pre-loaded name
         const cachedConvs = queryClient.getQueryData<any[]>(['conversations', user?.id]);
         const currentConv = cachedConvs?.find(c => c.id === localActiveId);
-        if (currentConv?.display_name) return currentConv.display_name;
+        if (currentConv?.display_name && currentConv.display_name !== 'User') return currentConv.display_name;
 
         return 'User';
     }, [conversation, isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile, queryClient, user?.id, localActiveId]);
 
     const displayAvatar = useMemo(() => {
-        if (conversation?.display_avatar !== undefined && conversation?.display_avatar !== null) return conversation.display_avatar;
         if (isAI) return '/app logo.png';
-        if (isSelf) return profile?.avatar_url || null;
-        if (isVirtual) return virtualProfile?.avatar_url || null;
-        const rawP = otherUserProfile || otherParticipant?.user_profiles;
+        if (isSelf) return profile?.avatar_url;
+        
+        const rawP = isVirtual ? virtualProfile : (otherUserProfile || otherParticipant?.user_profiles);
         const p = Array.isArray(rawP) ? rawP[0] : rawP;
-        return p?.avatar_url || null;
-    }, [conversation, isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile]);
+        
+        if (p?.avatar_url) return p.avatar_url;
+        if (conversation?.display_avatar) return conversation.display_avatar;
+        
+        const cachedConvs = queryClient.getQueryData<any[]>(['conversations', user?.id]);
+        const currentConv = cachedConvs?.find(c => c.id === localActiveId);
+        if (currentConv?.display_avatar) return currentConv.display_avatar;
+
+        return null;
+    }, [conversation, isAI, isSelf, profile, otherParticipant, otherUserProfile, isVirtual, virtualProfile, queryClient, user?.id, localActiveId]);
 
     // Handle initial scroll
     useEffect(() => {
@@ -607,7 +636,32 @@ export default function ChatConversation() {
 
     const resolvedOtherUserId = otherParticipant?.user_id || virtualTargetId;
     const isOnline = resolvedOtherUserId && onlineUsers.has(resolvedOtherUserId);
-    const displayStatus = isOnline ? "online" : "offline";
+    const displayStatus = useMemo(() => {
+        if (isOnline) return "online";
+        
+        // Prevent empty arrays from useQuery from overwriting the pre-fetched profile from conversation
+        const resolvedUserProfile = (Array.isArray(otherUserProfile) && otherUserProfile.length === 0) ? null : otherUserProfile;
+        const rawP = isVirtual ? virtualProfile : (resolvedUserProfile || otherParticipant?.user_profiles);
+        const p = Array.isArray(rawP) ? rawP[0] : rawP;
+        
+        const lastSeenStr = p?.last_seen || p?.updated_at;
+        
+        if (lastSeenStr) {
+            const date = new Date(lastSeenStr);
+            const now = new Date();
+            const diffMs = now.getTime() - date.getTime();
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 0) {
+                return `last seen today at ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+            } else if (diffDays === 1) {
+                return `last seen yesterday at ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+            } else {
+                return `last seen ${date.toLocaleDateString()}`;
+            }
+        }
+        return "Offline";
+    }, [isOnline, isVirtual, virtualProfile, otherUserProfile, otherParticipant]);
 
     // --- Actions ---
 
@@ -1046,7 +1100,8 @@ export default function ChatConversation() {
                 const newMessage = payload.new;
                 if (newMessage.sender_id === COACH_ID) {
                     setIsProcessingVoice(false);
-                    setOtherUserTyping(false);
+                    // V18: Don't clear typing on INSERT, wait for UPDATE with content
+                    // setOtherUserTyping(false); 
                 }
 
                 // 1. Update local cache with deduplication
@@ -1158,7 +1213,9 @@ export default function ChatConversation() {
                         });
                     });
 
-                    setOtherUserTyping(prev => (prev !== isTyping ? isTyping : prev));
+                    if (!isAI) {
+                        setOtherUserTyping(prev => (prev !== isTyping ? isTyping : prev));
+                    }
                     setOtherUserOnline(prev => (prev !== isOnline ? isOnline : prev));
                 })
                 .on('postgres_changes', {
@@ -1324,17 +1381,7 @@ export default function ChatConversation() {
             };
 
             if (isAI) {
-                const optimisticAiId = `opt-ai-${Date.now()}`;
-                const optimisticAiMsg = {
-                    id: optimisticAiId,
-                    content: 'Thinking...',
-                    sender_id: COACH_ID,
-                    conversation_id: localActiveId,
-                    created_at: new Date(Date.now() + 10).toISOString(),
-                    message_type: 'text',
-                    is_optimistic: true
-                };
-                queryClient.setQueryData(['messages', localActiveId], (old: any) => [...(old || []), optimisticMsg, optimisticAiMsg]);
+                queryClient.setQueryData(['messages', localActiveId], (old: any) => [...(old || []), optimisticMsg]);
             } else {
                 queryClient.setQueryData(['messages', localActiveId], (old: any) => [...(old || []), optimisticMsg]);
             }
@@ -1408,12 +1455,11 @@ export default function ChatConversation() {
         if (isAI) {
             setOtherUserTyping(true);
         }
-
         // Attach any pending analysis context when sending to the coach
         const contextMetadata = isAI && pendingAnalysisContext
             ? { 
                 scannedProductContext: pendingAnalysisContext,
-                url: pendingAnalysisContext.productImage
+                url: pendingAnalysisContext.productImage || pendingAnalysisContext.image
               }
             : undefined;
 
@@ -1445,7 +1491,7 @@ export default function ChatConversation() {
             const contextMetadata = isAI && pendingAnalysisContext
                 ? { 
                     scannedProductContext: pendingAnalysisContext,
-                    url: pendingAnalysisContext.productImage
+                    url: pendingAnalysisContext.productImage || pendingAnalysisContext.image
                   }
                 : undefined;
 
@@ -1722,10 +1768,12 @@ export default function ChatConversation() {
                     return (
                         <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-3 p-3 bg-white dark:bg-[#1f2c34] rounded-2xl shadow-sm border border-vic-green/20 min-w-[260px] max-w-[320px]">
-                                {ctx.productImage ? (
-                                    <img src={ctx.productImage} alt="Food" className="w-12 h-12 rounded-xl object-cover" />
+                                {(ctx.productImage || ctx.image) ? (
+                                    <img src={ctx.productImage || ctx.image} alt="Food" className="w-12 h-12 rounded-xl object-cover" />
                                 ) : (
-                                    <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800" />
+                                    <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase">No Img</span>
+                                    </div>
                                 )}
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
@@ -1833,7 +1881,7 @@ export default function ChatConversation() {
                             {displayName}
                             {isAI && <span className="text-[9px] font-bold bg-vic-green/20 text-vic-green px-1.5 py-0.5 rounded-full">AI</span>}
                         </h2>
-                        <p className="text-[13px] text-[#667781] dark:text-[#8696a0] truncate">
+                        <div className="text-[13px] text-[#667781] dark:text-[#8696a0] truncate relative h-5 flex items-center">
                             {isProcessingVoice ? (
                                 <span className="text-vic-green font-medium animate-pulse">Transcribing...</span>
                             ) : otherUserTyping ? (
@@ -1841,13 +1889,20 @@ export default function ChatConversation() {
                             ) : otherUserOnline ? (
                                 <span className="text-vic-green font-medium">Online</span>
                             ) : isAI ? (
-                                'AI Coach'
+                                <span>AI Coach</span>
                             ) : isSelf ? (
-                                'Personal Workspace'
+                                <span>Personal Workspace</span>
                             ) : (
-                                displayStatus || 'Offline'
+                                <div className="relative w-full h-full flex items-center">
+                                    <span className={`absolute left-0 transition-opacity duration-[2000ms] ease-in-out whitespace-nowrap ${showLastSeen && displayStatus !== 'Offline' ? 'opacity-100' : 'opacity-0'}`}>
+                                        {displayStatus}
+                                    </span>
+                                    <span className={`absolute left-0 transition-opacity duration-[2000ms] ease-in-out whitespace-nowrap ${!showLastSeen || displayStatus === 'Offline' ? 'opacity-100' : 'opacity-0'}`}>
+                                        Offline
+                                    </span>
+                                </div>
                             )}
-                        </p>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -1942,6 +1997,12 @@ export default function ChatConversation() {
 
                                 {dateMsgs.map((msg) => {
                                     const isMe = msg.sender_id === user?.id;
+                                    
+                                    // Hide empty placeholder messages from AI
+                                    if (!isMe && !msg.content && msg.message_type === 'text') {
+                                        return null;
+                                    }
+                                    
                                     return (
                                         <div
                                             key={msg.id}
@@ -1995,9 +2056,9 @@ export default function ChatConversation() {
                     { (otherUserTyping || isProcessingVoice) && (
                         <div className="flex w-full justify-start mt-1 px-3 py-1">
                             <div className="bg-white dark:bg-[#202c33] p-2 rounded-xl shadow-sm flex items-center gap-2">
-                                <span className="text-[11px] text-vic-green font-bold uppercase tracking-wider">
-                                    {isProcessingVoice ? 'AI is transcribing' : 'AI is thinking'}
-                                </span>
+                                <div className="flex items-center gap-1.5 text-vic-green">
+                                    {isProcessingVoice ? <Brain className="w-4 h-4 animate-pulse" /> : <Brain className="w-4 h-4 animate-pulse" />}
+                                </div>
                                 <div className="flex gap-1">
                                     <div className="size-1 bg-vic-green rounded-full animate-bounce"></div>
                                     <div className="size-1 bg-vic-green rounded-full animate-bounce [animation-delay:0.2s]"></div>

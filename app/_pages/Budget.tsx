@@ -8,6 +8,8 @@ import { useTranslation } from "@/lib/api/translation";
 import { useCurrency } from "@/lib/CurrencyContext";
 import { toast } from "sonner";
 import { ArrowLeft, PlusCircle, Wallet, Trash2 } from "lucide-react";
+import { BankConnectionWidget } from "@/components/BankConnectionWidget";
+import { getDynamicDailyBudget } from "@/lib/services/BudgetEngine";
 
 export default function Budget() {
     const queryClient = useQueryClient();
@@ -113,7 +115,17 @@ export default function Budget() {
                                 {t('active')}
                             </div>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-4">
+                            <div className="bg-white/10 rounded-xl p-4 flex justify-between items-center">
+                                <div>
+                                    <p className="text-xs text-white/70 uppercase tracking-widest font-bold">Dynamic Daily Target</p>
+                                    <p className="text-xl font-bold text-vic-green">{formatCurrency(getDynamicDailyBudget(activeBudget))}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-xs text-white/70 uppercase tracking-widest font-bold">Health Coaching</p>
+                                    <p className="text-xs font-bold text-white">Active</p>
+                                </div>
+                            </div>
                             <div className="flex justify-between text-sm">
                                 <span>{t('total_budget')}: {formatCurrency(activeBudget.total_budget)}</span>
                                 <span>{Math.round(((activeBudget.remaining_budget || 0) / activeBudget.total_budget) * 100)}% {t('left')}</span>
@@ -130,17 +142,7 @@ export default function Budget() {
                         </div>
                     </div>
                 ) : (
-                    <div className="bg-slate-50 dark:bg-[#1f2c34] p-8 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-center mb-8">
-                        <Wallet className="text-slate-400 mb-2" size={36} />
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">{t('no_active_budget')}</h3>
-                        <p className="text-slate-600 dark:text-slate-400 mb-6 text-sm">{t('setup_budget')}</p>
-                        <button
-                            onClick={() => setShowCreateModal(true)}
-                            className="px-6 py-3 bg-vic-green text-slate-900 rounded-xl font-bold"
-                        >
-                            {t('setup_budget')}
-                        </button>
-                    </div>
+                    <BankConnectionWidget />
                 )}
 
                 {/* History */}

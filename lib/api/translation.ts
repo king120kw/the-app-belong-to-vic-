@@ -7,6 +7,9 @@ import { detectLocation, getPrimaryLanguage } from './location';
 import { updateSettings } from './settings';
 import { toast } from 'sonner';
 
+import i18n from 'i18next';
+import { initReactI18next, useTranslation as useI18nextTranslation } from 'react-i18next';
+
 import { en } from '../translations/en';
 import { ar } from '../translations/ar';
 import { ur } from '../translations/ur';
@@ -35,14 +38,30 @@ const translations: Record<Language, Record<string, string>> = {
     en, ar, ur, bn, hi, zh, es, fr, pt, ru, id, sw, mr, te, ta, vi, so, my, ko, tr, de
 };
 
+const resources = Object.keys(translations).reduce((acc, key) => {
+    acc[key] = { translation: translations[key as Language] };
+    return acc;
+}, {} as Record<string, any>);
+
+i18n
+  .use(initReactI18next)
+  .init({
+    resources,
+    lng: 'en',
+    fallbackLng: 'en',
+    interpolation: {
+      escapeValue: false
+    }
+  });
+
 export const getTranslation = (lang: string = 'en', key: string): string => {
-    const l = (translations[lang as Language] ? lang : 'en') as Language;
-    return translations[l][key] || translations['en'][key] || key;
+    return i18n.getResource(lang, 'translation', key) || i18n.getResource('en', 'translation', key) || key;
 };
 
 export const useTranslation = () => {
     const { user } = useAuth();
     const queryClient = useQueryClient();
+    const { t: i18nT } = useI18nextTranslation();
 
     const { data: settings } = useQuery({
         queryKey: ['settings', user?.id],
@@ -61,26 +80,21 @@ export const useTranslation = () => {
     const { data: detectedLoc, refetch: refreshLocation } = useQuery({
         queryKey: ['detected-location'],
         queryFn: () => detectLocation(),
-        staleTime: 60 * 60 * 1000, // Increase to 1 hour to prevent frequent refetching
-        refetchOnWindowFocus: false, // Prevent looping on window focus
+        staleTime: 60 * 60 * 1000,
+        refetchOnWindowFocus: false,
         refetchOnMount: true
     });
 
     const isAuto = (settings as any)?.is_language_auto !== false;
-
-    // Use localStorage as a fast-cache for visual consistency
     const cachedLang = (typeof window !== 'undefined' ? localStorage.getItem('app_lang') : null) as Language;
 
-    // Core Precedence Logic: 
-    // Manual settings ALWAYS win if auto is off.
-    // If auto is on, detected location wins, then settings, then cache.
     const rawLang = !isAuto
         ? ((settings as any)?.language || cachedLang || 'en')
         : (getPrimaryLanguage(detectedLoc?.languages) || (settings as any)?.language || cachedLang || 'en');
 
     useEffect(() => {
         const primaryLang = getPrimaryLanguage(detectedLoc?.languages);
-        if (primaryLang && primaryLang !== 'en') {
+        if (primaryLang && primaryLang !== 'en' && typeof window !== 'undefined') {
             localStorage.setItem('app_lang', primaryLang);
         }
     }, [detectedLoc]);
@@ -90,13 +104,11 @@ export const useTranslation = () => {
             const syncKey = `location_synced_${user.id}`;
             const toastKey = `location_toasted_${user.id}`;
             
-            // If already synced this day, skip to avoid spamming Supabase
-            const lastSync = localStorage.getItem(syncKey);
+            const lastSync = typeof window !== 'undefined' ? localStorage.getItem(syncKey) : null;
             const todayStr = new Date().toISOString().split('T')[0];
             if (lastSync === todayStr) return;
 
             const s = settings as any;
-            // Sync if any core location attribute is missing or different
             const needsSync = !s ||
                 s.language !== getPrimaryLanguage(detectedLoc?.languages) ||
                 s.country_code !== detectedLoc?.country_code ||
@@ -104,6 +116,7 @@ export const useTranslation = () => {
                 (s.timezone !== detectedLoc?.timezone);
 
             if (needsSync) {
+                if (typeof window !== 'undefined') localStorage.setItem(syncKey, todayStr);
                 updateSettings(user.id, {
                     language: getPrimaryLanguage(detectedLoc?.languages),
                     currency: detectedLoc?.currency,
@@ -113,20 +126,19 @@ export const useTranslation = () => {
                 }).then(() => {
                     queryClient.invalidateQueries({ queryKey: ['settings', user.id] });
 
-                    // Only toast if it's a significant change and we haven't toasted recently
-                    if (s && s.country_code !== detectedLoc?.country_code && !localStorage.getItem(toastKey)) {
-                        toast.success(t('location_updated_toast').replace('%s', detectedLoc?.country_name || ''), {
+                    if (s && s.country_code !== detectedLoc?.country_code && typeof window !== 'undefined' && !localStorage.getItem(toastKey)) {
+                        toast.success(getTranslation(getPrimaryLanguage(detectedLoc?.languages), 'location_updated_toast').replace('%s', detectedLoc?.country_name || ''), {
                             icon: '🌎',
                             duration: 5000
                         });
                         localStorage.setItem(toastKey, todayStr);
                     }
-                    localStorage.setItem(syncKey, todayStr);
                 }).catch(err => {
                     console.error("Failed to sync location settings:", err);
+                    if (typeof window !== 'undefined') localStorage.removeItem(syncKey);
                 });
             } else {
-                localStorage.setItem(syncKey, todayStr);
+                if (typeof window !== 'undefined') localStorage.setItem(syncKey, todayStr);
             }
         }
     }, [detectedLoc, isAuto, user, settings, queryClient]);
@@ -142,19 +154,32 @@ export const useTranslation = () => {
 
     const finalLang = langMap[rawLang.toLowerCase()] || (translations[rawLang as Language] ? rawLang : 'en') as Language;
 
+    useEffect(() => {
+        if (i18n.language !== finalLang) {
+            i18n.changeLanguage(finalLang);
+        }
+    }, [finalLang]);
+
     const lang = finalLang;
     const currency = (settings as any)?.currency || detectedLoc?.currency || 'USD';
     const timezone = (settings as any)?.timezone || detectedLoc?.timezone || 'UTC';
-    const country = (settings as any)?.country || detectedLoc?.country_name || 'Global';
+    const country = (settings as any)?.country_code || detectedLoc?.country_name || 'Global';
+    const countryCode = (settings as any)?.country_code || detectedLoc?.country_code || 'US';
+    const countryFlag = detectedLoc?.flag || '';
 
     const currencySymbols: Record<string, string> = {
         'USD': '$', 'GBP': '£', 'EUR': '€', 'IDR': 'Rp', 'NGN': '₦', 'MYR': 'RM', 'INR': '₹',
         'SAR': 'SR', 'AED': 'DH', 'PKR': 'Rs', 'BDT': '৳', 'BRL': 'R$', 'RUB': '₽', 'KES': 'KSh',
-        'VND': '₫', 'SOS': 'Sh', 'MMK': 'K', 'TRY': '₺'
+        'VND': '₫', 'SOS': 'Sh', 'MMK': 'K', 'TRY': '₺', 'CNY': '¥'
     };
 
     const currencySymbol = (settings as any)?.currency_symbol || detectedLoc?.currency_symbol || currencySymbols[currency] || '$';
-    const t = (key: string) => getTranslation(lang, key);
+    
+    // Explicitly fallback to old logic if i18next returns key directly due to missing resource
+    const t = (key: string) => {
+        const res = i18nT(key);
+        return res === key ? getTranslation(lang, key) : res;
+    };
 
     const formatCurrency = (amount: number) => {
         return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -189,5 +214,19 @@ export const useTranslation = () => {
         window.speechSynthesis.speak(utterance);
     };
 
-    return { t, lang: finalLang, currency, currencySymbol, timezone, country, localHour, formatCurrency, speak, refreshLocation, isAuto };
+    return { 
+        t, 
+        lang: finalLang, 
+        currency, 
+        currencySymbol, 
+        timezone, 
+        country, 
+        countryCode,
+        countryFlag,
+        localHour, 
+        formatCurrency, 
+        speak, 
+        refreshLocation, 
+        isAuto 
+    };
 };

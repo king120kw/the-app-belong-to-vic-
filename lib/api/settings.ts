@@ -91,6 +91,11 @@ export const updateSettings = async (userId: string, settings: Partial<{
     is_language_auto: boolean
     country: string
     currency_symbol: string
+    prayer_notifications_enabled: boolean
+    pre_prayer_mins: number
+    post_prayer_mins: number
+    spiritual_intensity: string
+    sleep_aware: boolean
 }>) => {
     const { data, error } = await supabase
         .from('user_settings')

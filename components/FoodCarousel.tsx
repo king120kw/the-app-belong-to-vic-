@@ -36,11 +36,21 @@ export default function FoodCarousel({
     singleCategoryMeals,
     categoryTitle
 }: FoodCarouselProps & { strictMode?: boolean }) {
-    // Process meals: ensure exactly 12 items and trim images
-    const processMeals = (meals: Meal[]) => (meals || []).slice(0, 12).map(m => ({
-        ...m,
-        image: (m.image || "").trim() || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000&auto=format&fit=crop"
-    }));
+    // Process meals: ensure exactly 12 items and map unified schema to legacy props
+    const processMeals = (meals: any[]) => (meals || []).slice(0, 12).map(m => {
+        const mappedName = m.title || m.name || '';
+        const mappedImage = (m.image_url || m.image || "").trim() || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000&auto=format&fit=crop";
+        const mappedCalories = m.total_calories || m.calories || 0;
+        const mappedId = m.id || m.external_id || '';
+        
+        return {
+            ...m,
+            id: mappedId,
+            name: mappedName,
+            image: mappedImage,
+            calories: mappedCalories
+        };
+    });
 
     const isSingleMode = !!singleCategoryMeals;
 
@@ -118,18 +128,26 @@ export default function FoodCarousel({
             {!strictMode && !isSingleMode && (
 
                 <div className="flex gap-2 mb-6">
-                    {(['breakfast', 'lunch', 'dinner'] as const).map(type => (
-                        <button
-                            key={type}
-                            onClick={() => { setSelectedTab(type); setLocalIdx(0); }}
-                            className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedTab === type
-                                ? 'bg-vic-green text-slate-900 shadow-lg shadow-vic-green/20'
-                                : 'bg-slate-50 dark:bg-white/5 text-slate-400 dark:text-slate-600'
+                    {(['breakfast', 'lunch', 'dinner'] as const).map(type => {
+                        const isNotActive = type !== initialMealType;
+                        
+                        return (
+                            <button
+                                key={type}
+                                onClick={() => { if (!isNotActive) { setSelectedTab(type); setLocalIdx(0); } }}
+                                disabled={isNotActive}
+                                className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                    selectedTab === type
+                                        ? 'bg-vic-green text-slate-900 shadow-lg shadow-vic-green/20'
+                                        : isNotActive 
+                                            ? 'bg-slate-50 dark:bg-white/5 text-slate-400 dark:text-slate-600 opacity-30 cursor-not-allowed grayscale'
+                                            : 'bg-slate-50 dark:bg-white/5 text-slate-400 dark:text-slate-600'
                                 }`}
-                        >
-                            {t(type)}
-                        </button>
-                    ))}
+                            >
+                                {t(type)}
+                            </button>
+                        );
+                    })}
                 </div>
             )}
 

@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { getNotifications, markNotificationAsRead } from "@/lib/api/settings";
 import { useTranslation } from "@/lib/api/translation";
-import { getPrayerTimes, getPersonalizedSpiritualReminder, isPrayerTime } from "@/lib/api/prayerTimes";
+import { getPrayerTimes, getPersonalizedSpiritualReminder, getPrayerWindow } from "@/lib/api/prayerTimes";
 import { useNotificationStore } from "@/store/notificationStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -40,11 +40,13 @@ export default function Notifications() {
     staleTime: 3600000 // 1 hour
   });
 
+  const prayerWindow = prayerTimes ? getPrayerWindow(prayerTimes) : { inWindow: false, phase: 'none' as const };
+
   // Fetch Personalized Spiritual Reminder if it's prayer time
   const { data: spiritualReminder } = useQuery({
-    queryKey: ['spiritual-reminder', user?.id],
-    queryFn: () => getPersonalizedSpiritualReminder(user!.id),
-    enabled: !!user?.id && !!prayerTimes && isPrayerTime(prayerTimes),
+    queryKey: ['spiritual-reminder', user?.id, prayerWindow.phase],
+    queryFn: () => getPersonalizedSpiritualReminder(user!.id, prayerWindow.phase as 'pre-prayer' | 'post-prayer'),
+    enabled: !!user?.id && prayerWindow.inWindow && prayerWindow.phase !== 'none',
     staleTime: 300000 // 5 minutes
   });
 

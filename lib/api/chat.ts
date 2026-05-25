@@ -104,24 +104,11 @@ export const deleteConversation = async (userId: string, conversationId: string)
 export const softDeleteConversation = deleteConversation;
 
 export const getConversationById = async (conversationId: string, userId: string) => {
-    const { data, error } = await (supabase
-        .from('conversations')
-        .select(`
-            *,
-            conversation_participants(
-                user_id,
-                user_profiles(
-                    full_name, 
-                    username,
-                    avatar_url,
-                    chat_users(phone_number, is_verified)
-                )
-            )
-        `)
-        .eq('id', conversationId)
-        .maybeSingle() as any);
-
-    if (error) throw error;
+    const res = await fetch(`/api/chat/conversation?conversation_id=${conversationId}&user_id=${userId}`);
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || 'Failed to fetch conversation');
+    
+    const data = result.data;
     if (!data) return null;
 
     if (data.conversation_type === 'self') {
@@ -609,3 +596,15 @@ export const findUserByIdentifier = async (identifier: string) => {
     });
     return (data && data.length > 0) ? data[0] : null;
 }
+
+export const getChatParticipants = async (conversationId: string) => {
+    try {
+        const res = await fetch(`/api/chat/participants?conversation_id=${conversationId}`);
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Failed to fetch participants');
+        return result.data;
+    } catch (e) {
+        console.error('Error fetching chat participants:', e);
+        return [];
+    }
+};

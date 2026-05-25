@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from 'react';
-import { getPrayerTimes, getPersonalizedSpiritualReminder, isPrayerTime } from '@/lib/api/prayerTimes';
+import { getPrayerTimes, getPersonalizedSpiritualReminder, getPrayerWindow } from '@/lib/api/prayerTimes';
 import { useTranslation } from '@/lib/api/translation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, BadgeCheck, BookOpen } from 'lucide-react';
@@ -13,35 +13,51 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
     const { t } = useTranslation();
     const [reminder, setReminder] = useState<{ type: 'quran' | 'hadith', content: string, content_ar?: string, reference: string } | null>(null);
     const [isVisible, setIsVisible] = useState(false);
+    // Keep track of the active phase so we don't re-fetch multiple times during the same phase
+    const [currentPhase, setCurrentPhase] = useState<'pre-prayer' | 'post-prayer' | 'none'>('none');
 
     useEffect(() => {
         const checkSpiritualWindow = async () => {
             const prayerTimes = await getPrayerTimes();
-            const inWindow = prayerTimes ? isPrayerTime(prayerTimes) : false;
+            if (!prayerTimes) return;
 
-            if (inWindow) {
-                // If in window and not already visible, fetch and show
-                if (!isVisible) {
-                    const data = await getPersonalizedSpiritualReminder(userId);
+            const { inWindow, phase } = getPrayerWindow(prayerTimes);
+
+            if (inWindow && phase !== 'none') {
+                const today = new Date().toISOString().split('T')[0];
+                const seenKey = `spiritual_reminder_seen_${today}_${phase}`;
+                
+                // If we've already shown the reminder for this specific window today, do not show it again.
+                if (localStorage.getItem(seenKey)) {
+                    setIsVisible(false);
+                    return;
+                }
+
+                // If phase changed (e.g. from none to pre-prayer, or pre-prayer to post-prayer)
+                if (phase !== currentPhase) {
+                    const data = await getPersonalizedSpiritualReminder(userId, phase);
                     if (data) {
                         setReminder(data);
+                        setCurrentPhase(phase);
                         setIsVisible(true);
+                        // Lock this phase for the day so it never pops up on refresh
+                        localStorage.setItem(seenKey, 'true');
                     }
                 }
             } else {
-                // Not in window, hide immediately
-                if (isVisible) {
+                // Not in window
+                if (currentPhase !== 'none') {
                     setIsVisible(false);
                     setReminder(null);
+                    setCurrentPhase('none');
                 }
             }
         };
 
         checkSpiritualWindow();
-        // Check every minute for precision given the 10-min window
         const interval = setInterval(checkSpiritualWindow, 60 * 1000);
         return () => clearInterval(interval);
-    }, [userId, isVisible]);
+    }, [userId, currentPhase]);
 
     if (!isVisible || !reminder) return null;
 

@@ -34,26 +34,29 @@ serve(async (req) => {
     const userId = record.sender_id;
 
     // 1. Fetch user data
-    const [onboardingRes, profileRes, messagesRes] = await Promise.all([
+    const [onboardingRes, profileRes, messagesRes, settingsRes] = await Promise.all([
       supabaseAdmin.from('onboarding_responses').select('*').eq('user_id', userId).maybeSingle(),
       supabaseAdmin.from('user_profiles').select('*').eq('id', userId).maybeSingle(),
-      supabaseAdmin.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(10)
+      supabaseAdmin.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(10),
+      supabaseAdmin.from('user_settings').select('*').eq('user_id', userId).maybeSingle()
     ]);
 
     const profile = profileRes.data;
     const onboarding = onboardingRes.data || {};
+    const settings = settingsRes.data || {};
     const recentMessages = (messagesRes.data || []).reverse();
     const userName = profile?.full_name || 'there';
     
     const loc = record.metadata?.user_location;
-    const locationString = loc ? `Current Location: ${loc.city}, ${loc.country_name} (Timezone: ${loc.timezone})` : 'Location unknown';
+    const locationString = loc ? `Current Location: ${loc.city}, ${loc.country_name} (Timezone: ${settings.timezone || loc.timezone})` : 'Location unknown';
 
     const systemPrompt = `You are Vicalary Health Intelligence, an elite health coach and concierge for ${userName}.
 You MUST provide highly detailed, comprehensive information. DO NOT paraphrase. Give actionable, specific places, recipes, or advice.
 If the user asks where to buy something or asks for places, USE their exact location to give real-world recommendations.
 User Goal: ${onboarding.goal || 'General Wellness'}.
 Dietary: ${(onboarding.dietary_lifestyle || []).join(', ') || 'None'}.
-${locationString}.`;
+${locationString}.
+CRITICAL LANGUAGE REQUIREMENT: The user's preferred language code is '${settings.language || 'en'}' and their local currency is ${settings.currency || 'USD'}. ALL of your responses MUST be natively spoken in this language ('${settings.language || 'en'}') and you must format prices in their local currency. Do NOT reply in English unless their language code is 'en'.`;
 
     const chatContext = recentMessages.map((m: any) => {
       const role = m.sender_id === COACH_ID ? 'assistant' : 'user';

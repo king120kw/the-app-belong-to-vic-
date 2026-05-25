@@ -57,6 +57,24 @@ export async function POST(req: NextRequest) {
 - DAILY CALORIE TARGET: ${calorieTarget} kcal/day
 - ASSESSMENT RULE: Based on the above profile, explicitly state whether this meal is GOOD, MODERATE, or POOR for this user and why.`
       }
+      
+      const { data: budgetData } = await supabase
+        .from('user_budgets')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (budgetData) {
+        const today = new Date();
+        const end = new Date(budgetData.period_end);
+        if (today <= end) {
+            const diffTime = Math.abs(end.getTime() - today.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const dailyAllocation = diffDays > 0 ? budgetData.remaining_budget / diffDays : budgetData.remaining_budget;
+            profileContext += `\n- FINANCIAL CONTEXT: Remaining Daily Budget is ${locationContext?.currency_symbol || '$'}${dailyAllocation.toFixed(2)}. Evaluate affordability based on this limit.`;
+        }
+      }
     }
 
     // Step 1: Identify food
@@ -236,6 +254,19 @@ LANGUAGE MANDATE: Auto-detect the user's language from location (${geoInfo.count
     if (!aiResponse.ok) throw new Error(`OpenAI error: ${await aiResponse.text()}`)
     const aiResult = await aiResponse.json()
     const parsed = JSON.parse(aiResult.choices[0].message.content)
+
+    // Strip markdown symbols to prevent them from showing in the UI
+    const stripSymbols = (obj: any) => {
+      for (const key in obj) {
+        if (typeof obj[key] === 'string') {
+          obj[key] = obj[key].replace(/[*#]/g, '');
+        } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+          stripSymbols(obj[key]);
+        }
+      }
+    };
+    stripSymbols(parsed);
+
 
     // Post-AI enforcement
     if (isProductScan && political.invest_israel && !parsed.political_warning) {

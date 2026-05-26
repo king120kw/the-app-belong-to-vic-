@@ -4,11 +4,63 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 const COACH_ID = '00000000-0000-0000-0000-000000000001'
 
 const countryToLangMap: Record<string, string[]> = {
-  'ID': ['id', 'en'], 'US': ['en'], 'GB': ['en'], 'FR': ['fr', 'en'],
-  'DE': ['de', 'en'], 'ES': ['es', 'en'], 'SA': ['ar', 'en'],
-  'AE': ['ar', 'en'], 'IN': ['hi', 'en'], 'BD': ['bn', 'en'],
-  'PK': ['ur', 'en'], 'CN': ['zh', 'en'], 'RU': ['ru', 'en'],
-  'BR': ['pt', 'en'], 'VN': ['vi', 'en'], 'TR': ['tr', 'en']
+  'ID': ['id', 'en'], 
+  'US': ['en'], 
+  'GB': ['en'], 
+  'FR': ['fr', 'en'],
+  'DE': ['de', 'en'], 
+  'ES': ['es', 'en'], 
+  'SA': ['ar', 'en'],
+  'AE': ['ar', 'en'], 
+  'IN': ['hi', 'en'], 
+  'BD': ['bn', 'en'],
+  'PK': ['ur', 'en'], 
+  'CN': ['zh', 'en'], 
+  'RU': ['ru', 'en'],
+  'BR': ['pt', 'en'], 
+  'VN': ['vi', 'en'], 
+  'TR': ['tr', 'en'],
+  
+  // Additional Arabic-speaking countries
+  'EG': ['ar', 'en'], 'QA': ['ar', 'en'], 'KW': ['ar', 'en'], 'OM': ['ar', 'en'],
+  'BH': ['ar', 'en'], 'JO': ['ar', 'en'], 'LB': ['ar', 'en'], 'YE': ['ar', 'en'],
+  'IQ': ['ar', 'en'], 'DZ': ['ar', 'en'], 'MA': ['ar', 'en'], 'TN': ['ar', 'en'],
+  'LY': ['ar', 'en'], 'SD': ['ar', 'en'], 'SY': ['ar', 'en'], 'PS': ['ar', 'en'],
+  
+  // Swahili-speaking countries
+  'KE': ['sw', 'en'], 'TZ': ['sw', 'en'], 'UG': ['sw', 'en'], 'RW': ['sw', 'en'], 'BI': ['sw', 'en'],
+  
+  // Somali-speaking countries
+  'SO': ['so', 'en'], 'DJ': ['so', 'en'],
+  
+  // Burmese-speaking countries
+  'MM': ['my', 'en'],
+  
+  // Korean-speaking countries
+  'KR': ['ko', 'en'], 'KP': ['ko', 'en'],
+  
+  // German-speaking countries
+  'AT': ['de', 'en'], 'CH': ['de', 'fr', 'en'], 'LI': ['de', 'en'], 'LU': ['de', 'fr', 'en'],
+  
+  // French-speaking countries
+  'MC': ['fr', 'en'], 'BE': ['fr', 'de', 'en'], 'CA': ['en', 'fr'], 'SN': ['fr', 'en'],
+  'CI': ['fr', 'en'], 'CM': ['fr', 'en'], 'CD': ['fr', 'en'], 'CG': ['fr', 'en'],
+  'GA': ['fr', 'en'], 'NE': ['fr', 'en'], 'ML': ['fr', 'en'], 'TG': ['fr', 'en'],
+  'BJ': ['fr', 'en'], 'CF': ['fr', 'en'],
+  
+  // Portuguese-speaking countries
+  'PT': ['pt', 'en'], 'AO': ['pt', 'en'], 'MZ': ['pt', 'en'], 'CV': ['pt', 'en'],
+  'GW': ['pt', 'en'], 'TL': ['pt', 'en'],
+  
+  // Russian-speaking countries
+  'BY': ['ru', 'en'], 'KZ': ['ru', 'en'], 'KG': ['ru', 'en'], 'MD': ['ru', 'en'],
+  
+  // Spanish-speaking countries
+  'MX': ['es', 'en'], 'AR': ['es', 'en'], 'CO': ['es', 'en'], 'PE': ['es', 'en'],
+  'VE': ['es', 'en'], 'CL': ['es', 'en'], 'EC': ['es', 'en'], 'GT': ['es', 'en'],
+  'CU': ['es', 'en'], 'BO': ['es', 'en'], 'DO': ['es', 'en'], 'HN': ['es', 'en'],
+  'PY': ['es', 'en'], 'SV': ['es', 'en'], 'NI': ['es', 'en'], 'CR': ['es', 'en'],
+  'UY': ['es', 'en'], 'PA': ['es', 'en'], 'GQ': ['es', 'en']
 };
 
 function extractMediaUrl(record: any): string | null {

@@ -58,15 +58,40 @@ export async function POST(request: Request) {
         const accounts = authResponse.data.accounts;
         const primaryAccount = accounts[0]; // For MVP, grab the first account
 
-        // Add to user_banks (the public-facing table for the dashboard)
-        const { error: userBanksError } = await supabase.from('user_banks').upsert({
+        // Check if this account already exists for the user in user_banks
+        const { data: existingBank } = await supabase
+            .from('user_banks')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('account_id', primaryAccount.account_id)
+            .limit(1)
+            .maybeSingle();
+
+        const bankData = {
             user_id: userId,
-            bank_id: institution_id || 'plaid_bank',
+            provider: 'plaid',
             bank_name: institution_name || primaryAccount.name,
-            account_type: primaryAccount.subtype || 'checking',
+            account_id: primaryAccount.account_id,
+            account_name: primaryAccount.name,
             balance: primaryAccount.balances.available || primaryAccount.balances.current || 0,
-            currency: primaryAccount.balances.iso_currency_code || 'USD'
-        }, { onConflict: 'user_id,bank_id' });
+            currency: primaryAccount.balances.iso_currency_code || 'USD',
+            is_active: true,
+            updated_at: new Date().toISOString()
+        };
+
+        let userBanksError;
+        if (existingBank) {
+            const { error } = await supabase
+                .from('user_banks')
+                .update(bankData)
+                .eq('id', existingBank.id);
+            userBanksError = error;
+        } else {
+            const { error } = await supabase
+                .from('user_banks')
+                .insert(bankData);
+            userBanksError = error;
+        }
 
         if (userBanksError) console.error("Error updating user_banks:", userBanksError);
 

@@ -82,15 +82,40 @@ export const useTranslation = () => {
         queryFn: () => detectLocation(),
         staleTime: 60 * 60 * 1000,
         refetchOnWindowFocus: false,
-        refetchOnMount: true
+        refetchOnMount: true,
+        initialData: () => {
+            if (typeof window !== 'undefined') {
+                const cached = localStorage.getItem('vicalary_location_v3');
+                if (cached) {
+                    try {
+                        const { data, timestamp } = JSON.parse(cached);
+                        if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+                            return data;
+                        }
+                    } catch (e) {}
+                }
+            }
+            return undefined;
+        }
     });
+
+    const getBrowserLang = () => {
+        if (typeof window !== 'undefined' && window.navigator) {
+            const navLangs = window.navigator.languages;
+            if (navLangs && navLangs.length > 0) {
+                return getPrimaryLanguage(navLangs as string[]) || 'en';
+            }
+            return getPrimaryLanguage(window.navigator.language) || 'en';
+        }
+        return 'en';
+    };
 
     const isAuto = (settings as any)?.is_language_auto !== false;
     const cachedLang = (typeof window !== 'undefined' ? localStorage.getItem('app_lang') : null) as Language;
 
     const rawLang = !isAuto
-        ? ((settings as any)?.language || cachedLang || 'en')
-        : (getPrimaryLanguage(detectedLoc?.languages) || (settings as any)?.language || cachedLang || 'en');
+        ? ((settings as any)?.language || cachedLang || getBrowserLang() || 'en')
+        : (getPrimaryLanguage(detectedLoc?.languages) || (settings as any)?.language || cachedLang || getBrowserLang() || 'en');
 
     // Location-only effect removed in favor of direct finalLang syncing to app_lang below
 

@@ -17,9 +17,10 @@ export const createBudget = async (userId: string, totalBudget: number, startDat
             user_id: userId,
             total_budget: totalBudget,
             remaining_budget: totalBudget,
+            current_balance: totalBudget,
             period_start: startDate,
             period_end: endDate,
-            currency_code: currencyCode,
+            currency: currencyCode,
             currency_symbol: currencySymbol,
             is_active: true,
         } as any)

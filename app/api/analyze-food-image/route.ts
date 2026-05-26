@@ -71,7 +71,8 @@ export async function POST(req: NextRequest) {
         if (today <= end) {
             const diffTime = Math.abs(end.getTime() - today.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            const dailyAllocation = diffDays > 0 ? budgetData.remaining_budget / diffDays : budgetData.remaining_budget;
+            const remaining = budgetData.remaining_budget ?? budgetData.total_budget ?? 0;
+            const dailyAllocation = diffDays > 0 ? remaining / diffDays : remaining;
             profileContext += `\n- FINANCIAL CONTEXT: Remaining Daily Budget is ${locationContext?.currency_symbol || '$'}${dailyAllocation.toFixed(2)}. Evaluate affordability based on this limit.`;
         }
       }

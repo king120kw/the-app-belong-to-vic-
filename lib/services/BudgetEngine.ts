@@ -18,10 +18,12 @@ export const getDynamicDailyBudget = (budget: BudgetData | null) => {
     const diffTime = Math.abs(end.getTime() - today.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays <= 0) return budget.remaining_budget;
+    const remaining = budget.remaining_budget ?? budget.total_budget ?? 0;
+
+    if (diffDays <= 0) return remaining;
 
     // Dynamic daily spending target based on remaining budget and remaining days
-    const dailyAllocation = budget.remaining_budget / diffDays;
+    const dailyAllocation = remaining / diffDays;
     
     return Math.max(0, Number(dailyAllocation.toFixed(2)));
 };

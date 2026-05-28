@@ -782,13 +782,13 @@ export default function Dashboard() {
           >
             <div className="absolute inset-0 bg-white/5 opacity-0 dark:group-hover:opacity-20 transition-opacity" />
             <CustomAnimatedIcon
-              src="/cute-camera_15944861.mp4"
+              src="/cute-camera.gif"
               size={120}
               className="w-[110%] h-[110%]"
               loop={window.innerWidth < 768}
             />
           </button>
-          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-tighter">Camera</span>
+          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-tighter">{t('camera')}</span>
         </div>
 
         <div className="flex flex-col items-center gap-2">
@@ -798,7 +798,7 @@ export default function Dashboard() {
           >
             <div className="absolute inset-0 bg-white/5 opacity-0 dark:group-hover:opacity-20 transition-opacity" />
             <CustomAnimatedIcon
-              src="/scan_14984808.mp4"
+              src="/scan.gif"
               size={120}
               className="w-[110%] h-[110%]"
               loop={window.innerWidth < 768}
@@ -808,34 +808,34 @@ export default function Dashboard() {
         </div>
 
         <div className="flex flex-col items-center gap-2">
-          <button
-            onClick={() => router.push("/cookbook?tab=suggested")}
+          <Link
+            href="/cookbook?tab=suggested"
             className="aspect-square w-full rounded-2xl bg-[#D1F7C4] dark:bg-[#1a2e21] flex items-center justify-center transition-all hover:brightness-95 active:scale-95 border-none shadow-none overflow-hidden relative group"
           >
             <div className="absolute inset-0 bg-white/5 opacity-0 dark:group-hover:opacity-20 transition-opacity" />
             <CustomAnimatedIcon
-              src="/chef_17659714.mp4"
+              src="/chef.gif"
               size={120}
               className="w-[110%] h-[110%]"
               loop={window.innerWidth < 768}
             />
-          </button>
+          </Link>
           <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-tighter">{t('cook')}</span>
         </div>
 
         <div className="flex flex-col items-center gap-2">
-          <button
-            onClick={() => router.push("/budget")}
+          <Link
+            href="/budget"
             className="aspect-square w-full rounded-2xl bg-[#D1F7C4] dark:bg-[#1a2e21] flex items-center justify-center transition-all hover:brightness-95 active:scale-95 border-none shadow-none overflow-hidden relative group"
           >
             <div className="absolute inset-0 bg-white/5 opacity-0 dark:group-hover:opacity-20 transition-opacity" />
             <CustomAnimatedIcon
-              src="/money-bag_6172509.mp4"
+              src="/money-bag.gif"
               size={120}
               className="w-[110%] h-[110%]"
               loop={window.innerWidth < 768}
             />
-          </button>
+          </Link>
           <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-tighter">{t('budget')}</span>
         </div>
       </div>

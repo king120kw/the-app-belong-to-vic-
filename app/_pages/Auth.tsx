@@ -222,24 +222,13 @@ export default function Auth() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="flex flex-col gap-3">
                   <button
                     onClick={() => handleSocialAuth('google')}
-                    className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                    className="flex items-center justify-center gap-3 py-3 w-full rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
                   >
                     <Chrome size={20} className="text-white" />
-                  </button>
-                  <button
-                    onClick={() => handleSocialAuth('facebook')}
-                    className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                  >
-                    <Facebook size={20} className="text-white" />
-                  </button>
-                  <button
-                    onClick={handlePhoneAuth}
-                    className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                  >
-                    <Phone size={20} className="text-white" />
+                    <span className="text-white font-semibold">Continue with Google</span>
                   </button>
                 </div>
 
@@ -312,24 +301,13 @@ export default function Auth() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="flex flex-col gap-3">
                       <button
                         onClick={() => handleSocialAuth('google')}
-                        className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                        className="flex items-center justify-center gap-3 py-3 w-full rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
                       >
                         <Chrome size={20} className="text-white" />
-                      </button>
-                      <button
-                        onClick={() => handleSocialAuth('facebook')}
-                        className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                      >
-                        <Facebook size={20} className="text-white" />
-                      </button>
-                      <button
-                        onClick={handlePhoneAuth}
-                        className="flex items-center justify-center py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                      >
-                        <Phone size={20} className="text-white" />
+                        <span className="text-white font-semibold">Continue with Google</span>
                       </button>
                     </div>
                   </>

@@ -18,7 +18,7 @@ export default function RecipeDetails() {
     const router = useRouter();
     const queryClient = useQueryClient();
     const { user } = useAuth();
-    const { lang } = useTranslation();
+    const { t, lang } = useTranslation();
 
     // Voice State
     const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -83,9 +83,9 @@ export default function RecipeDetails() {
 
     const startVoiceGuidance = () => {
         setIsVoiceMode(true);
-        const welcome = lang === 'id' 
-            ? `Halo! Saya asisten masak Anda. Mari kita buat ${recipe.title}. Langkah pertama: ${recipe.instructions[0]}`
-            : `Hello! I'm your personal chef. Let's make ${recipe.title}. Step one: ${recipe.instructions[0]}`;
+        const welcome = (t('voice_welcome') || 'Hello! I am your personal chef. Let us make %s. Step one: %s')
+            .replace('%s', recipe.title)
+            .replace('%s', recipe.instructions[0]);
         speak(welcome);
         setCurrentStepIdx(0);
     };
@@ -96,7 +96,7 @@ export default function RecipeDetails() {
             setCurrentStepIdx(nextIdx);
             speak(recipe.instructions[nextIdx]);
         } else {
-            speak(lang === 'id' ? "Selesai! Selamat menikmati makanan Anda." : "All done! Enjoy your meal.");
+            speak(t('voice_done') || 'All done! Enjoy your meal.');
             setIsVoiceMode(false);
         }
     };
@@ -124,8 +124,8 @@ export default function RecipeDetails() {
         return (
             <div className="flex flex-col items-center justify-center h-screen p-8 text-center bg-white dark:bg-[#0d1418]">
                 <AlertCircle className="text-vic-pink mb-4" size={48} />
-                <h2 className="text-xl font-bold mb-2">Recipe Missing</h2>
-                <button onClick={() => router.back()} className="text-vic-green font-bold">Go Back</button>
+                <h2 className="text-xl font-bold mb-2">{t('recipe_missing') || 'Recipe Missing'}</h2>
+                <button onClick={() => router.back()} className="text-vic-green font-bold">{t('go_back') || 'Go Back'}</button>
             </div>
         );
     }
@@ -175,22 +175,22 @@ export default function RecipeDetails() {
                     <div className="bg-white dark:bg-[#1f2c34] p-3 rounded-2xl shadow-sm text-center">
                         <Flame className="mx-auto text-vic-orange mb-1" size={20} />
                         <div className="text-lg font-black dark:text-white leading-none">{recipe.total_calories || 0}</div>
-                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Kcal</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{t('kcal') || 'Kcal'}</div>
                     </div>
                     <div className="bg-white dark:bg-[#1f2c34] p-3 rounded-2xl shadow-sm text-center">
                         <Beef className="mx-auto text-vic-red mb-1" size={20} />
                         <div className="text-lg font-black dark:text-white leading-none">{recipe.protein_g || 0}g</div>
-                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Prot</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{t('prot') || 'Prot'}</div>
                     </div>
                     <div className="bg-white dark:bg-[#1f2c34] p-3 rounded-2xl shadow-sm text-center">
                         <Wheat className="mx-auto text-vic-green mb-1" size={20} />
                         <div className="text-lg font-black dark:text-white leading-none">{recipe.carbs_g || 0}g</div>
-                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Carb</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{t('carb') || 'Carb'}</div>
                     </div>
                     <div className="bg-white dark:bg-[#1f2c34] p-3 rounded-2xl shadow-sm text-center">
                         <Droplets className="mx-auto text-vic-blue mb-1" size={20} />
                         <div className="text-lg font-black dark:text-white leading-none">{recipe.fat_g || 0}g</div>
-                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Fat</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{t('fat') || 'Fat'}</div>
                     </div>
                 </div>
 
@@ -203,7 +203,7 @@ export default function RecipeDetails() {
                             <div className="text-sm font-black dark:text-white leading-none">
                                 {(recipe.prep_time_minutes || 0) + (recipe.cook_time_minutes || 0)} MIN
                             </div>
-                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Total Time</div>
+                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{t('total_time') || 'Total Time'}</div>
                         </div>
                     </div>
                     <div className="flex-1 bg-white dark:bg-[#1f2c34] p-4 rounded-3xl shadow-sm flex items-center gap-4">
@@ -214,7 +214,7 @@ export default function RecipeDetails() {
                             <div className="text-sm font-black dark:text-white leading-none">
                                 {recipe.servings || 2} PERS
                             </div>
-                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Servings</div>
+                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{t('servings') || 'Servings'}</div>
                         </div>
                     </div>
                 </div>
@@ -225,11 +225,11 @@ export default function RecipeDetails() {
                     className="w-full bg-vic-green text-slate-900 py-4 rounded-3xl font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 mb-8 hover:scale-[1.02] active:scale-95 transition-all"
                 >
                     <Mic size={20} />
-                    Start Voice Guidance
+                    {t('start_voice_guidance') || 'Start Voice Guidance'}
                 </button>
 
                 {/* Ingredients */}
-                <h3 className="text-xl font-black dark:text-white mb-4 uppercase tracking-tight">Ingredients</h3>
+                <h3 className="text-xl font-black dark:text-white mb-4 uppercase tracking-tight">{t('ingredients') || 'Ingredients'}</h3>
                 <div className="bg-white dark:bg-[#1f2c34] rounded-3xl p-6 shadow-sm mb-8">
                     <div className="space-y-4">
                         {recipe.ingredients?.map((ing: any, i: number) => (
@@ -242,7 +242,7 @@ export default function RecipeDetails() {
                 </div>
 
                 {/* Instructions */}
-                <h3 className="text-xl font-black dark:text-white mb-4 uppercase tracking-tight">Instructions</h3>
+                <h3 className="text-xl font-black dark:text-white mb-4 uppercase tracking-tight">{t('instructions') || 'Instructions'}</h3>
                 <div className="space-y-6 mb-20">
                     {recipe.instructions?.map((step: string, i: number) => (
                         <div key={i} className="flex gap-4">
@@ -262,7 +262,7 @@ export default function RecipeDetails() {
                 <div className="fixed inset-0 z-[100] bg-slate-900 flex flex-col p-8 text-white">
                     <div className="flex justify-between items-center mb-12">
                         <div className="flex flex-col">
-                            <h2 className="text-vic-green font-black uppercase tracking-widest text-xs">Cooking Mode</h2>
+                            <h2 className="text-vic-green font-black uppercase tracking-widest text-xs">{t('cooking_mode') || 'Cooking Mode'}</h2>
                             <p className="text-2xl font-black uppercase tracking-tighter">{recipe.title}</p>
                         </div>
                         <button onClick={() => setIsVoiceMode(false)} className="size-10 bg-white/10 rounded-full flex items-center justify-center">
@@ -276,7 +276,7 @@ export default function RecipeDetails() {
                         </div>
                         
                         <div className="mb-4 text-vic-green font-black uppercase tracking-widest text-sm">
-                            Step {currentStepIdx + 1} of {recipe.instructions.length}
+                            {(t('step_x_of_y') || 'Step %s of %s').replace('%s', (currentStepIdx + 1).toString()).replace('%s', recipe.instructions.length.toString())}
                         </div>
                         
                         <p className="text-3xl font-black leading-tight uppercase tracking-tighter mb-8">
@@ -300,7 +300,7 @@ export default function RecipeDetails() {
                     <div className="mt-auto flex flex-col items-center bg-white/5 p-6 rounded-3xl">
                         <div className="text-4xl font-black font-mono mb-2">{formatTime(timeLeft)}</div>
                         <button onClick={toggleTimer} className="text-xs font-black uppercase tracking-widest text-vic-green">
-                            {isTimerRunning ? "Pause Timer" : "Start 20:00 Timer"}
+                            {isTimerRunning ? (t('pause_timer') || 'Pause Timer') : (t('start_timer') || 'Start Timer')}
                         </button>
                     </div>
                 </div>

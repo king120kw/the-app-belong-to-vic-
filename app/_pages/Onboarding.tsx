@@ -35,7 +35,7 @@ export default function Onboarding() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { t } = useTranslation();
-  const { currencySymbol } = useCurrency();
+  const { currencySymbol, exchangeRate } = useCurrency();
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState(0);
   const [responses, setResponses] = useState<any>({});
@@ -212,8 +212,9 @@ export default function Onboarding() {
       type: "slider",
       imageAnimation: "bottom",
       imageSrc: "/Weekly Budget.jpg",
-      min: 20,
-      max: 500,
+      min: Math.round((20 * exchangeRate) / 10) * 10,
+      max: Math.round((500 * exchangeRate) / 10) * 10,
+      step: Math.round((10 * exchangeRate) / 10) * 10 || 10,
       unit: currencySymbol,
     },
     {
@@ -225,7 +226,7 @@ export default function Onboarding() {
       imageSrc: "/Daily Reminders.jpg",
       options: [t('yes'), t('no')],
     },
-  ], [t, currencySymbol]);
+  ], [t, currencySymbol, exchangeRate]);
 
   // Pre-load all onboarding images
   useEffect(() => {
@@ -476,6 +477,7 @@ export default function Onboarding() {
                 label={t('monthly_budget')}
                 min={currentQuestion.min || 50}
                 max={currentQuestion.max || 1000}
+                step={currentQuestion.step || 1}
                 unit={currentQuestion.unit}
                 value={responses[currentQuestion.key]}
                 onChange={(val) => updateResponse(currentQuestion.key, val)}
@@ -675,6 +677,7 @@ function NumberSlider({
         type="range"
         min={min}
         max={max}
+        step={0.1}
         value={value || (min + max) / 2}
         onChange={(e) => handleSliderChange(Number(e.target.value))}
         className="w-full h-2 bg-white rounded-lg appearance-none cursor-pointer accent-vic-blue"
@@ -692,6 +695,7 @@ function SliderInput({
   label,
   min,
   max,
+  step = 1,
   unit,
   value,
   onChange
@@ -699,6 +703,7 @@ function SliderInput({
   label: string;
   min: number;
   max: number;
+  step?: number;
   unit?: string;
   value?: number;
   onChange: (val: number) => void;
@@ -711,6 +716,7 @@ function SliderInput({
         type="range"
         min={min}
         max={max}
+        step={step}
         value={val}
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full h-2 bg-white rounded-lg appearance-none cursor-pointer accent-vic-blue"

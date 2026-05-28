@@ -10,7 +10,7 @@ interface SpiritualReminderProps {
 }
 
 export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
-    const { t } = useTranslation();
+    const { t, lang } = useTranslation();
     const [reminder, setReminder] = useState<{ type: 'quran' | 'hadith', content: string, content_ar?: string, reference: string } | null>(null);
     const [isVisible, setIsVisible] = useState(false);
     // Keep track of the active phase so we don't re-fetch multiple times during the same phase
@@ -35,7 +35,7 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
 
                 // If phase changed (e.g. from none to pre-prayer, or pre-prayer to post-prayer)
                 if (phase !== currentPhase) {
-                    const data = await getPersonalizedSpiritualReminder(userId, phase);
+                    const data = await getPersonalizedSpiritualReminder(userId, phase, lang);
                     if (data) {
                         setReminder(data);
                         setCurrentPhase(phase);
@@ -81,7 +81,7 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
                             </div>
                             <div>
                                 <h4 className="text-white font-bold text-sm tracking-tight uppercase">
-                                    {reminder.type === 'quran' ? 'Quranic Verse' : 'Hadith Reminder'}
+                                    {reminder.type === 'quran' ? (t('quran_reminder') || 'Quranic Verse') : (t('hadith_reminder') || 'Hadith Reminder')}
                                 </h4>
                                 <div className="flex items-center gap-1.5">
                                     <div className="size-1.5 rounded-full bg-vic-green animate-pulse shadow-[0_0_8px_rgba(19,236,55,0.8)]" />
@@ -116,7 +116,7 @@ export const SpiritualReminder = ({ userId }: SpiritualReminderProps) => {
                                     className="text-[10px] text-vic-green/60 hover:text-vic-green flex items-center gap-1 transition-colors font-bold uppercase"
                                 >
                                     <BadgeCheck size={12} />
-                                    Verify Online
+                                    {t('verify_online') || 'Verify Online'}
                                 </a>
                             )}
                         </div>

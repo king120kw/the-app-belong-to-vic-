@@ -135,7 +135,7 @@ export const detectLocation = async (forceRefresh = false): Promise<LocationData
           }
         }
       } catch (e) {
-        console.warn("[Location] ipwho.is failed:", e);
+        console.log("[Location] ipwho.is failed (likely offline).");
       }
 
       // Secondary: ipapi.co
@@ -167,7 +167,7 @@ export const detectLocation = async (forceRefresh = false): Promise<LocationData
           return result;
         }
       } catch (e) {
-        console.warn("[Location] ipapi.co failed:", e);
+        console.log("[Location] ipapi.co failed (likely offline).");
       }
 
       // Fallback

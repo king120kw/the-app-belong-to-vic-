@@ -13,13 +13,14 @@ export async function POST(request: Request) {
 
         // Generate a deterministic or random transaction ID for tracking
         const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
         const payload = {
             bank_id: bankId,
             country: countryCode || 'ID',
             callback: {
-                success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/banking/brankas/callback?status=SUCCESS&user_id=${userId}&bank_id=${bankId}&transaction_id=${transactionId}`,
-                fail_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/banking/brankas/callback?status=FAIL&user_id=${userId}&bank_id=${bankId}`
+                success_url: `${siteUrl}/api/banking/brankas/callback?status=SUCCESS&user_id=${userId}&bank_id=${bankId}&transaction_id=${transactionId}`,
+                fail_url: `${siteUrl}/api/banking/brankas/callback?status=FAIL&user_id=${userId}&bank_id=${bankId}`
             }
         };
 
@@ -35,8 +36,8 @@ export async function POST(request: Request) {
                     bank_id: bankId,
                     country: countryCode || 'ID',
                     callback: {
-                        success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/banking/brankas/callback?status=SUCCESS&user_id=${userId}&bank_id=${bankId}&transaction_id=${transactionId}`,
-                        fail_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/banking/brankas/callback?status=FAIL&user_id=${userId}&bank_id=${bankId}`
+                        success_url: `${siteUrl}/api/banking/brankas/callback?status=SUCCESS&user_id=${userId}&bank_id=${bankId}&transaction_id=${transactionId}`,
+                        fail_url: `${siteUrl}/api/banking/brankas/callback?status=FAIL&user_id=${userId}&bank_id=${bankId}`
                     }
                 })
             });
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
         // so that the user's dashboard integration functions perfectly in sandbox/dev mode.
         if (!redirectUrl) {
             const mockStatementId = `stmt_mock_${Date.now()}`;
-            redirectUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/api/banking/brankas/callback?status=SUCCESS&user_id=${userId}&bank_id=${bankId}&transaction_id=${transactionId}&statement_id=${mockStatementId}`;
+            redirectUrl = `${siteUrl}/api/banking/brankas/callback?status=SUCCESS&user_id=${userId}&bank_id=${bankId}&transaction_id=${transactionId}&statement_id=${mockStatementId}`;
         }
 
         return NextResponse.json({ success: true, redirect_url: redirectUrl });

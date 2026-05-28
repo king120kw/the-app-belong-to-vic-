@@ -44,10 +44,7 @@ const SplashSequence = ({ onComplete }: { onComplete: () => void }) => {
 
   const handleTypingComplete = () => {
     setIsTypingDone(true);
-    // Pause briefly so the user can absorb the moment, then complete
-    setTimeout(() => {
-      onComplete();
-    }, 1800);
+    onComplete();
   };
 
   return (
@@ -97,7 +94,7 @@ export default function Welcome() {
 
   const handleGetStarted = () => {
     setAnimationPhase("zooming");
-    setTimeout(() => setAnimationPhase("welcome"), 2500);
+    setTimeout(() => setAnimationPhase("welcome"), 500); // reduced from 2500
     // The transition to "/auth" is now handled dynamically by the SplashSequence component
   };
 
@@ -209,10 +206,7 @@ export default function Welcome() {
               key="splash-sequence"
               onComplete={() => {
                 setAnimationPhase("complete");
-                // The router push is slightly delayed to allow the SplashSequence exit animation to complete beautifully
-                setTimeout(() => {
-                  router.push("/auth");
-                }, 1000);
+                router.push("/auth");
               }} 
             />
           )}

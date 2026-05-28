@@ -112,7 +112,7 @@ export const BankConnectionWidget = () => {
             } else {
                 // Strict Brankas Redirect Flow
                 let endpoint = `/api/banking/${bank.provider}/create-link`;
-                if (!['brankas', 'plaid', 'truelayer'].includes(bank.provider)) endpoint = '/api/banking/brankas/create-link';
+                if (!['brankas', 'plaid'].includes(bank.provider)) endpoint = '/api/banking/brankas/create-link';
                 
                 const res = await fetch(endpoint, {
                     method: 'POST',

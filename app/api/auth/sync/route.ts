@@ -28,16 +28,30 @@ export async function POST(request: Request) {
 
     console.log(`[API Sync] Synchronizing profile for user: ${id}`);
 
-    // Clean the ID just in case
     const cleanId = String(id).replace(/^["']|["']$/g, '').trim();
 
-    const profilePayload = {
+    // Check existing profile so we don't overwrite user-uploaded avatars
+    const { data: existingProfile } = await supabaseAdmin
+      .from('user_profiles')
+      .select('full_name, avatar_url')
+      .eq('id', cleanId)
+      .maybeSingle();
+
+    const profilePayload: any = {
       id: cleanId,
       email: email || '',
       updated_at: new Date().toISOString(),
-      ...(full_name && { full_name }),
-      ...(avatar_url && { avatar_url })
     };
+
+    // Only update name if it doesn't exist or is empty
+    if (full_name && (!existingProfile || !existingProfile.full_name || existingProfile.full_name === '-')) {
+      profilePayload.full_name = full_name;
+    }
+
+    // Only update avatar if the user doesn't already have one in their profile!
+    if (avatar_url && (!existingProfile || !existingProfile.avatar_url)) {
+      profilePayload.avatar_url = avatar_url;
+    }
 
     const { data: profileRows, error: upsertError } = await supabaseAdmin
       .from('user_profiles')

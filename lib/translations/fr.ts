@@ -264,5 +264,141 @@ export const fr = {
     today: "Aujourd'hui",
     milestone_checkpoint: "Étape de contrôle",
     chat_verify_title: "Vérification Chat Global",
-    prayer_time_window: "Fenêtre de prière"
+    prayer_time_window: "Fenêtre de prière",
+
+    lbs: "lbs",
+
+    inches: "inches",
+
+    sleep_duration_q: "What is your average sleep duration?",
+
+    sleep_quality_q: "How would you describe your sleep quality?",
+
+    stress_level_q: "What is your typical stress level?",
+
+    dietary_preference_q: "Do you have any specific dietary preferences?",
+
+    health_conditions_q: "Do you have any health conditions?",
+
+    health_conditions_placeholder: "e.g., Diabetes, Hypertension, etc.",
+
+    allergies_q: "Do you have any food allergies?",
+
+    allergies_placeholder: "e.g., Peanuts, Shellfish, etc.",
+
+    weekly_budget_q: "What is your average weekly budget for groceries?",
+
+    daily_reminders_q: "Would you like us to remind you to log your meals?",
+
+    poor: "Poor",
+
+    fair: "Fair",
+
+    good: "Good",
+
+    excellent: "Excellent",
+
+    low: "Low",
+
+    moderate: "Moderate",
+
+    high: "High",
+
+    very_high: "Very High",
+
+    yes: "Yes",
+
+    no: "No",
+
+    hours: "hours",
+
+    rate_limit_exceeded: "Too many attempts. Please wait a few minutes before trying again.",
+
+    peer_milestones_label: "Milestones",
+
+    start_your_journey: "Start Your Journey",
+
+    welcome_subtitle: "Personalized meal plans for a healthier you.",
+
+    get_started: "Get Started",
+
+    welcome_to_vicalary: "Welcome to VICALARY",
+
+    dynamic_daily_target: "Dynamic Daily Target",
+
+    health_coaching: "Health Coaching",
+
+    profile_setup_failed: "Profile Setup Failed",
+
+    db_error_onboarding: "We encountered a database error. Please ensure the backend migration has run successfully.",
+
+    reload_page: "Reload Page",
+
+    failed_init_profile: "Failed to initialize your profile. Please try refreshing the page.",
+
+    failed_save_onboarding: "Failed to save onboarding: %s",
+
+    bank_connected_success: "Bank account connected securely!",
+
+    bank_secure_failed: "Failed to secure connection.",
+
+    bank_exchange_error: "Network error during token exchange.",
+
+    bank_valid_amount: "Please enter a valid amount within your balance",
+
+    budget_allocated_success: "Budget allocated successfully!",
+
+    budget_allocation_failed: "Allocation failed: %s",
+
+    approved: "Approved",
+
+    checking_account: "Checking Account",
+
+    open_banking: "Open Banking",
+
+    available_balance: "Available Balance",
+
+    bank_allocate_prompt: "How much of your balance would you like to allocate toward your monthly wellness objective?",
+
+    allocate: "Allocate",
+
+    daily_allowance: "Your Daily Allowance",
+
+    based_on_30_day: "Based on a 30-day month",
+
+    secure_open_banking: "Secure Open Banking",
+
+    connect_your_bank: "Connect Your Bank",
+
+    bank_connect_desc: "Link your bank account to intelligently allocate your wellness budget and receive real-time financial health coaching.",
+
+    search_bank_placeholder: "Search for your bank...",
+
+    no_institutions_found: "No institutions found matching \"%s\"",
+
+    via_secure_connection: "via secure connection",
+
+    securing_bank_connection: "Securing bank connection...",
+
+    bank_linked_success: "Bank linked successfully.",
+
+    bank_network_error: "Network error. The live banking provider is currently unreachable.",
+
+    keto: "Keto",
+
+    view_recipe: "View Recipe",
+
+    swipe_for_more: "Swipe for more",
+
+    saved_recipes_appear_here: "Your saved recipes will appear here.",
+
+    suggestions_label: "Suggestions",
+
+    cooking_suggestions: "Cooking up some suggestions...",
+
+    snacks_and_more: "Snacks & More",
+
+    untitled_recipe: "Untitled Recipe",
+
+    minutes_label: "Minutes",
 };

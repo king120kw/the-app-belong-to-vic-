@@ -67,9 +67,9 @@ export const CheckpointCalendar: React.FC<CheckpointCalendarProps> = ({ joinDate
                 calendar: 'islamic-umalqura' as any,
                 day: 'numeric'
             }).formatToParts(date);
-            return parseInt(parts.find(p => p.type === 'day')?.value || '0');
+            return parts.find(p => p.type === 'day')?.value || String(date.getDate());
         } catch (e) {
-            return date.getDate();
+            return String(date.getDate());
         }
     };
 
@@ -200,7 +200,7 @@ export const CheckpointCalendar: React.FC<CheckpointCalendarProps> = ({ joinDate
 
                             <span className={`text-[10px] uppercase font-bold tracking-tighter mb-1 ${isToday ? 'text-slate-900/60' : isMilestone ? 'text-indigo-200' : 'text-slate-400'
                                 }`}>
-                                {format(date, 'EEE')}
+                                {new Intl.DateTimeFormat(lang, { weekday: 'short' }).format(date)}
                             </span>
 
                             <span className="text-2xl font-black leading-none">

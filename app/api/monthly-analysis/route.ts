@@ -9,11 +9,14 @@ export async function POST(req: NextRequest) {
     const startDate = new Date(year, month - 1, 1).toISOString()
     const endDate = new Date(year, month, 0).toISOString()
 
-    const [progressRes, budgetRes, profileRes] = await Promise.all([
+    const [progressRes, budgetRes, profileRes, settingsRes] = await Promise.all([
       supabase.from('daily_progress').select('*').eq('user_id', userId).gte('progress_date', startDate).lte('progress_date', endDate),
       supabase.from('budget_transactions').select('*').eq('user_id', userId).gte('created_at', startDate).lte('created_at', endDate),
       supabase.from('user_profiles').select('*').eq('id', userId).single(),
+      supabase.from('user_settings').select('language').eq('user_id', userId).maybeSingle(),
     ])
+    
+    const explicitUserLang = settingsRes?.data?.language || 'en';
 
     const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
     if (!apiKey) throw new Error('NEXT_PUBLIC_OPENAI_API_KEY not configured.')
@@ -37,7 +40,9 @@ STRICT JSON OUTPUT:
     "spendingEfficiency": "EXCELLENT" | "GOOD" | "POOR",
     "tips": ["Concrete tip 1", "Concrete tip 2"],
     "trend": "improving" | "maintaining" | "struggling"
-}`
+}
+
+LANGUAGE MANDATE: You MUST write your entire response fluently in this language code ('\${explicitUserLang}'). Do NOT reply in English unless their language code is 'en'.`
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',

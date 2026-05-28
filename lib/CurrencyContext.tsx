@@ -10,6 +10,7 @@ interface CurrencyContextType {
     clearOverride: () => void;
     formatCurrency: (amount: number | string) => string;
     isLoading: boolean;
+    exchangeRate: number;
 }
 
 const CurrencyContext = createContext<CurrencyContextType>({
@@ -20,6 +21,7 @@ const CurrencyContext = createContext<CurrencyContextType>({
     clearOverride: () => { },
     formatCurrency: (amount) => `$${amount}`,
     isLoading: true,
+    exchangeRate: 1,
 });
 
 export const useCurrency = () => useContext(CurrencyContext);
@@ -29,6 +31,7 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
     const [currencyCode, setCurrencyCode] = useState('USD');
     const [currencySymbol, setCurrencySymbol] = useState('$');
     const [isLoading, setIsLoading] = useState(true);
+    const [exchangeRate, setExchangeRate] = useState(1);
 
     // Centralized location fetch via detectLocation utility
     const fetchGeoLocation = async () => {
@@ -40,6 +43,16 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
                 setCountryCode(data.country_code || 'US');
                 setCurrencyCode(data.currency || 'USD');
                 setCurrencySymbol(data.currency_symbol || '$');
+                
+                if (data.currency && data.currency !== 'USD') {
+                    try {
+                        const res = await fetch(`https://api.exchangerate-api.com/v4/latest/USD`);
+                        const rates = await res.json();
+                        if (rates.rates[data.currency]) {
+                            setExchangeRate(rates.rates[data.currency]);
+                        }
+                    } catch(e) {}
+                }
             }
         } catch (e) {
             console.error('Failed to fetch geo IP', e);
@@ -95,8 +108,9 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
         setManualOverride,
         clearOverride,
         formatCurrency,
-        isLoading
-    }), [countryCode, currencyCode, currencySymbol, isLoading]);
+        isLoading,
+        exchangeRate
+    }), [countryCode, currencyCode, currencySymbol, isLoading, exchangeRate]);
 
     return (
         <CurrencyContext.Provider value={value}>

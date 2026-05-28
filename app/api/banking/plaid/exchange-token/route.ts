@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 const PLAID_CLIENT_ID = process.env.PLAID_CLIENT_ID;
 const PLAID_SECRET = process.env.PLAID_SECRET;
-const PLAID_ENV = process.env.PLAID_ENV || 'sandbox';
+const PLAID_ENV = (process.env.PLAID_ENV as keyof typeof PlaidEnvironments) || 'production';
 
 const configuration = new Configuration({
     basePath: PlaidEnvironments[PLAID_ENV],
@@ -37,12 +37,11 @@ export async function POST(request: Request) {
         // 2. Store securely in backend (NOT accessible to frontend)
         const supabase = createServerSupabaseClient();
         
-        const { error: dbError } = await supabase.from('banking_tokens').upsert({
+        const { error: dbError } = await supabase.from('connected_banks').upsert({
             user_id: userId,
-            provider: 'plaid',
             access_token: accessToken,
-            item_id: itemId,
-            institution_id: institution_id || 'unknown'
+            institution_id: institution_id || 'unknown',
+            institution_name: institution_name || 'Unknown Institution',
         }, { onConflict: 'user_id,institution_id' });
 
         if (dbError) {
@@ -56,44 +55,28 @@ export async function POST(request: Request) {
         });
 
         const accounts = authResponse.data.accounts;
-        const primaryAccount = accounts[0]; // For MVP, grab the first account
-
-        // Check if this account already exists for the user in user_banks
-        const { data: existingBank } = await supabase
-            .from('user_banks')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('account_id', primaryAccount.account_id)
-            .limit(1)
-            .maybeSingle();
-
-        const bankData = {
-            user_id: userId,
-            provider: 'plaid',
-            bank_name: institution_name || primaryAccount.name,
-            account_id: primaryAccount.account_id,
-            account_name: primaryAccount.name,
-            balance: primaryAccount.balances.available || primaryAccount.balances.current || 0,
-            currency: primaryAccount.balances.iso_currency_code || 'USD',
-            is_active: true,
-            updated_at: new Date().toISOString()
-        };
-
-        let userBanksError;
-        if (existingBank) {
-            const { error } = await supabase
-                .from('user_banks')
-                .update(bankData)
-                .eq('id', existingBank.id);
-            userBanksError = error;
-        } else {
-            const { error } = await supabase
-                .from('user_banks')
-                .insert(bankData);
-            userBanksError = error;
+        
+        // Save balances to the new account_balances table
+        for (const account of accounts) {
+            const balanceData = {
+                user_id: userId,
+                account_id: account.account_id,
+                available_balance: account.balances.available || 0,
+                current_balance: account.balances.current || 0,
+                currency: account.balances.iso_currency_code || 'USD',
+                last_updated: new Date().toISOString()
+            };
+            
+            const { error: balanceError } = await supabase
+                .from('account_balances')
+                .upsert(balanceData, { onConflict: 'account_id' });
+                
+            if (balanceError) {
+                 console.error("Database Error Storing Balance:", balanceError);
+            }
         }
 
-        if (userBanksError) console.error("Error updating user_banks:", userBanksError);
+        const primaryAccount = accounts[0]; // For MVP, return the first account info to frontend
 
         // Return non-sensitive details to frontend
         return NextResponse.json({

@@ -175,6 +175,14 @@ export async function POST(req: NextRequest) {
     const brandForCheck = productData?.brand || ''
     const political = await checkPoliticalAffiliation(supabase, brandForCheck)
 
+    const { data: userSettings } = await supabase
+        .from('user_settings')
+        .select('language')
+        .eq('user_id', userId)
+        .maybeSingle()
+      
+    var explicitUserLang = userSettings?.language || locationContext?.language;
+
     let dailyBudgetStr = 'No specific financial constraints on file.';
     if (userId) {
       const { data: budgetData } = await supabase
@@ -205,7 +213,9 @@ ${medicationData ? `\nFDA DATA: ${JSON.stringify(medicationData)}\n` : '\nNOTE: 
 USER PROFILE: Location ${geoInfo.country_name} (${currencySymbol})
 
 Provide a JSON response. All fields required:
-{"name":"${medicationData?.proprietary_name || medicationData?.generic_name || 'Exact Medication Name'}","brand":"${medicationData?.manufacturer || 'Manufacturer'}","generic_name":"${medicationData?.generic_name || 'Generic Name'}","description":"2-3 paragraph clinical overview","purpose":"mechanism of action","side_effects":"common and serious side effects","interactions":"key drug or food interactions","warnings":"FDA black box warnings","storage":"storage requirements","healthStatus":"SAFE","is_compliant":true}`
+{"name":"${medicationData?.proprietary_name || medicationData?.generic_name || 'Exact Medication Name'}","brand":"${medicationData?.manufacturer || 'Manufacturer'}","generic_name":"${medicationData?.generic_name || 'Generic Name'}","description":"2-3 paragraph clinical overview","purpose":"mechanism of action","side_effects":"common and serious side effects","interactions":"key drug or food interactions","warnings":"FDA black box warnings","storage":"storage requirements","healthStatus":"SAFE","is_compliant":true}
+
+LANGUAGE MANDATE: You MUST write your entire response fluently in this language code ('\${explicitUserLang || 'en'}'). Do NOT reply in English unless their language code is 'en'.`
     } else {
       const hasVerifiedNutrition = verifiedNutrition !== null
       prompt = `You are a Consumer Health AI. Provide a "Factory Analysis" for this food product for a user in ${geoInfo.city || 'Unknown'}, ${geoInfo.country_name || 'Unknown'}.
@@ -227,7 +237,7 @@ RULES:
 Respond with ONLY JSON:
 {"name":"exact product name","brand":"brand name","description":"...","usage_instructions":"...","factory_ingredients":"...","suitability_analysis":"...","country_origin_details":"...","vitamins_and_nutrition":"...","recommendation":"...","recommended_pairings":"...","estimated_price":"${currencySymbol}X.XX","cheaper_alternatives":[{"name":"...","price":"...","reason":"..."}],"is_compliant":${!political.invest_israel},"political_warning":"${political.invest_israel ? political.warning : 'Company is not involved in these two countries (Israel/UAE).'}","calories":${hasVerifiedNutrition ? verifiedNutrition.calories : 0},"protein":${hasVerifiedNutrition ? verifiedNutrition.protein : 0},"carbs":${hasVerifiedNutrition ? verifiedNutrition.carbs : 0},"fat":${hasVerifiedNutrition ? verifiedNutrition.fat : 0},"sugar":${hasVerifiedNutrition ? verifiedNutrition.sugar : 0},"fiber":${hasVerifiedNutrition ? verifiedNutrition.fiber : 0},"healthStatus":"GOOD|MODERATE|POOR","user_alignment_boolean":true}
 
-LANGUAGE MANDATE: Auto-detect language based on location (${geoInfo.country_name}). If the region speaks Arabic, Urdu, Hindi, or Indonesian, respond fluently in that language.`
+LANGUAGE MANDATE: You MUST write your entire response fluently in this language code ('\${explicitUserLang || 'en'}'). Do NOT reply in English unless their language code is 'en'.`
     }
 
     const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {

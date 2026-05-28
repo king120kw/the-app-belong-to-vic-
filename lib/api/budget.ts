@@ -28,6 +28,22 @@ export const createBudget = async (userId: string, totalBudget: number, startDat
         .single()
 
     if (error) throw error
+
+    // Call AI Budget Engine orchestrator to generate intelligent goals and analysis
+    try {
+        await fetch('/api/banking/ai-budget', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId,
+                total_budget: totalBudget,
+                period_end: endDate
+            })
+        });
+    } catch (aiErr) {
+        console.error("AI Budget Engine failed to run, but basic budget was created:", aiErr);
+    }
+
     return data
 }
 

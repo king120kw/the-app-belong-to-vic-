@@ -58,6 +58,14 @@ export async function POST(req: NextRequest) {
 - ASSESSMENT RULE: Based on the above profile, explicitly state whether this meal is GOOD, MODERATE, or POOR for this user and why.`
       }
       
+      const { data: userSettings } = await supabase
+        .from('user_settings')
+        .select('language')
+        .eq('user_id', userId)
+        .maybeSingle()
+      
+      var explicitUserLang = userSettings?.language || locationContext?.language;
+
       const { data: budgetData } = await supabase
         .from('user_budgets')
         .select('*')
@@ -178,7 +186,9 @@ BRAND: ${identifiedBrand}
 USER PROFILE: Location ${geoInfo.country_name} (${geoInfo.currency_symbol})
 
 Provide a JSON response with all fields:
-{"name":"${identifiedName}","brand":"${identifiedBrand}","generic_name":"Generic Name","description":"2-3 paragraph clinical overview","purpose":"mechanism of action","side_effects":"common and serious side effects","interactions":"key drug or food interactions","warnings":"FDA black box warnings","storage":"storage requirements","healthStatus":"SAFE","is_compliant":${isCompliantBool},"political_warning":"${politicalWarningText}"}`
+{"name":"${identifiedName}","brand":"${identifiedBrand}","generic_name":"Generic Name","description":"2-3 paragraph clinical overview","purpose":"mechanism of action","side_effects":"common and serious side effects","interactions":"key drug or food interactions","warnings":"FDA black box warnings","storage":"storage requirements","healthStatus":"SAFE","is_compliant":${isCompliantBool},"political_warning":"${politicalWarningText}"}
+
+LANGUAGE MANDATE: You MUST write your entire response fluently in this language code ('\${explicitUserLang || 'en'}'). Do NOT reply in English unless their language code is 'en'.`
     } else if (isProductScan) {
       aiPrompt = `You are a Consumer Health AI. Provide a "Factory Analysis" for this packaged food product for a user in ${geoInfo.city}, ${geoInfo.country_name}.
 PRODUCT NAME: ${identifiedName}
@@ -194,7 +204,9 @@ RULES:
 4. Provide 2-3 cheaper_alternatives specific to ${geoInfo.country_name} market.
 
 Respond with ONLY JSON:
-{"name":"${identifiedName}","brand":"${identifiedBrand}","description":"...","usage_instructions":"...","factory_ingredients":"...","suitability_analysis":"...","country_origin_details":"...","vitamins_and_nutrition":"...","recommendation":"...","recommended_pairings":"...","estimated_price":"${geoInfo.currency_symbol}X.XX","cheaper_alternatives":[{"name":"...","price":"...","reason":"..."}],"is_compliant":${isCompliantBool},"political_warning":"${politicalWarningText}","calories":${verifiedFood ? verifiedFood.calories : 0},"protein":${verifiedFood ? verifiedFood.protein : 0},"carbs":${verifiedFood ? verifiedFood.carbs : 0},"fat":${verifiedFood ? verifiedFood.fat : 0},"sugar":${verifiedFood ? verifiedFood.sugar : 0},"fiber":${verifiedFood ? verifiedFood.fiber : 0},"verdict":"GOOD","user_alignment_boolean":true}`
+{"name":"${identifiedName}","brand":"${identifiedBrand}","description":"...","usage_instructions":"...","factory_ingredients":"...","suitability_analysis":"...","country_origin_details":"...","vitamins_and_nutrition":"...","recommendation":"...","recommended_pairings":"...","estimated_price":"${geoInfo.currency_symbol}X.XX","cheaper_alternatives":[{"name":"...","price":"...","reason":"..."}],"is_compliant":${isCompliantBool},"political_warning":"${politicalWarningText}","calories":${verifiedFood ? verifiedFood.calories : 0},"protein":${verifiedFood ? verifiedFood.protein : 0},"carbs":${verifiedFood ? verifiedFood.carbs : 0},"fat":${verifiedFood ? verifiedFood.fat : 0},"sugar":${verifiedFood ? verifiedFood.sugar : 0},"fiber":${verifiedFood ? verifiedFood.fiber : 0},"verdict":"GOOD","user_alignment_boolean":true}
+
+LANGUAGE MANDATE: You MUST write your entire response fluently in this language code ('\${explicitUserLang || 'en'}'). Do NOT reply in English unless their language code is 'en'.`
     } else {
       aiPrompt = `You are a world-class Clinical Nutritional AI and Certified Food Scientist.
 Analyze the provided food image with extreme precision.
@@ -215,7 +227,7 @@ ${verifiedFood ? 'MANDATORY: Use the VERIFIED NUTRITIONAL DATA provided above.' 
 JSON OUTPUT:
 {"name":"${identifiedName}","description":"...","vitamins_and_nutrition":"...","recommended_pairings":"...","recommendation":"...","verdict":"GOOD|MODERATE|POOR","user_alignment_boolean":true,"calories":${verifiedFood?.calories || 0},"protein":${verifiedFood?.protein || 0},"carbs":${verifiedFood?.carbs || 0},"fat":${verifiedFood?.fat || 0},"sugar":${verifiedFood?.sugar || 0},"fiber":${verifiedFood?.fiber || 0},"is_compliant":true,"confidence_interval":${verifiedFood ? 1.0 : 0.8},"is_verified":${!isHallucinated}}
 
-LANGUAGE MANDATE: Auto-detect the user's language from location (${geoInfo.country_name}). If the region speaks Arabic, Urdu, Hindi, or Indonesian, respond fluently in that language.`
+LANGUAGE MANDATE: You MUST write your entire response fluently in this language code ('\${explicitUserLang || 'en'}'). Do NOT reply in English unless their language code is 'en'.`
 
       responseFormat = {
         type: 'json_schema',

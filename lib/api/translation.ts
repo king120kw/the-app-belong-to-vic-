@@ -43,12 +43,19 @@ const resources = Object.keys(translations).reduce((acc, key) => {
     return acc;
 }, {} as Record<string, any>);
 
+import LanguageDetector from 'i18next-browser-languagedetector';
+
 i18n
+  .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources,
-    lng: 'en',
     fallbackLng: 'en',
+    detection: {
+      order: ['localStorage', 'navigator'],
+      lookupLocalStorage: 'app_lang',
+      caches: ['localStorage']
+    },
     interpolation: {
       escapeValue: false
     }

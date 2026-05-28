@@ -97,6 +97,25 @@ export const CustomAnimatedIcon: React.FC<CustomAnimatedIconProps> = ({
         }
     };
 
+    const isGif = src.toLowerCase().endsWith('.gif');
+
+    if (isGif) {
+        return (
+            <div
+                className={`relative inline-flex items-center justify-center overflow-hidden ${className}`}
+                style={{ width: size, height: size }}
+            >
+                <img
+                    src={src}
+                    alt="Animated Icon"
+                    className="w-full h-full object-contain pointer-events-none dark:mix-blend-screen dark:brightness-150 mixed-blend-multiply"
+                    style={{ mixBlendMode: 'inherit' }}
+                />
+                <div className="absolute inset-0 bg-white/20 blur-xl rounded-full opacity-0 dark:opacity-40 pointer-events-none" />
+            </div>
+        );
+    }
+
     return (
         <div
             className={`relative inline-flex items-center justify-center overflow-hidden ${className}`}

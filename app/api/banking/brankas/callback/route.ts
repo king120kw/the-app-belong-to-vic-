@@ -21,11 +21,11 @@ export async function GET(request: Request) {
         const bankId = searchParams.get('bank_id') || cookieStore.get('brankas_pending_bank_id')?.value;
 
         if (!userId) {
-            return NextResponse.redirect(new URL('/dashboard?error=MissingUser', request.url));
+            return NextResponse.redirect(new URL('/budget?error=MissingUser', request.url));
         }
 
         if (status !== 'SUCCESS') {
-             return NextResponse.redirect(new URL('/dashboard?error=BankAuthFailed', request.url));
+             return NextResponse.redirect(new URL('/budget?error=BankAuthFailed', request.url));
         }
 
         // Securely store the statement_id / token in backend
@@ -108,10 +108,10 @@ export async function GET(request: Request) {
                 .insert(bankData);
         }
 
-        return NextResponse.redirect(new URL('/dashboard?success=true', request.url));
+        return NextResponse.redirect(new URL('/budget?success=true', request.url));
 
     } catch (err: any) {
         console.error('Brankas Callback Error:', err.message);
-        return NextResponse.redirect(new URL('/dashboard?error=InternalError', request.url));
+        return NextResponse.redirect(new URL('/budget?error=InternalError', request.url));
     }
 }

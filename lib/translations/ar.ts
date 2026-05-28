@@ -264,5 +264,98 @@ export const ar = {
     today: "اليوم",
     milestone_checkpoint: "نقطة تفتيش الإنجاز",
     chat_verify_title: "التحقق من المحادثة العالمية",
-    prayer_time_window: "نافذة وقت الصلاة"
+    prayer_time_window: "نافذة وقت الصلاة",
+    start_your_journey: "ابدأ رحلتك",
+    welcome_subtitle: "خطط وجبات مخصصة لصحة أفضل.",
+    get_started: "البدء",
+    welcome_to_vicalary: "مرحباً بك في VICALARY",
+    dynamic_daily_target: "الهدف اليومي الديناميكي",
+    health_coaching: "التدريب الصحي",
+    profile_setup_failed: "فشل إعداد الملف الشخصي",
+    db_error_onboarding: "واجهنا خطأ في قاعدة البيانات. يرجى التأكد من تشغيل الترحيل بنجاح.",
+    reload_page: "إعادة تحميل الصفحة",
+    failed_init_profile: "فشل في تهيئة ملفك الشخصي. يرجى تحديث الصفحة.",
+    failed_save_onboarding: "فشل حفظ بيانات التسجيل: %s",
+    bank_connected_success: "تم ربط الحساب البنكي بأمان!",
+    bank_secure_failed: "فشل في تأمين الاتصال.",
+    bank_exchange_error: "خطأ في الشبكة أثناء تبادل الرمز.",
+    bank_valid_amount: "يرجى إدخال مبلغ صحيح ضمن رصيدك",
+    budget_allocated_success: "تم تخصيص الميزانية بنجاح!",
+    budget_allocation_failed: "فشل التخصيص: %s",
+    approved: "تمت الموافقة",
+    checking_account: "حساب جاري",
+    open_banking: "الخدمات المصرفية المفتوحة",
+    available_balance: "الرصيد المتاح",
+    bank_allocate_prompt: "ما هو المبلغ الذي تود تخصيصه من رصيدك لهدفك الصحي الشهري؟",
+    allocate: "تخصيص",
+    daily_allowance: "مخصصك اليومي",
+    based_on_30_day: "بناءً على شهر مكون من 30 يوماً",
+    secure_open_banking: "خدمات مصرفية مفتوحة آمنة",
+    connect_your_bank: "اربط حسابك البنكي",
+    bank_connect_desc: "اربط حسابك البنكي لتخصيص ميزانية صحتك بذكاء وتلقي تدريب مالي في الوقت الفعلي.",
+    search_bank_placeholder: "ابحث عن البنك الخاص بك...",
+    no_institutions_found: "لم يتم العثور على مؤسسات تطابق \"%s\"",
+    via_secure_connection: "عبر اتصال آمن",
+    securing_bank_connection: "تأمين الاتصال البنكي...",
+    bank_linked_success: "تم ربط البنك بنجاح.",
+    bank_network_error: "خطأ في الشبكة. مزود الخدمات المصرفية غير متاح حالياً.",
+    keto: "كيتو",
+    view_recipe: "عرض الوصفة",
+    swipe_for_more: "اسحب للمزيد",
+    saved_recipes_appear_here: "ستظهر وصفاتك المحفوظة هنا.",
+    suggestions_label: "اقتراحات",
+    cooking_suggestions: "جاري إعداد بعض الاقتراحات...",
+    snacks_and_more: "وجبات خفيفة والمزيد",
+    untitled_recipe: "وصفة بدون عنوان",
+    minutes_label: "دقائق",
+
+    lbs: "lbs",
+
+    inches: "inches",
+
+    sleep_duration_q: "What is your average sleep duration?",
+
+    sleep_quality_q: "How would you describe your sleep quality?",
+
+    stress_level_q: "What is your typical stress level?",
+
+    dietary_preference_q: "Do you have any specific dietary preferences?",
+
+    health_conditions_q: "Do you have any health conditions?",
+
+    health_conditions_placeholder: "e.g., Diabetes, Hypertension, etc.",
+
+    allergies_q: "Do you have any food allergies?",
+
+    allergies_placeholder: "e.g., Peanuts, Shellfish, etc.",
+
+    weekly_budget_q: "What is your average weekly budget for groceries?",
+
+    daily_reminders_q: "Would you like us to remind you to log your meals?",
+
+    poor: "Poor",
+
+    fair: "Fair",
+
+    good: "Good",
+
+    excellent: "Excellent",
+
+    low: "Low",
+
+    moderate: "Moderate",
+
+    high: "High",
+
+    very_high: "Very High",
+
+    yes: "Yes",
+
+    no: "No",
+
+    hours: "hours",
+
+    rate_limit_exceeded: "Too many attempts. Please wait a few minutes before trying again.",
+
+    peer_milestones_label: "Milestones",
 };

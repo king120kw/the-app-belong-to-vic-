@@ -330,5 +330,8 @@ export const id = {
     cooking_suggestions: "Menyiapkan saran makanan...",
     snacks_and_more: "Camilan & Lainnya",
     untitled_recipe: "Resep Tanpa Judul",
-    minutes_label: "Menit"
+    minutes_label: "Menit",
+    rate_limit_exceeded: "Too many attempts. Please wait a few minutes before trying again.",
+
+    peer_milestones_label: "Milestones",
 };

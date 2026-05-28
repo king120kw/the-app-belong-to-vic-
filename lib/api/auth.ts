@@ -60,7 +60,7 @@ export const syncUserWithSupabase = async (supabaseUser: any) => {
         updated_at: new Date().toISOString()
     };
 
-    if (supabaseUser.user_metadata?.avatar_url) {
+    if (supabaseUser.user_metadata?.avatar_url && (!existingProfile || !existingProfile.avatar_url)) {
         profilePayload.avatar_url = supabaseUser.user_metadata.avatar_url;
     }
 
@@ -248,6 +248,13 @@ export const saveOnboardingResponses = async (userId: string, responses: any) =>
         onboarding_completed: true,
         goal_calories: dailyCalorieGoal
     });
+
+    // Also update Supabase Auth metadata so the user's name appears correctly in the Supabase Dashboard!
+    if (filteredResponses.full_name) {
+        await supabase.auth.updateUser({
+            data: { full_name: filteredResponses.full_name }
+        });
+    }
 
     // Initialize daily progress and user settings in the background to avoid blocking the user redirect
     (async () => {
